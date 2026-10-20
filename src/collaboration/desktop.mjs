@@ -1,24 +1,17 @@
 import { mkdirSync,existsSync,readFileSync,writeFileSync,renameSync,unlinkSync,realpathSync,statSync } from 'node:fs';
 import { resolve,join,basename,isAbsolute } from 'node:path';
 import { randomUUID,createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { Store } from '../storage.mjs';
 import { Runner } from '../runner.mjs';
 import { PROVIDERS,validateOptions } from '../providers.mjs';
-import { redact } from '../process.mjs';
+import { redact,restrictToCurrentUser } from '../process.mjs';
 import { collaborationUrl } from './server.mjs';
 
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const exec=promisify(execFile);
 export async function savePrivateJSON(file,value){
   const temp=file+'.'+randomUUID()+'.tmp';writeFileSync(temp,'',{mode:0o600});
   try{
-    if(process.platform==='win32'){
-      const identity=await exec('powershell.exe',['-NoProfile','-NonInteractive','-Command','[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],{windowsHide:true,timeout:10000});
-      const sid=identity.stdout.trim();if(!/^S-1-\d+(?:-\d+)+$/.test(sid))throw Error('无法确认电脑登录用户');
-      await exec('icacls.exe',[temp,'/inheritance:r','/grant:r','*'+sid+':(F)','*S-1-5-18:(F)'],{windowsHide:true,timeout:10000});
-    }
+    await restrictToCurrentUser(temp);
     writeFileSync(temp,JSON.stringify(value,null,2),{mode:0o600});renameSync(temp,file);
   }catch(error){if(existsSync(temp))unlinkSync(temp);throw Error('无法安全保存电脑连接：'+redact(error.message));}
 }

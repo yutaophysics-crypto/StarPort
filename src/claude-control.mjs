@@ -1,5 +1,5 @@
 import {query} from '@anthropic-ai/claude-agent-sdk';
-import {childEnvironment,startProcess,stopProcess,exec} from './process.mjs';
+import {childEnvironment,startProcess,stopProcess,restrictToCurrentUser} from './process.mjs';
 import {mkdtemp,readFile,writeFile,unlink,rmdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -22,11 +22,7 @@ async function controlSettings(runtime,cwd){
   const cleanup=async()=>{await unlink(copy).catch(()=>{});await rmdir(directory).catch(()=>{});};
   try{
     await writeFile(copy,'',{mode:0o600});
-    if(process.platform==='win32'){
-      const identity=await exec('powershell.exe',['-NoProfile','-NonInteractive','-Command','[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],{windowsHide:true,timeout:10000});
-      const sid=identity.stdout.trim();if(!/^S-1-\d+(?:-\d+)+$/.test(sid))throw Error('无法确认电脑登录用户');
-      await exec('icacls.exe',[copy,'/inheritance:r','/grant:r','*'+sid+':(F)','*S-1-5-18:(F)'],{windowsHide:true,timeout:10000});
-    }
+    await restrictToCurrentUser(copy);
     await writeFile(copy,JSON.stringify({...settings,disableAllHooks:true}),{mode:0o600});return {settings:copy,cleanup};
   }catch(error){await cleanup();throw error;}
 }
