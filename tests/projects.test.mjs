@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, existsSync, readFileSync, renameSync, cpSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, parse } from 'node:path';
 import { Store } from '../src/storage.mjs';
 import { Runner } from '../src/runner.mjs';
 import { createHub } from '../src/server.mjs';
@@ -91,7 +91,7 @@ test('renaming a folder in Starport moves every conversation and project inside 
     await assert.rejects(pf.renameFolder(join(base, 'a'), 'b-exists'), e => e.status === 409);
     await assert.rejects(pf.renameFolder(join(base, 'a'), 'bad:name'), /文件夹名称无效/);
     await assert.rejects(pf.renameFolder(join(base, 'keep'), 'moved'), e => e.status === 409 && /星港自己的/.test(e.message));
-    await assert.rejects(pf.renameFolder(join(base, 'a').slice(0, 3), 'x'), /根目录/);
+    await assert.rejects(pf.renameFolder(parse(base).root, 'x'), /根目录/);
 
     const result = await pf.renameFolder(join(base, 'a'), 'b');
     assert.deepEqual(result, { path: join(base, 'b'), chats: 2, projects: 2 });

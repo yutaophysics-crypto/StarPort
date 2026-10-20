@@ -65,6 +65,27 @@ export function stopProcess(child,options){
   const pending=terminateProcess(child,options);stopping.set(child,pending);
   pending.then(()=>stopping.delete(child),()=>stopping.delete(child));return pending;
 }
+// Windows private files get an ACL for the signed-in user and SYSTEM only. The user's SID is
+// looked up once: whoami starts in milliseconds, while PowerShell can take over ten seconds on
+// a busy machine and time out a sign-in. PowerShell remains the fallback. whoami is called by
+// its System32 path because Git for Windows and MSYS2 put a GNU whoami on PATH.
+const SID=/^S-1-\d+(?:-\d+)+$/;
+let userSid=null;
+function currentUserSid(){
+  userSid??=(async()=>{
+    let sid='';
+    const whoami=(process.env.SystemRoot||'C:\\Windows')+'\\System32\\whoami.exe';
+    try{sid=(await exec(whoami,['/user','/fo','csv','/nh'],{windowsHide:true,timeout:10000})).stdout.trim().split(',').at(-1).replaceAll('"','');}catch{}
+    if(!SID.test(sid))sid=(await exec('powershell.exe',['-NoProfile','-NonInteractive','-Command','[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],{windowsHide:true,timeout:30000})).stdout.trim();
+    if(!SID.test(sid))throw Error('无法确认电脑登录用户');
+    return sid;
+  })().catch(error=>{userSid=null;throw error;});
+  return userSid;
+}
+export async function restrictToCurrentUser(file){
+  if(process.platform!=='win32')return;
+  await exec('icacls.exe',[file,'/inheritance:r','/grant:r','*'+await currentUserSid()+':(F)','*S-1-5-18:(F)'],{windowsHide:true,timeout:10000});
+}
 export function redact(text) {
   return String(text).replace(/\b(sk-[\w-]{12,}|Bearer\s+[\w.\-]{12,})/gi, '[已隐藏凭据]')
     .replace(/((?:api[_-]?key|access[_-]?token|refresh[_-]?token)\s*[=:]\s*)[^\s,;]+/gi, '$1[已隐藏]');

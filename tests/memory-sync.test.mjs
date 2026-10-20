@@ -161,11 +161,14 @@ test('existing backup copies deduplicate by content and preserve their local sou
 
 test('automatic polling works through different local directories without a cloud login or model call',async()=>{
   const d=await devices(),other=await mkdtemp(join(tmpdir(),'starport-sync-other-'));
+  // Stands in for a file sync app. It skips in-progress .tmp files, which the writer renames
+  // away while polling; copying one mid-rename would fail the copy, not the sync.
+  const mirror=()=>cp(join(d.folder,'StarportMemory'),join(other,'StarportMemory'),{recursive:true,filter:source=>!source.endsWith('.tmp')});
   try{
-    await d.x.configure({enabled:true,folder:d.folder});await cp(join(d.folder,'StarportMemory'),join(other,'StarportMemory'),{recursive:true});
+    await d.x.configure({enabled:true,folder:d.folder});await mirror();
     await d.y.configure({enabled:true,folder:other});d.x.interval=30;d.y.interval=30;d.x.start();d.y.start();
     const row=d.a.memory.create(input,{confirmed:true});
-    for(let i=0;i<80;i++){await new Promise(resolve=>setTimeout(resolve,20));await cp(join(d.folder,'StarportMemory'),join(other,'StarportMemory'),{recursive:true});if(d.b.db.prepare('SELECT id FROM shared_memories WHERE id=?').get(row.id))break;}
+    for(let i=0;i<80;i++){await new Promise(resolve=>setTimeout(resolve,20));await mirror();if(d.b.db.prepare('SELECT id FROM shared_memories WHERE id=?').get(row.id))break;}
     assert.equal(d.b.memory.get(row.id).content,input.content);assert.notEqual(d.x.config().folder,d.y.config().folder);
   }finally{await d.close();await rm(other,{recursive:true,force:true});}
 });

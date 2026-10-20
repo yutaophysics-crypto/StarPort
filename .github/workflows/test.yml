@@ -12,7 +12,12 @@ permissions:
 jobs:
   test:
     # Starport runs on Windows first; several tests cover Windows paths and process cleanup.
-    runs-on: windows-latest
+    # macOS and Linux run too, so path and process differences show up before release.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
