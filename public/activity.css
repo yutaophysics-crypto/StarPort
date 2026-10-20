@@ -1,0 +1,617 @@
+.native-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.context-compaction-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.context-compaction-status > div { display: grid; gap: 2px; min-width: 0; }
+.context-compaction-status strong { font-weight: 500; }
+.context-compaction-status small { color: var(--muted); font-size: 12px; }
+
+.activity-preference {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.activity-preference-label {
+  font-size: 12px;
+}
+
+.activity-preference > small {
+  font-size: 10px;
+  line-height: 1.6;
+  opacity: 0.8;
+}
+
+.activity-levels {
+  display: flex;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--field);
+}
+
+.activity-levels button {
+  flex: 1;
+  min-height: 34px;
+  padding: 6px 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.activity-levels button[aria-pressed=true] {
+  color: var(--ink);
+  background: var(--hover);
+  box-shadow: 0 1px 4px #0003;
+}
+
+.activity-levels button:focus-visible,
+.workflow-view-switch button:focus-visible,
+.native-workflow summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.native-workflow {
+  font-size: 13px;
+  min-width: 0;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel) 65%, transparent);
+}
+
+.workflow-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 15px;
+  min-height: 44px;
+  line-height: 1.6;
+}
+
+.workflow-heading::-webkit-details-marker,
+.native-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.workflow-heading::after {
+  content: '›';
+  flex: none;
+  transform: rotate(0);
+  transition: transform 0.16s ease;
+  color: var(--muted);
+}
+
+.native-workflow[open] > .workflow-heading::after {
+  transform: rotate(90deg);
+}
+
+.workflow-label {
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.workflow-count {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-duration {
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.workflow-body {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid var(--line);
+  padding: 8px 15px 14px;
+}
+
+.workflow-view-switch {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+  margin-bottom: 3px;
+}
+
+.workflow-view-switch button {
+  background: none;
+  color: var(--muted);
+  padding: 5px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.workflow-view-switch button[aria-pressed=true] {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.workflow-body .native-item {
+  margin-left: 7px;
+  border-color: var(--line);
+  padding-left: 13px;
+}
+
+.workflow-body .native-item > summary {
+  align-items: center;
+  min-height: 40px;
+  gap: 8px;
+  padding: 7px 0;
+  font-size: 12px;
+}
+
+.workflow-body .native-name {
+  color: var(--ink);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-body .native-preview {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.native-workflow[data-level=full] .native-item[open] > .workflow-row-heading > .native-preview {
+  display: none;
+}
+
+.workflow-body .native-item summary small {
+  font-size: 10px;
+}
+
+.workflow-agent > .workflow-row-heading > .subagent-duration {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.native-item-body,
+.workflow-agent-body {
+  padding: 3px 0 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.native-item-body .message-body {
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.native-item-body pre {
+  margin-top: 7px;
+}
+
+.workflow-agent-body .subagent-task {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 8px 0;
+  color: var(--ink);
+}
+
+.workflow-agent-body .subagent-activity {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.workflow-agent-body .subagent-updated,
+.workflow-agent-body .subagent-parent {
+  display: block;
+  font-size: 10px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+.workflow-thinking {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 8px 6px;
+  font-size: 12px;
+}
+
+.native-final-answer {
+  min-width: 0;
+}
+
+.native-meta {
+  font-size: 11px;
+}
+
+.native-meta > summary {
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .workflow-heading {
+    padding: 11px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .workflow-label {
+    font-size: 12px;
+  }
+  .workflow-count {
+    font-size: 10px;
+    flex-basis: auto;
+  }
+  .workflow-body {
+    padding: 7px 12px 12px;
+  }
+  .workflow-body .native-name {
+    max-width: 65%;
+  }
+  .workflow-body .native-preview {
+    flex-basis: calc(100% - 24px);
+    order: 5;
+    white-space: nowrap;
+  }
+  .workflow-agent > .workflow-row-heading > .subagent-duration {
+    display: none;
+  }
+  .workflow-body .native-item > summary {
+    gap: 6px;
+  }
+  .workflow-body .native-item summary small {
+    margin-left: auto;
+  }
+  .activity-levels button {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-heading::after {
+    transition: none;
+  }
+}
+
+.native-item {
+  border-left: 1px solid #7398b344;
+  padding: 0 0 0 14px;
+  color: var(--muted, #adc3d3);
+  min-width: 0;
+}
+
+.native-item > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 6px 0;
+}
+
+.native-item > summary::after {
+  content: '›';
+  margin-left: auto;
+  color: #809ba8;
+  transform: rotate(0deg);
+  flex: none;
+}
+
+.native-item[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.native-glyph {
+  width: 15px;
+  flex: none;
+  color: #85b9cb;
+}
+
+.native-glyph.running {
+  animation: native-pulse 1.5s ease-in-out infinite;
+}
+
+.native-glyph.error,
+.native-status.error {
+  color: #ed9b92;
+}
+
+.native-status.denied {
+  color: #dbb078;
+}
+
+.native-name {
+  font-weight: 500;
+  color: #d4e4ed;
+  flex: none;
+}
+
+.native-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  opacity: 0.8;
+}
+
+.native-item summary small {
+  white-space: nowrap;
+  flex: none;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.native-item pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 360px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  border-radius: 6px;
+  padding: 12px;
+  background: #04101c80;
+  border: 1px solid #789db222;
+  margin: 8px 0;
+}
+
+.native-output {
+  font-family: Consolas, 'Cascadia Code', monospace;
+}
+
+.native-thinking-content {
+  font-size: 14px;
+  opacity: 0.85;
+  padding: 4px 0 8px;
+}
+
+.native-thinking-content .message-body {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.native-cwd,
+.native-scope,
+.native-result-meta,
+.native-history-note,
+.native-empty {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  opacity: 0.7;
+}
+
+.native-plan-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.native-plan-list li {
+  display: flex;
+  gap: 12px;
+}
+
+.native-plan-list li[data-status=completed] {
+  opacity: 0.7;
+}
+
+.native-claude .native-item {
+  border-left-color: #bf8b6438;
+}
+
+.native-claude .native-glyph {
+  color: #d1a386;
+}
+
+.native-claude .native-name {
+  font-family: Consolas, 'Cascadia Code', monospace;
+  font-weight: 600;
+}
+
+.native-claude .native-tool > summary {
+  font-size: 13px;
+}
+
+.native-claude .native-tool > summary .native-glyph.complete {
+  font-size: 0;
+}
+
+.native-claude .native-tool > summary .native-glyph.complete::before {
+  content: '●';
+  font-size: 10px;
+}
+
+.native-codex .native-thinking > summary {
+  font-size: 14px;
+}
+
+.native-codex .native-thinking > summary .native-preview {
+  color: #c5d3de;
+  font-weight: 500;
+}
+
+.native-codex .native-input {
+  border-color: #9bb9ca30;
+}
+
+.native-antigravity .native-item {
+  border-left-color: #859adc55;
+}
+
+.native-deepseek .native-item {
+  border-left-color: #748ff755;
+}
+
+.native-approval {
+  border: 1px solid #9bc1d566;
+  border-radius: 12px;
+  padding: 20px;
+  background: #112432f0;
+  box-shadow: 0 16px 48px #0003;
+  max-height: min(60vh, 620px);
+  overflow: auto;
+}
+
+.native-approval.native-claude {
+  border-color: #b9957955;
+}
+
+.approval-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.approval-heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.native-approval p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.native-approval pre {
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px;
+  background: #06131e;
+  border-radius: 6px;
+}
+
+.approval-question {
+  border: 0;
+  padding: 0;
+  margin: 18px 0;
+  min-width: 0;
+}
+
+.approval-question legend {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.approval-question > small {
+  display: block;
+  margin-bottom: 8px;
+  opacity: 0.7;
+}
+
+.approval-option {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #7195ac33;
+  border-radius: 7px;
+  margin: 6px 0;
+  cursor: pointer;
+}
+
+.approval-option:has(input:checked) {
+  border-color: #8dc4df;
+  background: #213e5166;
+}
+
+.approval-option input {
+  width: 16px !important;
+  flex: none;
+  margin-top: 3px;
+}
+
+.approval-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.approval-option b {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.approval-option small {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.approval-question textarea {
+  width: 100%;
+  resize: vertical;
+  margin-top: 8px;
+}
+
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.approval-submit-status {
+  min-height: 1em;
+  color: #aacbda;
+  margin-bottom: 0;
+}
+
+.approval-path {
+  overflow-wrap: anywhere;
+}
+
+@keyframes native-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .native-glyph.running {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .native-item > summary {
+    flex-wrap: wrap;
+  }
+  .native-preview {
+    flex-basis: calc(100% - 30px);
+    order: 3;
+  }
+  .native-item summary small {
+    margin-left: auto;
+  }
+  .native-approval {
+    padding: 14px;
+  }
+}

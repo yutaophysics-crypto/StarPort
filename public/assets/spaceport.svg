@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <!-- Starport concourse: a docking ring seen through the observation window. Hand-written, no filters, safe to edit. -->
+  <defs>
+    <radialGradient id="space" cx="1080" cy="320" r="1150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f1d38"/><stop offset=".42" stop-color="#081022"/><stop offset="1" stop-color="#020409"/>
+    </radialGradient>
+    <radialGradient id="neb-cyan"><stop offset="0" stop-color="#1d6f8e" stop-opacity=".32"/><stop offset="1" stop-color="#1d6f8e" stop-opacity="0"/></radialGradient>
+    <radialGradient id="neb-violet"><stop offset="0" stop-color="#3b2c74" stop-opacity=".24"/><stop offset="1" stop-color="#3b2c74" stop-opacity="0"/></radialGradient>
+    <radialGradient id="neb-ice"><stop offset="0" stop-color="#2a93b3" stop-opacity=".16"/><stop offset="1" stop-color="#2a93b3" stop-opacity="0"/></radialGradient>
+    <radialGradient id="flare"><stop offset="0" stop-color="#e6f8ff" stop-opacity=".85"/><stop offset="1" stop-color="#e6f8ff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glow-c"><stop offset="0" stop-color="#5fd8ff" stop-opacity=".85"/><stop offset="1" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glow-a"><stop offset="0" stop-color="#ffb347" stop-opacity=".85"/><stop offset="1" stop-color="#ffb347" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glow-r"><stop offset="0" stop-color="#ff6b5a" stop-opacity=".85"/><stop offset="1" stop-color="#ff6b5a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="planet" cx="1500" cy="1700" r="1000" fx="1180" fy="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2f7896"/><stop offset=".16" stop-color="#123247"/><stop offset=".5" stop-color="#081521"/><stop offset="1" stop-color="#03070c"/>
+    </radialGradient>
+    <linearGradient id="hub" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#3a5167"/><stop offset=".35" stop-color="#1d2a38"/><stop offset="1" stop-color="#070b10"/></linearGradient>
+    <linearGradient id="trail-c" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#5fd8ff" stop-opacity="0"/><stop offset="1" stop-color="#9eeaff" stop-opacity=".55"/></linearGradient>
+    <linearGradient id="trail-a" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ffb347" stop-opacity="0"/><stop offset="1" stop-color="#ffd08a" stop-opacity=".45"/></linearGradient>
+    <clipPath id="planet-clip"><circle cx="1500" cy="1700" r="1000"/></clipPath>
+    <pattern id="stars-a" width="160" height="160" patternUnits="userSpaceOnUse" fill="#fff">
+      <circle cx="12" cy="18" r=".7" opacity=".55"/><circle cx="47" cy="92" r=".5" opacity=".4"/><circle cx="88" cy="31" r=".9" opacity=".7"/>
+      <circle cx="131" cy="64" r=".6" opacity=".45"/><circle cx="150" cy="139" r=".7" opacity=".5"/><circle cx="23" cy="128" r=".5" opacity=".35"/>
+      <circle cx="71" cy="148" r=".6" opacity=".5"/><circle cx="104" cy="111" r=".8" opacity=".6"/><circle cx="63" cy="57" r=".4" opacity=".3"/>
+      <circle cx="140" cy="12" r=".5" opacity=".4"/><circle cx="8" cy="77" r=".6" opacity=".45"/><circle cx="118" cy="154" r=".4" opacity=".3"/>
+    </pattern>
+    <pattern id="stars-b" width="233" height="197" patternUnits="userSpaceOnUse" fill="#fff">
+      <circle cx="19" cy="44" r="1" opacity=".75"/><circle cx="77" cy="12" r=".6" opacity=".4"/><circle cx="140" cy="88" r="1.2" opacity=".8" fill="#cfefff"/>
+      <circle cx="201" cy="30" r=".7" opacity=".5"/><circle cx="58" cy="150" r=".8" opacity=".6"/><circle cx="176" cy="172" r=".6" opacity=".45"/>
+      <circle cx="110" cy="180" r=".5" opacity=".35"/><circle cx="222" cy="121" r=".8" opacity=".55" fill="#ffe9c9"/><circle cx="33" cy="100" r=".5" opacity=".35"/>
+      <circle cx="95" cy="63" r=".6" opacity=".4"/>
+    </pattern>
+    <pattern id="stars-c" width="97" height="89" patternUnits="userSpaceOnUse" fill="#cfe6ff">
+      <circle cx="9" cy="14" r=".45" opacity=".25"/><circle cx="41" cy="52" r=".4" opacity=".2"/><circle cx="73" cy="23" r=".5" opacity=".3"/>
+      <circle cx="88" cy="71" r=".4" opacity=".2"/><circle cx="24" cy="80" r=".45" opacity=".25"/><circle cx="60" cy="6" r=".35" opacity=".2"/>
+    </pattern>
+    <g id="star"><circle r="7" fill="url(#flare)"/><path d="M-11 0H11M0-11V11" stroke="#dff6ff" stroke-width=".6" opacity=".45"/><circle r="1.3" fill="#fff"/></g>
+  </defs>
+
+  <!-- Deep space -->
+  <rect width="1600" height="1000" fill="url(#space)"/>
+  <ellipse cx="1120" cy="260" rx="520" ry="170" fill="url(#neb-cyan)" transform="rotate(-14 1120 260)"/>
+  <ellipse cx="820" cy="520" rx="460" ry="140" fill="url(#neb-violet)" transform="rotate(-8 820 520)"/>
+  <ellipse cx="1380" cy="420" rx="260" ry="110" fill="url(#neb-ice)" transform="rotate(20 1380 420)"/>
+  <rect width="1600" height="1000" fill="url(#stars-c)"/>
+  <rect width="1600" height="1000" fill="url(#stars-a)"/>
+  <rect width="1600" height="1000" fill="url(#stars-b)"/>
+  <use href="#star" transform="translate(240 150)"/>
+  <use href="#star" transform="translate(610 96) scale(.8)"/>
+  <use href="#star" transform="translate(905 180) scale(.7)"/>
+  <use href="#star" transform="translate(1420 128) scale(1.1)"/>
+  <use href="#star" transform="translate(1540 400) scale(.8)"/>
+  <use href="#star" transform="translate(690 330) scale(.6)"/>
+  <use href="#star" transform="translate(380 470) scale(.7)"/>
+  <use href="#star" transform="translate(1290 560) scale(.6)"/>
+  <use href="#star" transform="translate(520 640) scale(.5)"/>
+
+  <!-- Planet below the station, lit from the upper left -->
+  <circle cx="1500" cy="1700" r="1000" fill="url(#planet)"/>
+  <g clip-path="url(#planet-clip)" fill="#6fc6e6">
+    <ellipse cx="1350" cy="820" rx="420" ry="26" opacity=".06" transform="rotate(-8 1350 820)"/>
+    <ellipse cx="1520" cy="880" rx="520" ry="40" opacity=".05" transform="rotate(-4 1520 880)"/>
+    <ellipse cx="1200" cy="935" rx="380" ry="20" opacity=".045" transform="rotate(-12 1200 935)"/>
+  </g>
+  <g fill="#ffc46b">
+    <circle cx="1460" cy="900" r="1.2" opacity=".6"/><circle cx="1475" cy="905" r=".9" opacity=".5"/><circle cx="1490" cy="897" r="1.1" opacity=".65"/>
+    <circle cx="1540" cy="931" r="1.3" opacity=".6"/><circle cx="1556" cy="925" r=".9" opacity=".5"/>
+    <circle cx="1380" cy="962" r="1" opacity=".5"/><circle cx="1396" cy="956" r="1.2" opacity=".6"/>
+  </g>
+  <g fill="none">
+    <circle cx="1500" cy="1700" r="1000" stroke="#5fd8ff" stroke-width="40" opacity=".035"/>
+    <circle cx="1500" cy="1700" r="1000" stroke="#5fd8ff" stroke-width="20" opacity=".06"/>
+    <circle cx="1500" cy="1700" r="1000" stroke="#5fd8ff" stroke-width="8" opacity=".14"/>
+    <circle cx="1500" cy="1700" r="1000" stroke="#bff3ff" stroke-width="1.8" opacity=".6"/>
+  </g>
+
+  <!-- Distant freighter skimming the atmosphere -->
+  <g transform="translate(1210 655) rotate(8)">
+    <rect x="-120" y="-.6" width="114" height="1.2" fill="url(#trail-a)"/>
+    <circle cx="-6" r="6" fill="url(#glow-a)"/><circle cx="-6" r="1.2" fill="#ffe2b0"/>
+    <path d="M8 0-4-3-6 0-4 3Z" fill="#2a3644"/>
+  </g>
+
+  <!-- Orbital dock: back half of the ring, spindle, then the front half -->
+  <g transform="translate(1030 300) rotate(-9)">
+    <path d="M-200 0A200 56 0 0 1 200 0" fill="none" stroke="#131c27" stroke-width="18"/>
+    <path d="M-193 0A193 49 0 0 1 193 0" fill="none" stroke="#3b5a70" stroke-width="1" opacity=".7"/>
+    <path d="M-200 0A200 56 0 0 1 200 0" fill="none" stroke="#ffc46b" stroke-width="1.2" stroke-dasharray="2 11" opacity=".3"/>
+    <g stroke="#1a2533" stroke-width="4"><path d="M0-6-141-40M0-6 141-40"/></g>
+
+    <g stroke="#2f6f8f" stroke-width=".8">
+      <rect x="-96" y="-90" width="66" height="16" fill="#0d2030"/><rect x="30" y="-90" width="66" height="16" fill="#0d2030"/>
+      <path d="M-74-90V-74M-52-90V-74M52-90V-74M74-90V-74M-96-82H-30M30-82H96" opacity=".6"/>
+    </g>
+    <path d="M0-118V-176M-10-150H10" stroke="#4a6176" stroke-width="1.5"/>
+    <circle cy="-178" r="9" fill="url(#glow-r)"/><circle cy="-178" r="2.2" fill="#ff6b5a"/>
+    <path d="M0 118V160" stroke="#4a6176" stroke-width="1.5"/>
+    <circle cy="162" r="9" fill="url(#glow-c)"/><circle cy="162" r="2" fill="#bff3ff"/>
+    <rect x="-15" y="-118" width="30" height="236" rx="9" fill="url(#hub)"/>
+    <rect x="-24" y="-92" width="48" height="22" rx="4" fill="#18222e" stroke="#344b5e"/>
+    <g fill="#9eeaff" opacity=".8"><rect x="-16" y="-83" width="5" height="2"/><rect x="-7" y="-83" width="5" height="2"/><rect x="2" y="-83" width="5" height="2"/><rect x="11" y="-83" width="5" height="2"/></g>
+    <rect x="-22" y="66" width="44" height="26" rx="4" fill="#141d28" stroke="#344b5e"/>
+    <rect x="-12" y="86" width="24" height="3" fill="#5fd8ff" opacity=".7"/>
+    <ellipse rx="50" ry="15" fill="#141e29" stroke="#3c5a70"/>
+    <g fill="#ffc46b" opacity=".85">
+      <rect x="-38" y="2" width="3" height="2"/><rect x="-29" y="3" width="3" height="2"/><rect x="-20" y="4" width="3" height="2"/>
+      <rect x="-11" y="4" width="3" height="2"/><rect x="-2" y="4" width="3" height="2"/><rect x="7" y="4" width="3" height="2"/>
+      <rect x="16" y="4" width="3" height="2"/><rect x="25" y="3" width="3" height="2"/><rect x="34" y="2" width="3" height="2"/>
+    </g>
+
+    <g stroke="#1a2533" stroke-width="4"><path d="M0 6-141 40M0 6 141 40"/></g>
+    <path d="M200 0A200 56 0 0 1-200 0" fill="none" stroke="#18222e" stroke-width="18"/>
+    <path d="M200-7A200 56 0 0 1-200-7" fill="none" stroke="#6f93ab" stroke-width="1.2" opacity=".55"/>
+    <path d="M200 2A200 56 0 0 1-200 2" fill="none" stroke="#9fe6ff" stroke-width="1.4" stroke-dasharray="2 9" opacity=".55"/>
+    <g>
+      <circle cx="173" cy="28" r="7" fill="url(#glow-c)"/><circle cx="173" cy="28" r="1.6" fill="#dff8ff"/>
+      <circle cx="100" cy="48.5" r="7" fill="url(#glow-a)"/><circle cx="100" cy="48.5" r="1.6" fill="#ffe2b0"/>
+      <circle cy="56" r="7" fill="url(#glow-c)"/><circle cy="56" r="1.6" fill="#dff8ff"/>
+      <circle cx="-100" cy="48.5" r="7" fill="url(#glow-a)"/><circle cx="-100" cy="48.5" r="1.6" fill="#ffe2b0"/>
+      <circle cx="-173" cy="28" r="7" fill="url(#glow-c)"/><circle cx="-173" cy="28" r="1.6" fill="#dff8ff"/>
+    </g>
+  </g>
+
+  <!-- Station HUD reticle, kept screen-aligned -->
+  <g transform="translate(1030 300)" fill="none" stroke="#5fd8ff" stroke-width="1.2" opacity=".5">
+    <path d="M-246-168V-196H-218M218-196H246V-168M246 160V188H218M-218 188H-246V160"/>
+  </g>
+  <g font-family="Cascadia Mono, Consolas, monospace" letter-spacing="2.5">
+    <text x="784" y="94" font-size="11" fill="#7fe3ff" opacity=".65">SP-07 · ORBITAL DOCK</text>
+    <text x="1276" y="505" font-size="10" fill="#7ff0c0" opacity=".55" text-anchor="end">BERTH 12 · CLEARED</text>
+  </g>
+
+  <!-- Inbound shuttle on its approach corridor -->
+  <g transform="translate(735 465) rotate(-28.7)">
+    <g stroke="#5fd8ff" fill="none" opacity=".35">
+      <path d="M45-12H232M45 12H232" stroke-dasharray="3 7"/>
+      <path d="M66-6 72 0 66 6M106-6 112 0 106 6M146-6 152 0 146 6M186-6 192 0 186 6" opacity=".9"/>
+    </g>
+    <rect x="-260" y="-1" width="238" height="2" fill="url(#trail-c)"/>
+    <circle cx="-21" r="10" fill="url(#glow-c)"/>
+    <path d="M2-6-12-16H-18L-10-6ZM2 6-12 16H-18L-10 6Z" fill="#141e29" stroke="#3f5a70" stroke-width=".6"/>
+    <path d="M34 0 6-6H-14L-20-2V2L-14 6H6Z" fill="#1b2733" stroke="#4f6d84" stroke-width=".8"/>
+    <path d="M30-1 6-5H-14" fill="none" stroke="#8fb5cc" stroke-width=".6"/>
+    <circle cx="-21" r="2.6" fill="#e9fdff"/>
+    <circle cx="-16" cy="-16" r="1.2" fill="#ff6b5a"/><circle cx="-16" cy="16" r="1.2" fill="#6ff0b0"/>
+  </g>
+
+  <!-- Observation window: faint glass sheen, struts, header beam and sill -->
+  <path d="M820 56H940L700 930H580Z" fill="#fff" opacity=".018"/>
+  <path d="M250 50 278 56 182 1000H150Z" fill="#05080c"/>
+  <path d="M278 56 182 1000" stroke="#2a3a4c" stroke-width="1.2"/>
+  <path d="M1322 56 1350 50 1450 1000H1418Z" fill="#05080c"/>
+  <path d="M1322 56 1418 1000" stroke="#2a3a4c" stroke-width="1.2"/>
+  <path d="M0 0H1600V34H1352L1322 56H278L248 34H0Z" fill="#04060a"/>
+  <path d="M0 34H248L278 56H1322L1352 34H1600" fill="none" stroke="#22303e" stroke-width="1.5"/>
+  <path d="M278 59H1322" stroke="#5fd8ff" stroke-width="1" opacity=".25"/>
+  <g fill="#5fd8ff" opacity=".7"><rect x="420" y="43" width="14" height="2"/><rect x="460" y="43" width="14" height="2"/><rect x="500" y="43" width="14" height="2"/></g>
+  <g fill="#ffb347" opacity=".75"><rect x="1100" y="43" width="14" height="2"/><rect x="1140" y="43" width="14" height="2"/></g>
+  <path d="M0 1000V944L150 930H1450L1600 944V1000Z" fill="#04060a"/>
+  <path d="M0 944 150 930H1450L1600 944" fill="none" stroke="#22303e" stroke-width="1.5"/>
+  <path d="M180 938H1420" stroke="#5fd8ff" stroke-width="2" stroke-dasharray="26 18" opacity=".3"/>
+</svg>

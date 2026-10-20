@@ -1,0 +1,50 @@
+/* Copy button on code boxes: hidden until the box is hovered, colours from the theme. */
+.code-box {
+  position: relative;
+}
+
+.code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 18px;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.code-box:hover .code-copy,
+.code-copy:focus-visible,
+.code-copy[data-state='done'],
+.code-copy[data-state='failed'] {
+  opacity: 1;
+}
+
+.code-copy:hover,
+.code-copy[data-state='done'] {
+  color: var(--accent);
+}
+
+.code-copy[data-state='failed'] {
+  color: var(--room-danger, #c9737b);
+}
+
+.code-copy svg {
+  flex: none;
+}
+
+@media (hover: none) {
+  .code-copy {
+    opacity: 1;
+  }
+}

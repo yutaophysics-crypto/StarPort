@@ -1,0 +1,115 @@
+/* 提示词: a quiet icon beside send, its menu, and the manager in the rooms' dialog anatomy (agents-room.css). */
+.composer-snippets {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border-radius: 6px;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+.room-composer-tools:not([hidden]) + .composer-snippets {
+  margin-left: 2px;
+}
+/* Send normally takes the free space with its own auto margin; here the snippet button already did. */
+.composer-snippets + .composer-action {
+  margin-left: 0;
+}
+.composer-snippets:hover,
+.composer-snippets[aria-expanded='true'] {
+  color: var(--accent);
+}
+
+.snippet-menu {
+  width: 240px;
+  max-height: min(420px, 60dvh);
+  overflow-y: auto;
+}
+.snippet-menu button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+}
+.snippet-row + .snippet-row {
+  border-top: 1px solid var(--line);
+}
+.snippet-row-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+}
+.snippet-row-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  text-align: left;
+}
+.snippet-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.snippet-row-toggle[aria-expanded='true'] .snippet-chevron {
+  transform: rotate(90deg);
+}
+.snippet-row-name {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink);
+}
+.snippet-row-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.snippet-row.open .snippet-row-preview {
+  visibility: hidden;
+}
+.snippet-row-tools {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.snippet-row:hover .snippet-row-tools,
+.snippet-row:focus-within .snippet-row-tools {
+  opacity: 1;
+}
+.snippet-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 2px 14px 16px 36px;
+}
+
+@media (hover: none) {
+  .snippet-row-tools {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .snippet-chevron {
+    transition: none;
+  }
+}

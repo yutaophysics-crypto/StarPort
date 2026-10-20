@@ -1,0 +1,4 @@
+interface:
+  display_name: "Starport · 星港"
+  short_description: "Open Starport with shared chats and four AI tools"
+  default_prompt: "Use $harness-hub to open Starport (星港)."

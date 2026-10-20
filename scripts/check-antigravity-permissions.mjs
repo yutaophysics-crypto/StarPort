@@ -1,0 +1,24 @@
+// Native permission check in a dedicated workspace, without creating a Starport chat.
+import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {createInterface} from 'node:readline';
+import {randomUUID} from 'node:crypto';
+import {cliArguments,cliInput,parseEvent} from '../src/adapters/cli.mjs';
+import {startProcess,stopProcess,redact} from '../src/process.mjs';
+import {validateOptions} from '../src/providers.mjs';
+const root=resolve(import.meta.dirname,'..'),audit=JSON.parse(readFileSync(join(root,'.data/antigravity-permissions-audit.json'),'utf8'));
+const cwd=join(root,'.data/agy-permission-smoke');mkdirSync(cwd,{recursive:true});
+const options=validateOptions('antigravity',{...audit.chats[0]?.options,permissionMode:'allow-all',mode:'accept-edits'});
+const runtime=audit.provider,args=[...(runtime.prefixArgs||[]),...cliArguments('antigravity',options)];
+const marker='STARPORT_TOOL_'+randomUUID().replaceAll('-','');
+const prompt=`This is a tool permission test. Use the shell command tool once to print exactly ${marker} (for example, echo ${marker}). Do not read or change any files, do not access the network, and do not use other tools. After executing the command, reply with its output.`;
+const child=startProcess(runtime.command,args,{cwd});let stderr='',result=null;const events=[],steps=[],state={};
+let timedOut=false;const timer=setTimeout(()=>{timedOut=true;stopProcess(child);},90000);
+child.stderr.on('data',chunk=>stderr=(stderr+redact(chunk.toString())).slice(-6000));
+child.stdin.on('error',()=>{});
+createInterface({input:child.stdout}).on('line',line=>{try{const event=JSON.parse(line);if(event.event==='init')console.log('Native session initialized');if(event.event==='step_update'){if(!steps.some(s=>s.step_type===event.step_update.step_type))console.log(JSON.stringify({step:event.step_update.step_type}));steps.push(event.step_update);}for(const item of parseEvent('antigravity',event,state))events.push(item);if(event.event==='result')result=event.result;}catch{}});
+child.stdin.end(cliInput('antigravity',prompt));
+const exitCode=await new Promise((ok,fail)=>{child.once('error',fail);child.once('close',code=>{clearTimeout(timer);ok(code);});});
+const summary={runtime:{command:runtime.command,version:runtime.version},args,exitCode,timedOut,status:result?.status,error:result?.error,reply:result?.response,marker,stepTypes:[...new Set(steps.map(s=>s.step_type))],stderr};
+writeFileSync(join(root,'.data/agy-permission-smoke/result.json'),JSON.stringify({summary,steps},null,2));console.log(JSON.stringify(summary));
+if(exitCode!==0||result?.status!=='SUCCESS'||!result.response?.includes(marker)||/auto-denied|no output produced/i.test(stderr))process.exitCode=1;

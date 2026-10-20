@@ -1,0 +1,1347 @@
+/* Workflows: run cards in the conversation, the mounts in the right panel, and their dialogs.
+   Colours come from the theme's variables (and agents-room.css's --room-*), so each theme keeps its look. */
+:root {
+  --wf-good: var(--accent);
+  --wf-warn: var(--room-busy);
+  --wf-bad: var(--room-danger);
+}
+
+@keyframes wf-flash {
+  from {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+.wf-dot {
+  flex: none;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--faint) 45%, transparent);
+}
+.wf-dot.running {
+  background: var(--wf-warn);
+  animation: room-pulse 1.4s ease-in-out infinite;
+}
+.wf-dot.stopped {
+  background: var(--faint);
+}
+
+.wf-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--room-radius) - 2px);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.wf-badge.good {
+  border-color: color-mix(in srgb, var(--wf-good) 45%, var(--line));
+  color: var(--wf-good);
+}
+.wf-badge.bad {
+  border-color: color-mix(in srgb, var(--wf-bad) 55%, var(--line));
+  color: var(--wf-bad);
+}
+.wf-badge.warn {
+  border-color: color-mix(in srgb, var(--wf-warn) 50%, var(--line));
+  color: var(--wf-warn);
+}
+
+/* Run cards -------------------------------------------------------------------------------- */
+.message-header .provider-mark.wf-mark {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.wf-mark .room-icon svg {
+  width: 13px;
+  height: 13px;
+}
+.message.wf-flash {
+  border-radius: var(--room-radius);
+  animation: wf-flash 1.6s ease-out;
+}
+
+.wf-card {
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+  background: color-mix(in srgb, var(--field) 55%, transparent);
+}
+.wf-card.failed-run {
+  border-color: color-mix(in srgb, var(--wf-bad) 55%, var(--line));
+  box-shadow: inset 2px 0 0 var(--wf-bad);
+}
+.wf-card.running,
+.wf-card.planning {
+  border-color: color-mix(in srgb, var(--wf-warn) 35%, var(--line));
+}
+
+.wf-card-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 8px;
+  text-align: left;
+  color: inherit;
+}
+.wf-card-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+.wf-card-title strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.wf-card-meta {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.wf-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.wf-status.passed,
+.wf-status.done {
+  color: var(--wf-good);
+}
+.wf-status.running,
+.wf-status.planning {
+  color: var(--wf-warn);
+}
+.wf-status.failed,
+.wf-status.verify-failed {
+  color: var(--wf-bad);
+}
+.wf-chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--faint);
+  transition: transform 0.15s;
+}
+.wf-card.open .wf-chevron {
+  transform: rotate(90deg);
+}
+.wf-card-head:hover .wf-chevron {
+  color: var(--ink);
+}
+
+.wf-card-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px 12px;
+  min-width: 0;
+}
+.wf-card.open .wf-card-strip {
+  padding-bottom: 6px;
+}
+.wf-card.open .wf-card-summary {
+  display: none;
+}
+.wf-card-steps {
+  flex: none;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.wf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 6px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--field);
+}
+.wf-chip-avatar {
+  font-size: 12px;
+  line-height: 1;
+}
+.wf-chip.waiting {
+  opacity: 0.55;
+}
+.wf-mark-icon {
+  display: inline-flex;
+}
+.wf-mark-icon svg {
+  width: 11px;
+  height: 11px;
+}
+.wf-mark-icon.good {
+  color: var(--wf-good);
+}
+.wf-mark-icon.bad {
+  color: var(--wf-bad);
+}
+.wf-mark-icon.warn {
+  color: var(--wf-warn);
+}
+.wf-card-summary {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.wf-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 14px 6px;
+}
+.wf-plan-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+.wf-plan-fallback {
+  color: var(--wf-warn);
+}
+.wf-plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+}
+.wf-plan li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+.wf-plan li + li {
+  border-top: 1px solid var(--line);
+}
+.wf-plan-order {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--muted);
+}
+.wf-plan-who {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+}
+.wf-mini-avatar {
+  font-size: 13px;
+  line-height: 1;
+}
+.wf-plan-task {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.wf-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--line);
+}
+.wf-step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.room-avatar.wf-step-avatar {
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
+}
+.wf-step-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.wf-step-who strong {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.wf-step-meta {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.wf-step-side {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.wf-step-status {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.wf-step-status.running {
+  color: var(--wf-warn);
+}
+.wf-step-status.failed {
+  color: var(--wf-bad);
+}
+.wf-step-status.done {
+  color: var(--wf-good);
+}
+.wf-step-process {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.wf-step-duty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.wf-step.waiting .wf-step-duty {
+  color: var(--faint);
+}
+.message-body.wf-step-output {
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+.wf-step-output.clamped {
+  max-height: 260px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 70%, transparent);
+  mask-image: linear-gradient(#000 70%, transparent);
+}
+.wf-step > .room-text-action {
+  align-self: flex-start;
+}
+.wf-step-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--wf-bad);
+  overflow-wrap: anywhere;
+}
+.wf-step-notes,
+.wf-card-notes {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--faint);
+}
+.wf-card-notes {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  padding-left: 0;
+}
+.wf-step-ledger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.wf-step-rejected {
+  color: var(--wf-warn);
+}
+.wf-step.verdict-fail .wf-step-who strong {
+  color: var(--wf-bad);
+}
+
+.wf-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--line);
+}
+.wf-card:not(.open) .wf-card-actions {
+  border-top: 0;
+  padding-top: 0;
+}
+.wf-card-actions .room-text-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.wf-card-actions .room-text-action:hover {
+  color: var(--accent);
+}
+
+/* Exams: the proposal the user starts, and each seat's folder and checks -------------------- */
+.wf-card.proposed {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.wf-status.proposed {
+  color: var(--accent);
+}
+.wf-card.proposed .wf-card-head {
+  cursor: default;
+}
+.wf-exam-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 11.5px;
+}
+.wf-exam-facts dt {
+  padding-top: 3px;
+  color: var(--faint);
+}
+.wf-exam-facts dd {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0;
+}
+.wf-exam-path {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: left;
+}
+.wf-exam-path span:last-child {
+  overflow-wrap: anywhere;
+}
+.wf-exam-path:hover {
+  color: var(--accent);
+}
+.wf-exam-note {
+  color: var(--faint);
+  font-size: 11px;
+}
+.wf-exam-top {
+  flex-basis: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.wf-exam-task {
+  border: 1px solid var(--line);
+  border-radius: calc(var(--room-radius) - 2px);
+}
+.wf-exam-task summary {
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.wf-exam-task[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+.message-body.wf-exam-task-body {
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+.wf-exam-task-body :is(h1, h2, h3, h4) {
+  margin: 6px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.wf-exam-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--room-radius) - 2px);
+}
+.wf-exam-seat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 3px 6px 3px 10px;
+  font-size: 12px;
+}
+.wf-exam-seat + .wf-exam-seat {
+  border-top: 1px solid var(--line);
+}
+.wf-exam-seat-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.wf-exam-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--room-radius) - 2px);
+  font-size: 11px;
+  color: var(--faint);
+}
+.wf-exam-toggle[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--accent);
+}
+.wf-exam-toggle .room-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.wf-exam-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.wf-exam-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.wf-exam-actions {
+  align-items: center;
+}
+.wf-card-actions .primary-button.wf-exam-start {
+  padding: 5px 16px;
+  font-size: 12px;
+}
+.wf-exam-seat-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.wf-exam-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--faint);
+}
+.wf-exam-check .room-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.wf-exam-check.warn {
+  color: var(--wf-warn);
+}
+.wf-exam-check.bad {
+  color: var(--wf-bad);
+}
+.wf-exam-check[title] {
+  cursor: help;
+}
+
+/* Replying to a run */
+.wf-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.wf-ref:hover {
+  color: var(--accent);
+}
+.wf-ref span:last-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.message.user .wf-ref {
+  display: flex;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+.wf-reply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 6px;
+  padding: 6px 6px 6px 10px;
+  border-radius: var(--room-radius);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+.wf-reply-label {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: inherit;
+}
+.wf-reply-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--faint);
+}
+.room-tool.wf-reply-close {
+  width: 22px;
+  height: 22px;
+}
+
+/* A step's desk */
+.wf-desk {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.wf-desk-prompt summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.wf-desk-prompt pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 10px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+  white-space: pre-wrap;
+  font: 11.5px/1.6 var(--mono);
+  color: var(--muted);
+}
+.message.wf-desk-answer {
+  max-width: none;
+  margin: 0;
+}
+
+/* Right panel: this conversation's workflows ----------------------------------------------- */
+.room-presence.busy .room-presence-stack {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wf-warn) 60%, transparent);
+  border-radius: 10px;
+}
+.wf-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.wf-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wf-section-head h4 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+}
+.wf-section-empty {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--faint);
+}
+.wf-mounts {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+  padding: 0;
+}
+.wf-mount {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding-right: 4px;
+  border-radius: var(--room-radius);
+}
+.wf-mount:hover,
+.wf-mount:focus-within {
+  background: var(--hover);
+}
+.wf-mount-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 0 9px 8px;
+  text-align: left;
+  color: inherit;
+}
+.wf-mount-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.wf-mount-when,
+.wf-mount-last,
+.wf-mount-note,
+.wf-mount-block {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.wf-mount-last,
+.wf-mount-note {
+  color: var(--faint);
+}
+.wf-mount-note.accent {
+  color: var(--accent);
+}
+.wf-mount-last.bad {
+  color: var(--wf-bad);
+}
+.wf-mount-last {
+  display: block;
+}
+.wf-nowrap {
+  white-space: nowrap;
+}
+.wf-mount-block {
+  align-items: flex-start;
+  color: var(--wf-warn);
+}
+.wf-mount-block .room-icon {
+  margin-top: 1px;
+}
+.wf-mount.paused .wf-mount-name {
+  color: var(--muted);
+}
+.wf-mount-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-top: 8px;
+}
+.wf-mount-seats {
+  display: inline-flex;
+}
+.wf-mount-seats .room-presence-avatar + .room-presence-avatar {
+  margin-left: -4px;
+}
+.wf-mount-tools {
+  display: inline-flex;
+  gap: 2px;
+}
+.room-tool.wf-run-button:not(:disabled) {
+  color: var(--accent);
+}
+.room-tool.wf-run-button.running {
+  color: var(--wf-warn);
+}
+.room-tool:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Composer */
+.room-route {
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--accent);
+}
+.room-route-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.room-mount-select {
+  max-width: 150px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--room-radius) - 2px);
+  background: var(--field);
+  color: var(--ink);
+  font-size: 11px;
+}
+.room-mode-switch button[aria-pressed='true'] {
+  color: var(--accent);
+}
+.room-one-way {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--room-radius) - 2px);
+  background: var(--field);
+  color: var(--muted);
+  font-size: 11px;
+}
+.room-one-way:hover {
+  color: var(--ink);
+}
+.room-one-way[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  color: var(--accent);
+}
+.room-one-way .room-icon {
+  display: inline-grid;
+}
+
+/* Dialogs --------------------------------------------------------------------------------- */
+.wf-menu {
+  width: 200px;
+}
+.agent-desk-dialog .dialog-footer .wf-footer-left {
+  margin-right: auto;
+}
+.agent-desk-dialog .dialog-footer .room-icon {
+  margin-right: 5px;
+}
+.agent-desk-dialog .dialog-footer .secondary-button {
+  display: inline-flex;
+  align-items: center;
+}
+.agent-desk-dialog input[type='number'] {
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+  background: var(--field);
+  color: var(--ink);
+  font: 12.5px/1.55 var(--sans);
+}
+.agent-desk-dialog .wf-mono,
+.agent-desk-dialog textarea.wf-mono {
+  font: 11.5px/1.65 var(--mono);
+}
+.room-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wf-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.wf-inline input[type='time'] {
+  width: auto;
+}
+.wf-strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+.wf-note {
+  padding: 10px 12px;
+  border-radius: var(--room-radius);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+.wf-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--wf-warn);
+}
+.wf-warning .room-icon {
+  margin-top: 2px;
+}
+.wf-check-hint {
+  display: block;
+  margin-top: 3px;
+  line-height: 1.6;
+}
+.language-switch.wf-segmented {
+  align-self: flex-start;
+  flex-wrap: wrap;
+  margin-right: 0;
+}
+.wf-segmented button {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 11.5px;
+}
+
+/* Workflow editor */
+.wf-stages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wf-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+}
+.wf-stage > .room-text-action {
+  align-self: flex-start;
+}
+.wf-stage-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wf-stage-index {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 11px;
+  color: var(--accent);
+}
+.agent-desk-dialog .wf-stage-head input[type='text'] {
+  flex: 1;
+  padding: 6px 9px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+}
+.agent-desk-dialog .wf-stage-head input[type='text']:hover,
+.agent-desk-dialog .wf-stage-head input[type='text']:focus {
+  border-color: var(--line);
+  background: var(--field);
+}
+.wf-position {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0 0 30px;
+  border-top: 1px dashed var(--line);
+}
+.wf-position-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.agent-desk-dialog .wf-position-head input[type='text'] {
+  flex: 1;
+  min-width: 0;
+}
+.room-check.wf-verify {
+  flex: none;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.room-check.wf-verify input {
+  margin: 0;
+}
+.secondary-button.wf-add-stage {
+  align-self: flex-start;
+}
+.wf-template summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.wf-template textarea {
+  margin: 10px 0 6px;
+}
+
+/* Mount: seats and trigger */
+.wf-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+  padding: 4px 12px;
+}
+.wf-seat-stage + .wf-seat-stage {
+  border-top: 1px solid var(--line);
+}
+.wf-seat-stage-name {
+  margin: 10px 0 2px;
+  font-size: 10.5px;
+  letter-spacing: 0.3px;
+  color: var(--faint);
+}
+.wf-seat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 0;
+}
+.wf-seat-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wf-seat-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.wf-seat-task {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--faint);
+}
+.agent-desk-dialog .wf-seat select {
+  flex: none;
+  width: 210px;
+}
+.wf-seat.empty select {
+  border-color: color-mix(in srgb, var(--wf-warn) 55%, var(--line));
+}
+.wf-trigger-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+.wf-trigger-box[hidden] {
+  display: none;
+}
+.wf-days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.wf-days .room-text-action {
+  margin-left: 10px;
+}
+.wf-day {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 12px;
+  color: var(--muted);
+}
+.wf-day[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.agent-desk-dialog input.wf-every {
+  width: 90px;
+}
+.agent-desk-dialog select.wf-unit {
+  width: auto;
+}
+
+/* Ledger */
+.agent-desk-dialog.ledger {
+  width: min(820px, calc(100vw - 32px));
+}
+.wf-ledger-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wf-ledger-panel > .message-body {
+  font-size: 13px;
+}
+.wf-ledger-path {
+  flex: 1;
+  min-width: 0;
+  align-self: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 10.5px var(--mono);
+  color: var(--faint);
+}
+.wf-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: var(--room-radius);
+}
+.wf-proposal header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.wf-proposal header strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+.wf-proposal header time {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.wf-proposal-summary {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.wf-proposal summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.wf-proposal textarea {
+  margin-top: 8px;
+}
+.wf-claims {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wf-claim {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+}
+.wf-claim + .wf-claim {
+  border-top: 1px solid var(--line);
+}
+.wf-claim.dropped .wf-claim-text {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+.wf-claim-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.wf-claim-id {
+  font: 11px var(--mono);
+  color: var(--muted);
+}
+.wf-claim-by {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.wf-claim-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+.wf-claim-prediction {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+.agent-desk-dialog .wf-claim-rule select {
+  width: 110px;
+}
+.agent-desk-dialog .wf-claim-rule input[type='text'] {
+  flex: 1;
+  width: auto;
+  min-width: 160px;
+}
+.wf-verifiers {
+  margin: 0;
+  padding-left: 18px;
+}
+.wf-verifiers li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 0;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.wf-verifiers li span {
+  font: 11.5px/1.6 var(--mono);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.wf-verifiers li small {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* Settings: the planner chain */
+.wf-planners {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wf-planner {
+  display: grid;
+  grid-template-columns: 52px 130px 1fr 130px;
+  align-items: start;
+  gap: 8px;
+}
+.wf-planner-rank {
+  padding-top: 9px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Library */
+.wf-library {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wf-library li {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+}
+.wf-library li + li {
+  border-top: 1px solid var(--line);
+}
+.wf-library-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wf-library-text strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.wf-library-meta,
+.wf-library-where {
+  font-size: 11px;
+  color: var(--faint);
+}
+.wf-library-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.wf-library-actions {
+  flex: none;
+  display: inline-flex;
+  gap: 14px;
+  padding-top: 1px;
+}
+
+/* A companion's recent work */
+.room-duty-list > li > .room-icon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--muted);
+}
+.room-duty-list li.wf-recent {
+  cursor: pointer;
+}
+.room-duty-list li.wf-recent:hover {
+  background: var(--hover);
+}
+
+html[data-theme=port] :is(.wf-card-meta, .wf-step-meta, .wf-status, .wf-mount-when, .wf-mount-last, .wf-plan-order) {
+  font-family: var(--mono);
+  letter-spacing: 0.2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-dot.running {
+    animation: none;
+  }
+  .message.wf-flash {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .wf-planner {
+    grid-template-columns: 1fr 1fr;
+  }
+  .wf-planner-rank {
+    grid-column: 1 / -1;
+    padding-top: 0;
+  }
+  .wf-seat {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .agent-desk-dialog .wf-seat select {
+    width: 100%;
+  }
+  .wf-position {
+    padding-left: 0;
+  }
+  .room-route,
+  .room-one-way span:not(.room-icon) {
+    display: none;
+  }
+}

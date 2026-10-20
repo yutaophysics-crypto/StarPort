@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Starport · 星港 — Edge Bridge",
+  "version": "0.2.0",
+  "description": "Attach selected webpages and Bilibili subtitles using your existing Edge login in Starport.",
+  "permissions": ["tabs", "scripting", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "Starport · 星港", "default_popup": "popup.html"}
+}

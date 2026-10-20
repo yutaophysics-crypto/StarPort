@@ -1,0 +1,26 @@
+{
+  "name": "harness-hub",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Starport — local and group conversations with caller-owned computer agents and a mobile PWA",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "launch": "node scripts/launch.mjs",
+    "install:macos": "node scripts/build-macos-app.mjs",
+    "start:collaboration": "node src/collaboration/server.mjs",
+    "launch:collaboration": "node scripts/launch-collaboration.mjs",
+    "sync-magi": "python scripts/magi_catalog.py",
+    "start:accounts": "node src/accounts/server.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.282",
+    "dompurify": "3.4.16",
+    "zod": "4.6.5"
+  },
+  "license": "MIT"
+}

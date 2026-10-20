@@ -1,0 +1,51 @@
+import { createServer as createNetServer } from 'node:net';
+import { request as httpRequest } from 'node:http';
+import { existsSync,readFileSync,mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { DatabaseSync } from 'node:sqlite';
+import { createAccountHub } from './accounts/server.mjs';
+import { AccountStore } from './accounts/store.mjs';
+import { AccountVerifier } from './accounts/protocol.mjs';
+import { serviceRequest } from './accounts/desktop.mjs';
+import { createCollaborationHub,collaborationUrl } from './collaboration/server.mjs';
+import { CollaborationStore,fail } from './collaboration/store.mjs';
+import { savePrivateJSON } from './collaboration/desktop.mjs';
+import { readLocalServices } from '../scripts/local-services.mjs';
+const execute=promisify(execFile),read=file=>{try{return JSON.parse(readFileSync(file,'utf8'));}catch{return null;}};
+async function loaded(label){try{await execute('launchctl',['print','gui/'+process.getuid()+'/'+label],{timeout:5000});return true;}catch{return false;}}
+async function freePort(){const server=createNetServer();await new Promise((ok,no)=>{server.once('error',no);server.listen(0,'127.0.0.1',ok);});const port=server.address().port;await new Promise(ok=>server.close(ok));return port;}
+// node:http does not default DELETE requests to chunked bodies; frame JSON using its UTF-8 byte length.
+export async function backendRequest(base,path,options={},backend){const {method='GET',body,cookie,csrf,token,native=false}=options,url=new URL(base),payload=body===undefined?null:JSON.stringify(body),headers={Host:url.host,Origin:url.origin,...cookie?{Cookie:cookie}:{},...csrf?{'X-Starport-CSRF':csrf}:{},...token?{Authorization:'Bearer '+token}:{},...native?{'X-Starport-Native':'1'}:{},...payload?{'Content-Type':'application/json','Content-Length':Buffer.byteLength(payload)}:{}};
+  return new Promise((ok,no)=>{const req=httpRequest(backend+url.pathname.replace(/\/$/,'')+path,{method,headers,timeout:12000},res=>{let n=0;const parts=[];res.on('data',p=>{n+=p.length;if(n>16*1024*1024)req.destroy(fail('服务器响应过大',502));else parts.push(p);});res.on('error',no);res.on('end',()=>{try{const data=JSON.parse(Buffer.concat(parts).toString());if(res.statusCode<200||res.statusCode>=300)throw fail(data.error||'服务器连接失败',res.statusCode);ok({data,response:{headers:{getSetCookie:()=>res.headers['set-cookie']||[]}}});}catch(e){no(e);}});});req.on('timeout',()=>req.destroy(fail('服务器连接超时',504)));req.on('error',no);req.end(payload);});
+}
+export class StarportHosting {
+  constructor({root,dataDir}){Object.assign(this,{root,dataDir});this.file=join(dataDir,'server-hosting.json');this.account=null;this.group=null;this.busy=false;this.lastError='';const saved=read(this.file),old=readLocalServices(root,dataDir);
+    this.config=saved||(old?.server&&old?.accountServer? {enabled:true,managed:true,port:3218,accountPort:3217,publicUrl:old.collaborationUrl,accountData:old.accountData||join(root,'.data/accounts'),groupData:old.groupData||join(root,'.data/collaboration'),allowRegistration:true}:{enabled:false,managed:false,port:3218,accountPort:0,publicUrl:'',accountData:join(dataDir,'hosted-server/accounts'),groupData:join(dataDir,'hosted-server/groups'),allowRegistration:true});
+  }
+  origin(){return this.config.publicUrl||'http://127.0.0.1:'+this.config.port;}
+  async save(){await savePrivateJSON(this.file,this.config);}
+  async request(base,path,options){if(new URL(base).origin===this.origin()&&(this.group||this.config.managed)){const backend='http://127.0.0.1:'+(new URL(base).pathname==='/account'?this.config.accountPort:this.config.port);return backendRequest(base,path,options,backend);}return serviceRequest(base,path,options);}
+  async health(){try{const {data}=await backendRequest(this.origin(),'/health',{},'http://127.0.0.1:'+this.config.port);return data.app==='starport-collaboration'&&data.origin===this.origin()&&data.accountCenter===this.origin()+'/account';}catch{return false;}}
+  counts(){const files=[['accounts',join(this.config.accountData,'accounts.sqlite'),'users'],['groups',join(this.config.groupData,'collaboration.sqlite'),'rooms']];const result={accounts:0,groups:0};for(const [key,file,table]of files){if(!existsSync(file))continue;const db=new DatabaseSync(file,{readOnly:true});try{db.exec('PRAGMA busy_timeout=8000');result[key]=db.prepare('SELECT count(*) AS n FROM '+table).get().n;}finally{db.close();}}return result;}
+  async status(){return {...this.config,publicUrl:this.origin(),running:await this.health(),counts:this.counts(),error:this.lastError};}
+  activeJobs(){const file=join(this.config.groupData,'collaboration.sqlite');if(!existsSync(file))return 0;const db=new DatabaseSync(file,{readOnly:true});try{db.exec('PRAGMA busy_timeout=8000');return db.prepare("SELECT count(*) AS n FROM jobs WHERE status IN ('queued','claimed','running')").get().n;}finally{db.close();}}
+  async configure(input){if(this.busy)throw fail('服务器正在调整，请稍后再试');const port=Number(input.port??this.config.port);if(!Number.isInteger(port)||port<0||port>65535)throw fail('端口使用 0–65535 的整数');let publicUrl=String(input.publicUrl??this.config.publicUrl).trim();if(publicUrl)publicUrl=collaborationUrl(publicUrl);if(typeof(input.allowRegistration??true)!=='boolean')throw fail('注册开关无效');
+    const changed=port!==this.config.port||publicUrl!==this.config.publicUrl;if(changed&&await this.health())throw fail('请先停止服务器，再修改地址或端口');if(changed&&this.counts().accounts>0)throw fail('此服务器已有账号，修改身份地址需要迁移；现有账号和数据未改动');if(this.config.managed&&changed)throw fail('现有后台服务的地址请通过部署配置迁移');Object.assign(this.config,{port,publicUrl,allowRegistration:input.allowRegistration??this.config.allowRegistration});mkdirSync(this.config.accountData,{recursive:true,mode:0o700});await savePrivateJSON(join(this.config.accountData,'server-policy.json'),{allowRegistration:this.config.allowRegistration});await this.save();return this.status();}
+  async resume(){if(this.config.enabled){try{await this.start();}catch(e){this.lastError=e.message;}}}
+  async start(){if(this.busy)throw fail('服务器正在启动或停止');this.busy=true;try{if(await this.health()){this.config.enabled=true;await this.save();return this.status();}
+      if(this.config.managed){if(process.platform!=='darwin')throw fail('旧后台服务需要在原部署入口启动');for(const label of ['local.tao.starport.accounts','local.tao.starport.groups']){const file=join(homedir(),'Library/LaunchAgents',label+'.plist');if(!existsSync(file))throw fail('缺少已配置的服务器后台入口');if(!await loaded(label))await execute('launchctl',['bootstrap','gui/'+process.getuid(),file],{timeout:15000});}let ready=false;for(let i=0;i<30;i++){if(await this.health()){ready=true;break;}await new Promise(r=>setTimeout(r,100));}if(!ready)throw fail('后台服务器未能启动，请检查服务日志');}
+      else{if(this.config.port===0)this.config.port=await freePort();const publicUrl=this.origin();this.account=createAccountHub({root:this.root,port:0,dataDir:this.config.accountData,publicUrl:publicUrl+'/account',allowRegistration:this.config.allowRegistration});await this.account.listen();this.config.accountPort=this.account.server.address().port;this.group=createCollaborationHub({root:this.root,port:this.config.port,dataDir:this.config.groupData,publicUrl,accountCenter:publicUrl+'/account',accountBackend:'http://127.0.0.1:'+this.config.accountPort,eventsTransport:'poll',verifier:new AccountVerifier(publicUrl+'/account',{publicKeyFile:join(this.config.accountData,'public-key.pem')})});await this.group.listen();}
+      this.config.enabled=true;this.lastError='';await this.configurePolicy();await this.save();return this.status();
+    }catch(e){if(this.group){await this.group.close().catch(()=>{});this.group=null;}if(this.account){await this.account.close().catch(()=>{});this.account=null;}this.lastError=e.message;throw e;}finally{this.busy=false;}}
+  async configurePolicy(){mkdirSync(this.config.accountData,{recursive:true,mode:0o700});await savePrivateJSON(join(this.config.accountData,'server-policy.json'),{allowRegistration:this.config.allowRegistration});}
+  async stop(){if(this.busy)throw fail('服务器正在启动或停止');if(this.activeJobs())throw fail('服务器仍有等待或执行中的任务，请结束后再停止',409);this.busy=true;try{await this.close();if(this.config.managed){if(process.platform!=='darwin')throw fail('请从原部署入口停止后台服务器');for(const label of ['local.tao.starport.groups','local.tao.starport.accounts']){if(await loaded(label))await execute('launchctl',['bootout','gui/'+process.getuid()+'/'+label],{timeout:15000});}}this.config.enabled=false;await this.save();return this.status();}finally{this.busy=false;}}
+  accounts(){const file=join(this.config.accountData,'accounts.sqlite');if(!existsSync(file))return [];const store=new AccountStore(file);try{return store.db.prepare('SELECT id,username,name,created,disabled FROM users ORDER BY created').all().map(u=>({...u,disabled:!!u.disabled}));}finally{store.close();}}
+  async accountAction(action,input){if(!existsSync(join(this.config.accountData,'accounts.sqlite')))throw fail('请先启用本机服务器');const store=new AccountStore(join(this.config.accountData,'accounts.sqlite'));let userId=input.userId;
+    try{if(action==='create'){const result=await store.register(input);store.logout(store.session(result.token));return {user:result.user};}if(!['password','disabled'].includes(action))throw fail('账号操作无效');if(action==='password')await store.resetPassword(userId,input.password);else store.setDisabled(userId,input.disabled);
+      const groupFile=join(this.config.groupData,'collaboration.sqlite');if(existsSync(groupFile)&&(action==='password'||input.disabled===true)){const groups=new CollaborationStore(groupFile);try{groups.db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);groups.db.prepare('DELETE FROM window_tickets WHERE user_id=?').run(userId);for(const d of groups.db.prepare('SELECT id FROM devices WHERE user_id=? AND revoked=0').all(userId))groups.revokeDevice(userId,d.id);}finally{groups.close();}}return {ok:true};
+    }finally{store.close();}}
+  async close(){if(this.group){await this.group.close();this.group=null;}if(this.account){await this.account.close();this.account=null;}}
+}

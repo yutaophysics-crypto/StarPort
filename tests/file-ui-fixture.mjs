@@ -1,0 +1,15 @@
+import {createHub} from '../src/server.mjs';
+import {FileActions} from '../src/files.mjs';
+import {mkdtempSync,writeFileSync,appendFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const dir=mkdtempSync(join(tmpdir(),'starport-file-ui-'));
+for(const name of ['PROJECT_NOTES.md','report.md','报告 (a,b) & draft.md'])writeFileSync(join(dir,name),'Synthetic UI fixture only.');
+const registry={list:async()=>[{id:'codex',name:'Codex',installed:true,fields:[],notes:'',color:'#8dcdeb'}],models:async()=>({models:[]}),probe:async()=>({}),resolve:()=>({})};
+const fileActions=new FileActions({launch:async(action,path)=>{appendFileSync(join(dir,'actions.jsonl'),JSON.stringify({action,path})+'\n');return {ok:true};}});
+const hub=createHub({port:0,dataDir:dir,registry,fileActions});
+const chat=hub.store.newChat({title:'文件交互测试',workspace:dir});
+hub.store.message(chat.id,'assistant','codex','文档已保存：\n\n👉 [PROJECT_NOTES.md]('+pathToFileURL(join(dir,'PROJECT_NOTES.md')).href+')\n\n纯文件名 report.md，行内代码 `report.md`。\n\n[中文与空格](<'+pathToFileURL(join(dir,'报告 (a,b) & draft.md')).href+'>)\n\n公式 $x_i^2$ 保持原样。\n\n```text\nreport.md\n```\n\n[网页](https://example.com/report.md) · [不允许的协议](javascript:alert%281%29)\n\nmissing.md');
+console.log(JSON.stringify({port:await hub.listen(),dir,chatId:chat.id}));
+process.on('SIGTERM',async()=>{await hub.close();process.exit(0);});

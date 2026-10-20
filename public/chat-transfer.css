@@ -1,0 +1,13 @@
+.chat-transfer-dialog { width: min(720px, calc(100vw - 32px)); }
+.chat-transfer-dialog .dialog-body { display: grid; gap: 12px; max-height: 68vh; overflow-y: auto; }
+.chat-transfer-dialog p { margin: 0; line-height: 1.7; }
+.chat-transfer-dialog h3 { margin: 0; overflow-wrap: anywhere; }
+.chat-transfer-dialog input, .chat-transfer-dialog select { min-width: 0; width: 100%; }
+.chat-transfer-dialog input[type=file] { padding: 12px; border: 1px dashed var(--line); border-radius: 8px; }
+.chat-transfer-dialog input::file-selector-button { padding: 8px 12px; margin-right: 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); cursor: pointer; }
+.transfer-folder { display: flex; align-items: center; gap: 10px; }
+.transfer-folder input { flex: 1; }
+.transfer-folder button { flex: 0 0 auto; }
+.transfer-preview { display: grid; gap: 10px; max-height: 30vh; overflow: auto; overflow-wrap: anywhere; }
+.transfer-preview:empty { display: none; }
+.transfer-preview .history-preview-message div { white-space: pre-wrap; }

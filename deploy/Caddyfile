@@ -1,0 +1,6 @@
+{$STARPORT_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy groups:3218 {
+    header_up X-Forwarded-Proto https
+  }
+}

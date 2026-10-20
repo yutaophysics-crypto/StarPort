@@ -1,0 +1,8 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Starport · 星港</title><link rel="stylesheet" href="popup.css"><script defer src="popup.js"></script><body>
+<h1>Starport · 星港</h1><p>使用当前 Edge 登录读取 B 站字幕。<br>Read Bilibili subtitles using your Edge login.</p>
+<label>星港地址 / Starport URL<input id="url" value="http://127.0.0.1:3210"></label>
+<label>配对码 / Pairing code<input id="code" placeholder="从星港「附加 Edge」中复制"></label>
+<label class="checkbox"><input id="all-sites" type="checkbox">同时允许附加其他网站 / Allow other sites too</label>
+<button id="connect">连接并允许读取 B 站 / Connect</button>
+<p>默认只授权 B 站。仅在你选择视频或发送 BV 号时读取字幕，登录凭据留在浏览器中。不会读取密码框、输入框或浏览历史。<br>Bilibili only by default. Subtitles are read for videos you select or send. Login credentials stay in Edge. No password fields, form inputs or browsing history are read.</p>
+<button id="disconnect">断开 / Disconnect</button><p id="status" role="status"></p></body></html>

@@ -1,0 +1,143 @@
+{
+  "source": "MAGI",
+  "version": "2.8.0",
+  "hosts": {
+    "claude": {
+      "key": "claude",
+      "label": "Claude Code",
+      "bin": "claude",
+      "tier": 1,
+      "marker": "{home}/.claude",
+      "drops": [
+        {
+          "kind": "skill",
+          "global_dir": "{home}/.claude/skills",
+          "project_dir": "{root}/.claude/skills",
+          "layout": "dir",
+          "invoke": "/{name}"
+        }
+      ],
+      "argv": [
+        "{bin}",
+        "-p",
+        "{prompt}"
+      ],
+      "model_flag": "--model",
+      "model": "",
+      "strong": "opus",
+      "strong_effort": "high",
+      "cheap": "haiku",
+      "effort_argv": [
+        "--effort",
+        "{effort}"
+      ],
+      "effort": "",
+      "run_argv": [
+        "--allowedTools",
+        "Bash"
+      ],
+      "timeout_argv": [],
+      "list_models": [],
+      "models": [
+        "haiku",
+        "sonnet",
+        "opus"
+      ],
+      "reader": "claude",
+      "hook": "claude",
+      "note": "The magi plugin already serves these as /magi:<name>; a copy here also answers to a plain /<name>."
+    },
+    "codex": {
+      "key": "codex",
+      "label": "Codex CLI",
+      "bin": "codex",
+      "tier": 1,
+      "marker": "{home}/.codex",
+      "drops": [
+        {
+          "kind": "skill",
+          "global_dir": "{home}/.agents/skills",
+          "project_dir": "{root}/.agents/skills",
+          "layout": "dir",
+          "invoke": "${name}  (or let Codex pick it by description)"
+        },
+        {
+          "kind": "skill",
+          "global_dir": "{home}/.codex/skills",
+          "project_dir": "",
+          "layout": "dir",
+          "invoke": "${name}  (Codex-native location)"
+        }
+      ],
+      "argv": [
+        "{bin}",
+        "exec",
+        "{prompt}"
+      ],
+      "model_flag": "-m",
+      "model": "",
+      "strong": "",
+      "strong_effort": "high",
+      "cheap": "",
+      "effort_argv": [
+        "-c",
+        "model_reasoning_effort={effort}"
+      ],
+      "effort": "",
+      "run_argv": [
+        "--sandbox",
+        "workspace-write"
+      ],
+      "timeout_argv": [],
+      "list_models": [],
+      "models": [],
+      "reader": "codex",
+      "hook": "claude",
+      "note": "Codex skills are not slash commands: type $<name> to force one, or let it choose by description."
+    },
+    "antigravity": {
+      "key": "antigravity",
+      "label": "Antigravity CLI (agy)",
+      "bin": "agy",
+      "tier": 1,
+      "marker": "{home}/.gemini/config",
+      "drops": [
+        {
+          "kind": "skill",
+          "global_dir": "{home}/.gemini/config/skills",
+          "project_dir": "{root}/.agents/skills",
+          "layout": "dir",
+          "invoke": "named in your prompt, or auto by description (/skills lists them)"
+        }
+      ],
+      "argv": [
+        "{bin}",
+        "-p",
+        "{prompt}"
+      ],
+      "model_flag": "--model",
+      "model": "",
+      "strong": "gemini-3.8-flash-high",
+      "strong_effort": "",
+      "cheap": "gemini-3.7-flash-low",
+      "effort_argv": [
+        "--effort",
+        "{effort}"
+      ],
+      "effort": "",
+      "run_argv": [],
+      "timeout_argv": [
+        "--print-timeout",
+        "{timeout}s"
+      ],
+      "list_models": [
+        "{bin}",
+        "models"
+      ],
+      "models": [],
+      "reader": "antigravity",
+      "hook": "antigravity",
+      "note": "agy has no per-skill slash command — /skills browses what is loaded."
+    }
+  }
+}

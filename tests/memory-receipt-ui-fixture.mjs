@@ -1,0 +1,23 @@
+// Isolated receipt verification; no real providers, logins or conversation writes.
+import {createHub} from '../src/server.mjs';
+import {PROVIDERS} from '../src/providers.mjs';
+import {mkdtempSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+const registry={resolve:()=>({command:process.execPath,prefixArgs:[]}),probe:async()=>({loggedIn:true}),models:async()=>({models:[]}),record:()=>{},list:async()=>Object.values(PROVIDERS).map(p=>({...p,installed:true,statusLabel:'隔离模拟测试'}))};
+const hub=createHub({port:3221,dataDir:mkdtempSync(join(tmpdir(),'starport-receipt-ui-')),registry,implementations:Object.fromEntries(Object.keys(PROVIDERS).map(id=>[id,async({emit})=>emit({type:'replace',text:'模拟回答。'})]))});
+const group=hub.store.group('记忆详情验证'),chat=hub.store.newChat({title:'本轮记忆验证',provider:'codex',workspace:process.cwd(),group_id:group.id});
+const used=['交流语言','回答长度','排版习惯'].map((title,i)=>hub.store.memory.create({kind:'preference',title,content:['请使用中文交流。','请先说明结论，再给出必要依据。','数学公式使用标准 Markdown 分隔符。'][i]},{confirmed:true}));
+const unrelated=hub.store.memory.create({kind:'knowledge',title:'与本轮无关的记忆',content:'这条记忆不应出现在第一轮详情中。'},{confirmed:true});
+hub.store.message(chat.id,'user','codex','这里是第一轮，使用三条记忆。');
+hub.store.message(chat.id,'assistant','codex','第一轮：三条已使用的记忆，没有新候选。','complete',{memory:{ids:used.map(row=>row.id),candidates:[],browsed:[...used,unrelated].map(row=>({id:row.id,title:row.title})),reads:used.map(row=>({id:row.id,revision:1,reason:'当前回答需要这条明确的交流偏好。'}))}});
+const user=hub.store.message(chat.id,'user','codex','我希望以后先写结论。');
+const proposed=hub.store.memory.create({kind:'preference',title:'先写结论',content:'用户希望先写结论，再补充解释。'},{source:{chat,message:user,provider:'codex',evidence:user.content},origin:'assistant'});
+const confirmedCandidate=hub.store.memory.create({kind:'goal',title:'本轮提出，后来确认',content:'这条候选后来已经确认，仍属于该轮提出的候选。'},{confirmed:true});
+hub.store.message(chat.id,'assistant','codex','第二轮：一条已使用的记忆，两条本轮候选。','complete',{memory:{ids:[unrelated.id],candidates:[proposed.id,confirmedCandidate.id]}});
+hub.store.message(chat.id,'user','codex','这里是第三轮，记忆已经被删除。');
+hub.store.message(chat.id,'assistant','codex','第三轮：已删除条目仍保留在本轮使用记录中。','complete',{memory:{ids:['deleted-fixture-memory'],candidates:[]}});
+hub.store.message(chat.id,'user','codex','这里是第四轮，检索结果不适用于本次任务。');
+hub.store.message(chat.id,'assistant','codex','第四轮：只浏览索引，没有读取正文。','complete',{memory:{ids:[],candidates:[],browsed:[{id:unrelated.id,title:unrelated.title}]}});
+console.log('Receipt fixture http://127.0.0.1:'+await hub.listen());
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{await hub.close();process.exit(0);});

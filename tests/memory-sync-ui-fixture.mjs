@@ -1,0 +1,22 @@
+// Synthetic two-device UI fixture; no real histories, credentials or model calls.
+import {createHub,ROOT} from '../src/server.mjs';
+import {Store} from '../src/storage.mjs';
+import {MemorySync} from '../src/memory-sync.mjs';
+import {PROVIDERS} from '../src/providers.mjs';
+import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+const base=mkdtempSync(join(ROOT,'.data','memory-sync-ui-'));
+const dataDir=join(base,'device-a'),folder=join(base,'Shared');mkdirSync(folder);
+const registry={list:async()=>Object.values(PROVIDERS).map(p=>({...p,installed:true,statusLabel:'隔离模拟测试'})),models:async()=>({models:[]})};
+const hub=createHub({dataDir,port:3241,registry});
+const remote=new Store(join(base,'device-b','hub.sqlite')),sync=new MemorySync(remote,{interval:500});sync.name='模拟设备 B';hub.memorySync.name='模拟设备 A';
+const original=hub.store.memory.create({kind:'preference',title:'交流方式',content:'使用清楚的中文说明。'},{confirmed:true});
+hub.store.memory.create({kind:'goal',title:'项目目标',content:'把示例应用做得易用。'});
+await hub.memorySync.configure({enabled:true,folder});await sync.configure({enabled:true,folder});
+await hub.memorySync.configure({enabled:false});
+hub.store.memory.update(original.id,{revision:hub.store.memory.get(original.id).revision,content:'A：使用简短句子解释。'});
+remote.memory.update(original.id,{revision:remote.memory.get(original.id).revision,content:'B：使用条理清楚的段落解释。'});await sync.sync();
+const port=await hub.listen();sync.start();
+writeFileSync(join(ROOT,'.data','memory-sync-ui-current.json'),JSON.stringify({base,dataDir,folder,port,pid:process.pid}));
+console.log(JSON.stringify({port,folder,pid:process.pid}));
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{await sync.close();remote.close();await hub.close();process.exit(0);});

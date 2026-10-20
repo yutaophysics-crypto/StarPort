@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0a1321"><meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="星港群聊：用自己的模型，在绑定的电脑上调用 Agent。">
+  <title>星港群聊 · Starport</title>
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/mobile/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/mobile/icon-180.png">
+  <link rel="stylesheet" href="/mobile/style.css">
+  <script defer src="/vendor/marked.min.js"></script><script defer src="/vendor/purify.min.js"></script><script defer src="/mobile/invitation.js"></script><script defer src="/mobile/composer.js"></script><script defer src="/mobile/app.js?v=account-info-4"></script>
+</head>
+<body>
+  <section id="auth" class="auth-screen">
+    <div class="auth-brand"><img src="/mobile/icon.svg" alt="" width="54" height="54"><div><strong>星港</strong><span>STARPORT</span></div></div>
+    <div class="auth-content"><p class="eyebrow">群聊与远程工作</p><h1>一起对话。<br>在你的电脑上执行。</h1><p class="muted">选择服务器，再登录该服务器的账号。每个人使用自己的模型登录和额度。</p>
+      <div class="auth-switch" hidden role="group" aria-label="账号操作"><button id="choose-login" aria-pressed="true" type="button">登录</button><button id="choose-register" aria-pressed="false" type="button">创建账号</button></div>
+      <form id="auth-form" hidden><label>服务器地址<input id="auth-server" required type="url" autocomplete="url" spellcheck="false" placeholder="https://starport.example.com"></label><label id="name-field" hidden>显示名称<input id="auth-name" maxlength="80" autocomplete="nickname"></label><label>星港账号<input id="auth-username" required minlength="3" maxlength="64" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="你的星港账号"></label><label>密码<input id="auth-password" required type="password" minlength="12" maxlength="256" autocomplete="current-password" placeholder="至少 12 个字符"></label><p id="auth-error" class="error" role="alert"></p><button id="auth-submit" class="primary" type="submit">登录星港</button></form>
+      <div id="central-auth" hidden><p id="central-address" class="muted"></p><button id="central-login" class="primary" type="button">登录星港账号</button><p class="muted">登录后，填写服务器地址和邀请码即可加入群聊。</p></div><p class="auth-footnote">星港账号用于群聊和电脑绑定；模型账号在你自己的电脑上登录。</p>
+    </div>
+    <button id="auth-install" class="quiet install-control" type="button">安装到手机</button>
+  </section>
+  <main id="app" class="app" hidden>
+    <aside id="sidebar" class="sidebar" aria-label="群聊列表"><header class="brand"><img src="/mobile/icon.svg" alt="" width="34" height="34"><strong>星港</strong><span>群聊</span><button id="close-sidebar" class="icon mobile-only" aria-label="关闭群聊列表">×</button></header>
+      <div class="room-actions"><button id="create-room" class="quiet">＋ 创建群聊</button><button id="join-room" class="quiet">加入</button></div><nav id="rooms" class="rooms" aria-label="正在使用的群聊"></nav><details id="dissolved-rooms" class="dissolved-rooms" hidden><summary id="dissolved-room-count">已解散群聊</summary><nav id="dissolved-room-list" class="rooms" aria-label="已解散群聊"></nav></details>
+      <footer><button id="device-button" class="sidebar-action"><span aria-hidden="true">⌘</span><div>我的电脑<small id="binding-summary">尚未绑定</small></div><span>›</span></button><button id="install-button" class="sidebar-action"><span aria-hidden="true">↓</span><div>安装手机端<small>苹果 · 安卓 · 鸿蒙浏览器</small></div><span>›</span></button><div class="account"><span id="account-avatar" class="avatar"></span><div><strong id="account-name"></strong><small id="account-server"></small><small id="connection-state" role="status">已连接</small></div><button id="account-info" class="icon" type="button" aria-label="账号与服务器信息" title="账号与服务器信息">ⓘ</button></div></footer>
+    </aside>
+    <section class="workspace"><header class="room-header"><button id="open-sidebar" class="icon mobile-only" aria-label="打开群聊列表">☰</button><div><p class="eyebrow">共享对话</p><h2 id="room-title">星港群聊</h2></div><button id="other-account" class="quiet" hidden>另一个账号窗口</button><button id="room-info" class="quiet" hidden>群聊设置</button></header><p id="room-notice" class="room-notice" role="status" hidden></p>
+      <section id="empty" class="empty-state"><span class="orbit-mark" aria-hidden="true">✦</span><h2>从一个群聊开始</h2><p>邀请朋友一起对话。调用 Agent 时，使用你绑定电脑上的模型与额度。</p><button id="empty-create" class="primary">创建第一个群聊</button></section>
+      <section id="thread" class="thread" aria-label="群聊消息" hidden><button id="older" class="quiet load-older" hidden>查看更早的消息</button><div id="messages" class="messages" aria-live="polite"></div></section>
+      <section id="composer-region" class="composer-region" hidden><div id="invocation-options" class="invocation-options" hidden><label>Agent<select id="provider"></select></label><label>模型<select id="model"></select></label><label id="custom-model-label" hidden>模型标识<input id="custom-model" maxlength="500" placeholder="原工具支持的模型标识"></label><label>工作目录<select id="workspace"></select></label></div>
+        <div class="compose-context"><div class="compose-switch" role="group" aria-label="发送方式"><button id="mode-message" aria-pressed="true">群聊消息</button><button id="mode-agent" aria-pressed="false">调用 Agent</button></div><button id="binding-chip" class="quiet binding-chip" type="button">绑定电脑</button></div>
+        <form id="composer" class="composer"><label class="sr-only" for="prompt">消息内容</label><textarea id="prompt" required rows="2" maxlength="20000" placeholder="发给群聊成员…"></textarea><button id="send" class="send" type="submit" aria-label="发送消息">↑</button></form><p id="send-context" class="send-context">消息对群聊成员可见。</p><p class="composer-shortcuts">Enter 发送 · Shift/Ctrl+Enter 换行</p>
+      </section>
+    </section>
+  </main>
+  <div id="sidebar-shade" class="shade" hidden></div>
+  <dialog id="dialog"><form id="dialog-form"><header><h2 id="dialog-title"></h2><button type="button" id="dialog-close" class="icon" aria-label="关闭">×</button></header><div id="dialog-body"></div><footer id="dialog-footer"></footer></form></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

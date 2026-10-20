@@ -1,0 +1,31 @@
+services:
+  groups:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.collaboration
+    environment:
+      STARPORT_PUBLIC_URL: https://${STARPORT_DOMAIN:?Set STARPORT_DOMAIN}
+      STARPORT_ACCOUNT_URL: ${STARPORT_ACCOUNT_URL:?Set STARPORT_ACCOUNT_URL}
+    volumes:
+      - group_data:/data
+    restart: unless-stopped
+    expose:
+      - "3218"
+  caddy:
+    image: caddy:2
+    environment:
+      STARPORT_DOMAIN: ${STARPORT_DOMAIN:?Set STARPORT_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - groups
+    restart: unless-stopped
+volumes:
+  group_data:
+  caddy_data:
+  caddy_config:

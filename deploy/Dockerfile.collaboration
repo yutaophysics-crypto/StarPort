@@ -1,0 +1,11 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+RUN mkdir -p /data && chown node:node /data
+COPY src ./src
+COPY public ./public
+ENV STARPORT_COLLAB_HOST=0.0.0.0 STARPORT_COLLAB_PORT=3218 STARPORT_COLLAB_DATA=/data
+USER node
+EXPOSE 3218
+CMD ["node", "src/collaboration/server.mjs"]

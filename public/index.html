@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="hub-token" content="__HUB_TOKEN__">
+  <meta name="theme-color" content="#0a1321">
+  <meta name="color-scheme" content="dark">
+  <title>星港 · Starport</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <script src="/theme.js"></script>
+  <script defer src="/queue.js"></script>
+  <script defer src="/memory-protocol.js"></script>
+  <link rel="stylesheet" href="/vendor/katex.min.css">
+  <link rel="stylesheet" href="/style.css?v=0.2.5">
+  <link rel="stylesheet" href="/star-sea.css?v=0.2.3">
+  <link rel="stylesheet" href="/spaceport.css?v=0.2.3">
+  <link rel="stylesheet" href="/deep-space.css?v=0.2.3">
+  <link rel="stylesheet" href="/files.css?v=0.2.3">
+  <link rel="stylesheet" href="/activity.css?v=0.2.9">
+  <link rel="stylesheet" href="/cover.css?v=0.2.3">
+  <link rel="stylesheet" href="/memory.css?v=0.2.3">
+  <link rel="stylesheet" href="/chat-status.css?v=0.2.3">
+  <link rel="stylesheet" href="/chat-transfer.css?v=0.2.3">
+  <link rel="stylesheet" href="/collaboration.css?v=0.2.3">
+  <link rel="stylesheet" href="/code-copy.css?v=0.2.5">
+  <link rel="stylesheet" href="/settings.css?v=0.2.6">
+  <script defer src="/vendor/marked.min.js"></script>
+  <script defer src="/vendor/katex.min.js"></script>
+  <script defer src="/vendor/purify.min.js"></script>
+  <script defer src="/i18n.js?v=0.2.12"></script>
+  <script defer src="/files.js?v=0.2.3"></script>
+  <script defer src="/markdown.js?v=0.2.3"></script>
+  <script defer src="/code-copy.js?v=0.2.5"></script>
+  <script defer src="/activity-model.js?v=0.2.3"></script>
+  <script defer src="/activity.js?v=0.2.9"></script>
+  <script defer src="/approvals.js?v=0.2.3"></script>
+  <script defer src="/questions.js?v=0.2.3"></script>
+  <script defer src="/live.js?v=0.2.3"></script>
+  <script defer src="/notifications.js?v=0.2.6"></script>
+  <script defer src="/app.js?v=0.2.14"></script>
+  <script defer src="/app-layout.js?v=0.2.14"></script>
+  <script defer src="/app-options.js?v=0.2.14"></script>
+  <script defer src="/app-messages.js?v=0.2.14"></script>
+  <script defer src="/app-send.js?v=0.2.14"></script>
+  <script defer src="/app-folders.js?v=0.2.14"></script>
+  <script defer src="/app-start.js?v=0.2.14"></script>
+  <script defer src="/settings.js?v=0.2.10"></script>
+  <script defer src="/subagents.js?v=0.2.3"></script>
+  <script defer src="/composer.js?v=0.2.4"></script>
+  <script defer src="/permissions.js?v=0.2.3"></script>
+  <script defer src="/chat-transfer.js?v=0.2.3"></script>
+  <script defer src="/imports.js?v=0.2.3"></script>
+  <script defer src="/chat-actions.js?v=0.2.3"></script>
+  <script defer src="/memory-receipt.js?v=0.2.3"></script>
+  <script defer src="/memory.js?v=0.2.3"></script>
+  <script defer src="/shared-context.js?v=0.2.4"></script>
+  <script defer src="/memory-sync.js?v=0.2.4"></script>
+  <script defer src="/context.js?v=0.2.3"></script>
+  <script defer src="/usage.js?v=0.2.3"></script>
+  <script defer src="/group-account.js?v=0.2.3"></script>
+  <script defer src="/hosting.js?v=0.2.3"></script>
+  <script defer src="/collaboration.js?v=0.2.3"></script>
+  <link rel="stylesheet" href="/agents-room.css?v=0.2.4">
+  <link rel="stylesheet" href="/workflows.css?v=0.2.4">
+  <script defer src="/ui-kit.js?v=0.2.13"></script>
+  <script defer src="/workflows.js?v=0.2.15"></script>
+  <script defer src="/workflow-cards.js?v=0.2.15"></script>
+  <script defer src="/workflow-editor.js?v=0.2.15"></script>
+  <script defer src="/workflow-mount.js?v=0.2.15"></script>
+  <script defer src="/workflow-ledger.js?v=0.2.15"></script>
+  <script defer src="/workflow-exam.js?v=0.2.15"></script>
+  <script defer src="/context-settings.js?v=0.2.14"></script>
+  <script defer src="/room-migrate.js?v=0.2.14"></script>
+  <script defer src="/agents-room.js?v=0.2.14"></script>
+  <script defer src="/room-companions.js?v=0.2.14"></script>
+  <script defer src="/room-delete.js?v=0.2.14"></script>
+  <link rel="stylesheet" href="/prompt-snippets.css?v=0.2.4">
+  <script defer src="/prompt-snippets.js?v=0.2.5"></script>
+</head>
+<body>
+<a class="skip-link" href="#main"><b class="i18n-text" data-i18n="跳到对话">跳到对话</b></a>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="对话分组" data-i18n-aria-label="对话分组">
+    <div class="sidebar-top">
+      <a href="#" class="brand" id="home-link">
+        <img src="/icon.svg" alt="" width="34" height="34">
+        <span>
+          <b class="i18n-text" data-i18n="星港">星港</b>
+          <small><b class="i18n-text" data-i18n="STARPORT">STARPORT</b></small>
+        </span>
+      </a>
+      <button id="theme-cover-button" type="button" class="icon-button theme-cover-button" aria-pressed="false" aria-controls="welcome" title="打开主页面" data-i18n-title="打开主页面" aria-label="主页面" data-i18n-aria-label="主页面">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2.5"/>
+          <path d="m3 16 5-5 5 5 3-3 5 5"/>
+          <circle cx="16" cy="9" r="1.5"/>
+        </svg>
+      </button>
+    </div>
+
+    <button id="new-chat" class="new-chat">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+      <b class="i18n-text" data-i18n="新对话">新对话</b>
+      <kbd>Ctrl N</kbd>
+    </button>
+
+    <label class="search">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/>
+        <path d="m20 20-3.5-3.5"/>
+      </svg>
+      <input id="search" placeholder="搜索对话" data-i18n-placeholder="搜索对话" aria-label="搜索对话" data-i18n-aria-label="搜索对话">
+    </label>
+
+    <div class="section-label">
+      <span><b class="i18n-text" data-i18n="房间">房间</b></span>
+      <button id="add-group" class="icon-button" aria-label="新建房间" data-i18n-aria-label="新建房间" title="新建房间" data-i18n-title="新建房间">＋</button>
+    </div>
+    <nav id="groups" class="groups"></nav>
+
+    <div class="sidebar-bottom">
+      <button id="shared-memory" type="button" class="plain-button">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.5"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <b class="i18n-text" data-i18n="共同记忆">共同记忆</b>
+        <small id="memory-badge" hidden></small>
+      </button>
+      <button id="collaboration" type="button" class="plain-button">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <b class="i18n-text" data-i18n="群聊与手机">群聊与手机</b>
+      </button>
+      <button id="connections" type="button" class="plain-button">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+        </svg>
+        <b class="i18n-text" data-i18n="设置">设置</b>
+      </button>
+      <div class="local-state">
+        <i></i>
+        <span id="connection-status"><b class="i18n-text" data-i18n="记录保存在本机">记录保存在本机</b></span>
+      </div>
+    </div>
+    <div id="sidebar-resizer" class="panel-resizer sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调节侧边栏宽度" data-i18n-aria-label="调节侧边栏宽度" title="左右拖动调节宽度 · 双击重置" data-i18n-title="左右拖动调节宽度 · 双击重置" tabindex="0"></div>
+  </aside>
+
+  <main id="main" class="main">
+    <header class="topbar">
+      <button id="sidebar-toggle" class="icon-button mobile-only" aria-label="展开分组" data-i18n-aria-label="展开分组">☰</button>
+      <div class="breadcrumb">
+        <span id="group-label"><b class="i18n-text" data-i18n="个人工作台">个人工作台</b></span>
+        <span class="slash">/</span>
+        <button id="chat-title" class="title-button"><b class="i18n-text" data-i18n="新的一页">新的一页</b></button>
+      </div>
+      <div class="top-actions">
+        <button id="notify-toggle" type="button" class="icon-button notify-toggle" aria-pressed="false" aria-label="勿扰模式" data-i18n-aria-label="勿扰模式">
+          <svg class="bell-on" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+          </svg>
+          <svg class="bell-off" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/>
+          </svg>
+        </button>
+        <button id="export-chat" class="icon-button" aria-label="导出当前对话" data-i18n-aria-label="导出当前对话" title="导出对话" data-i18n-title="导出对话" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+          </svg>
+        </button>
+        <button id="chat-settings" class="icon-button" aria-label="对话设置" data-i18n-aria-label="对话设置" title="标题、分组和工作目录" data-i18n-title="标题、分组和工作目录" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>
+          </svg>
+        </button>
+        <button id="features-toggle" class="icon-button" aria-label="展开工具选项" data-i18n-aria-label="展开工具选项" title="工具选项" data-i18n-title="工具选项">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <path d="M15 4v16"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <section id="welcome" class="welcome">
+      <div class="eyebrow"><span></span> <b class="i18n-text" data-i18n="你的工作，在这里继续">你的工作，在这里继续</b></div>
+      <h1><b class="i18n-text" data-i18n="从这里继续">从这里继续</b><span data-i18n="。">。</span></h1>
+      <div id="welcome-providers" class="provider-grid" role="group" aria-label="选择工具" data-i18n-aria-label="选择工具"></div>
+    </section>
+
+    <section id="conversation" class="conversation" aria-label="对话内容" data-i18n-aria-label="对话内容" hidden>
+      <div id="messages"></div>
+      <div id="approvals"></div>
+      <div id="questions"></div>
+      <div id="run-status" class="run-status" role="status"></div>
+    </section>
+
+    <div id="cover-actions" class="cover-actions" hidden>
+      <div>
+        <p class="cover-note"><b class="i18n-text" data-i18n="返回后，继续刚才的工作。">返回后，继续刚才的工作。</b></p>
+        <p id="cover-run-status" class="cover-run-status" role="status"></p>
+      </div>
+      <button id="return-from-cover" type="button" class="secondary-button">
+        <b class="i18n-text" data-i18n="返回对话">返回对话</b>
+        <span aria-hidden="true">↗</span>
+      </button>
+    </div>
+
+    <div class="composer-region">
+      <section id="message-queue" class="message-queue" aria-label="等待队列" data-i18n-aria-label="等待队列" hidden></section>
+      <section id="goal-status" class="goal-status" hidden aria-label="目标进度" data-i18n-aria-label="目标进度"></section>
+      <form id="composer" class="composer">
+        <div id="composer-attachments" class="attachment-list" aria-live="polite"></div>
+        <div id="composer-mode" class="composer-mode"></div>
+        <label class="sr-only" for="prompt"><b class="i18n-text" data-i18n="发送消息">发送消息</b></label>
+        <textarea id="prompt" placeholder="写下你想继续的事…" data-i18n-placeholder="写下你想继续的事…" rows="2" maxlength="100000"></textarea>
+        <p id="composer-guidance" class="composer-guidance" hidden></p>
+        <div class="composer-bottom">
+          <div class="composer-context">
+            <span id="composer-provider" class="provider-pill">Codex</span>
+            <button id="workspace-button" type="button" class="workspace-button" title="设置工作目录" data-i18n-title="设置工作目录">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>
+              </svg>
+              <span id="workspace-label"><b class="i18n-text" data-i18n="选择工作目录">选择工作目录</b></span>
+            </button>
+          </div>
+          <button id="composer-snippets" type="button" class="composer-snippets" title="提示词：点一条插入输入框" aria-label="提示词" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5"/>
+            </svg>
+          </button>
+          <button id="send" class="send composer-action" type="submit" aria-label="发送消息" title="发送 · Enter">
+            <svg class="send-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <svg class="stop-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" hidden>
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+          </button>
+        </div>
+      </form>
+      <div class="composer-foot">
+        <button id="context-indicator" type="button" aria-haspopup="dialog"></button>
+        <span class="composer-shortcut-hint"><b class="i18n-text" data-i18n="Enter 发送 · Shift Enter 换行">Enter 发送 · Shift Enter 换行</b></span>
+      </div>
+    </div>
+  </main>
+
+  <aside id="features" class="features" aria-label="当前工具选项" data-i18n-aria-label="当前工具选项">
+    <div id="features-resizer" class="panel-resizer features-resizer" role="separator" aria-orientation="vertical" aria-label="调节工具栏宽度" data-i18n-aria-label="调节工具栏宽度" title="左右拖动调节宽度 · 双击重置" data-i18n-title="左右拖动调节宽度 · 双击重置" tabindex="0"></div>
+    <div class="features-heading">
+      <span><b class="i18n-text" data-i18n="当前工具">当前工具</b></span>
+      <span class="tiny-label">HARNESS</span>
+    </div>
+    <label class="sr-only" for="provider-select"><b class="i18n-text" data-i18n="切换工具">切换工具</b></label>
+    <select id="provider-select" class="provider-select"></select>
+    <div id="provider-status" class="provider-status"></div>
+    <button id="query-usage" type="button" class="secondary-button usage-entry">
+      <b class="i18n-text" data-i18n="查询剩余用量">查询剩余用量</b>
+      <span aria-hidden="true">↗</span>
+    </button>
+    <div class="feature-divider"></div>
+    <form id="provider-options" class="provider-options"></form>
+    <p id="provider-note" class="provider-note" hidden></p>
+  </aside>
+</div>
+<dialog id="settings-dialog" class="settings-dialog app-settings" aria-labelledby="settings-heading">
+  <div class="dialog-heading">
+    <div>
+      <p class="eyebrow"><b class="i18n-text" data-i18n="你的本地工作台">你的本地工作台</b></p>
+      <h2 id="settings-heading"><b class="i18n-text" data-i18n="设置">设置</b></h2>
+    </div>
+    <button class="icon-button" data-close aria-label="关闭设置" data-i18n-aria-label="关闭设置">×</button>
+  </div>
+  <div class="settings-layout">
+    <div class="settings-tabs" role="tablist" aria-orientation="vertical" aria-label="设置分类" data-i18n-aria-label="设置分类">
+      <button type="button" role="tab" id="settings-tab-general" data-settings-tab="general" aria-controls="settings-general" aria-selected="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+        <b class="i18n-text" data-i18n="通用">通用</b>
+      </button>
+      <button type="button" role="tab" id="settings-tab-notifications" data-settings-tab="notifications" aria-controls="settings-notifications" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <b class="i18n-text" data-i18n="通知">通知</b>
+      </button>
+      <button type="button" role="tab" id="settings-tab-workflows" data-settings-tab="workflows" aria-controls="settings-workflows" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3.5" width="7" height="6" rx="1.5"/><rect x="14" y="14.5" width="7" height="6" rx="1.5"/><path d="M6.5 9.5v3.5a2 2 0 0 0 2 2H14"/></svg>
+        <b class="i18n-text" data-i18n="工作流">工作流</b>
+      </button>
+      <button type="button" role="tab" id="settings-tab-context" data-settings-tab="context" aria-controls="settings-context" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h9M4 18h6"/><path d="M17 15.5l2.5 2.5L17 20.5"/></svg>
+        <b class="i18n-text" data-i18n="上下文">上下文</b>
+      </button>
+      <button type="button" role="tab" id="settings-tab-connections" data-settings-tab="connections" aria-controls="settings-connections" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg>
+        <b class="i18n-text" data-i18n="连接与数据">连接与数据</b>
+      </button>
+    </div>
+    <div class="dialog-body settings-panels">
+      <section id="settings-general" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-general">
+        <div class="settings-row settings-row-stack">
+          <div class="settings-text">
+            <h3><b class="i18n-text" data-i18n="界面主题">界面主题</b></h3>
+            <p><b class="i18n-text" data-i18n="只改变这台设备上的样子。">只改变这台设备上的样子。</b></p>
+          </div>
+          <div class="theme-cards" role="group" aria-label="界面主题" data-i18n-aria-label="界面主题">
+            <button type="button" class="theme-card" data-theme-choice="sea" aria-pressed="true"><span class="theme-swatch" aria-hidden="true"></span><b class="i18n-text" data-i18n="蔚蓝">蔚蓝</b><small class="i18n-text" data-i18n="海面与星空">海面与星空</small></button>
+            <button type="button" class="theme-card" data-theme-choice="port" aria-pressed="false"><span class="theme-swatch" aria-hidden="true"></span><b class="i18n-text" data-i18n="星港">星港</b><small class="i18n-text" data-i18n="未来星际飞船港">未来星际飞船港</small></button>
+            <button type="button" class="theme-card" data-theme-choice="deep-space" aria-pressed="false"><span class="theme-swatch" aria-hidden="true"></span><b class="i18n-text" data-i18n="深空">深空</b><small class="i18n-text" data-i18n="星际飞船航站">星际飞船航站</small></button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-text">
+            <h3><b class="i18n-text" data-i18n="界面语言">界面语言</b></h3>
+            <p><b class="i18n-text" data-i18n="对话内容和工具输出保持原文。">对话内容和工具输出保持原文。</b></p>
+          </div>
+          <div class="settings-segmented" role="group" aria-label="界面语言" data-i18n-aria-label="界面语言">
+            <button type="button" data-language="zh" lang="zh-CN" aria-pressed="true">中文</button>
+            <button type="button" data-language="en" lang="en" aria-pressed="false">English</button>
+          </div>
+        </div>
+        <section id="activity-preference" class="activity-preference settings-row" aria-label="执行过程显示" data-i18n-aria-label="执行过程显示"></section>
+      </section>
+      <section id="settings-notifications" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-notifications" hidden>
+        <div class="settings-row">
+          <div class="settings-text">
+            <h3><b class="i18n-text" data-i18n="任务完成通知">任务完成通知</b></h3>
+            <p><b class="i18n-text" data-i18n="任务做完时，右下角弹出提醒，任务栏的星港图标闪烁。你正在看的对话不会打扰你。">任务做完时，右下角弹出提醒，任务栏的星港图标闪烁。你正在看的对话不会打扰你。</b></p>
+          </div>
+          <button id="notify-enabled" type="button" class="settings-switch" role="switch" aria-checked="true" aria-label="任务完成通知" data-i18n-aria-label="任务完成通知"><span></span></button>
+        </div>
+        <div class="settings-row">
+          <div class="settings-text">
+            <h3><b class="i18n-text" data-i18n="提示音">提示音</b></h3>
+            <p><b class="i18n-text" data-i18n="弹出提醒时轻响一声。">弹出提醒时轻响一声。</b></p>
+          </div>
+          <button id="notify-sound" type="button" class="settings-switch" role="switch" aria-checked="true" aria-label="提示音" data-i18n-aria-label="提示音"><span></span></button>
+        </div>
+        <div class="settings-row">
+          <div class="settings-text">
+            <h3><b class="i18n-text" data-i18n="试一下">试一下</b></h3>
+            <p><b class="i18n-text" data-i18n="马上弹出一条示例提醒，看看样子、听听声音。">马上弹出一条示例提醒，看看样子、听听声音。</b></p>
+          </div>
+          <button id="notify-test" type="button" class="secondary-button"><b class="i18n-text" data-i18n="发送测试通知">发送测试通知</b></button>
+        </div>
+        <p id="notify-browser" class="settings-note" hidden></p>
+      </section>
+      <section id="settings-workflows" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-workflows" hidden>
+        <div class="settings-row">
+          <div class="settings-text">
+            <h3><b class="i18n-text" data-i18n="点名与工作流">点名与工作流</b></h3>
+            <p><b class="i18n-text" data-i18n="一次点名几位伙伴时由哪个模型排执行顺序、验收不通过时重做几次、每一步最长多久。">一次点名几位伙伴时由哪个模型排执行顺序、验收不通过时重做几次、每一步最长多久。</b></p>
+          </div>
+          <button id="open-workflow-settings" type="button" class="secondary-button"><b class="i18n-text" data-i18n="工作流设置…">工作流设置…</b></button>
+        </div>
+      </section>
+      <section id="settings-context" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-context" hidden>
+        <div class="settings-row">
+          <div class="settings-text">
+            <h3><b class="i18n-text" data-i18n="上下文与压缩">上下文与压缩</b></h3>
+            <p><b class="i18n-text" data-i18n="换模型时新会话最多读多少历史、放不下时是否压缩成摘要、由哪个模型写摘要。">换模型时新会话最多读多少历史、放不下时是否压缩成摘要、由哪个模型写摘要。</b></p>
+          </div>
+          <button id="open-context-settings" type="button" class="secondary-button"><b class="i18n-text" data-i18n="上下文设置…">上下文设置…</b></button>
+        </div>
+          <div id="context-update-status" class="settings-note" role="status" aria-live="polite" hidden></div>
+      </section>
+      <section id="settings-connections" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-connections" hidden>
+        <div class="settings-lead">
+          <p class="muted"><b class="i18n-text" data-i18n="调用各工具已有的登录。账号和密钥由原工具管理。">调用各工具已有的登录。账号和密钥由原工具管理。</b></p>
+          <button id="refresh-connections" type="button" class="secondary-button"><b class="i18n-text" data-i18n="重新检查工具">重新检查工具</b></button>
+        </div>
+        <div id="connection-list"></div>
+        <div class="data-actions">
+          <h3><b class="i18n-text" data-i18n="群聊账号与本机 Agent">群聊账号与本机 Agent</b></h3>
+          <p class="muted"><b class="i18n-text" data-i18n="管理星港账号、群聊服务器，以及本机 Agent 的工作目录和执行权限。">管理星港账号、群聊服务器，以及本机 Agent 的工作目录和执行权限。</b></p>
+          <button id="server-hosting-settings" type="button" class="secondary-button"><b class="i18n-text" data-i18n="本机服务器">本机服务器</b></button>
+          <button id="group-account-settings" type="button" class="secondary-button"><b class="i18n-text" data-i18n="群聊连接设置">群聊连接设置</b></button>
+        </div>
+        <div class="data-actions">
+          <h3><b class="i18n-text" data-i18n="自己的记录，自己保存">自己的记录，自己保存</b></h3>
+          <p class="muted"><b class="i18n-text" data-i18n="备份包含分组与对话，不包含登录凭据。导入会添加副本，不覆盖现有记录。">备份包含分组与对话，不包含登录凭据。导入会添加副本，不覆盖现有记录。</b></p>
+          <button id="export-all" class="secondary-button"><b class="i18n-text" data-i18n="导出全部记录">导出全部记录</b></button>
+          <button id="import-all" class="secondary-button"><b class="i18n-text" data-i18n="导入备份">导入备份</b></button>
+          <input id="import-file" type="file" accept="application/json,.json" hidden>
+        </div>
+        <details class="about">
+          <summary><b class="i18n-text" data-i18n="关于这个工作台">关于这个工作台</b></summary>
+          <p><b class="i18n-text" data-i18n="Starport 0.2 · 前端和对话数据独立运行。">Starport 0.2 · 前端和对话数据独立运行。</b></p>
+          <p><b class="i18n-text" data-i18n="复用">复用</b> <a href="https://github.com/Misaka16384/magi" target="_blank" rel="noreferrer">MAGI 2.8.0</a> <b class="i18n-text" data-i18n="的宿主注册表与本地 Markdown / KaTeX 资源。MAGI 原作者：Misaka16384，MIT 许可。">的宿主注册表与本地 Markdown / KaTeX 资源。MAGI 原作者：Misaka16384，MIT 许可。</b></p>
+        </details>
+      </section>
+    </div>
+  </div>
+  <div class="dialog-footer">
+    <button class="primary-button" data-close><b class="i18n-text" data-i18n="完成">完成</b></button>
+  </div>
+</dialog>
+
+<dialog id="edit-dialog" class="edit-dialog">
+  <form id="edit-form">
+    <div class="dialog-heading">
+      <h2 id="edit-heading"><b class="i18n-text" data-i18n="对话设置">对话设置</b></h2>
+      <button type="button" data-close class="icon-button" aria-label="关闭" data-i18n-aria-label="关闭">×</button>
+    </div>
+    <div id="edit-fields" class="dialog-body"></div>
+    <div class="dialog-footer">
+      <button type="button" data-close class="secondary-button"><b class="i18n-text" data-i18n="取消">取消</b></button>
+      <button type="submit" class="primary-button"><b class="i18n-text" data-i18n="保存">保存</b></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="folder-dialog" class="folder-dialog" aria-label="选择工作目录" data-i18n-aria-label="选择工作目录"></dialog>
+<dialog id="action-dialog" class="action-dialog"></dialog>
+<dialog id="sketch-dialog" class="sketch-dialog"></dialog>
+<dialog id="attachment-dialog" class="attachment-dialog"></dialog>
+<dialog id="usage-dialog" class="usage-dialog" aria-labelledby="usage-heading"></dialog>
+<dialog id="context-dialog" class="context-dialog" aria-labelledby="context-heading"></dialog>
+<dialog id="memory-dialog" class="memory-dialog" aria-labelledby="memory-heading"></dialog>
+<dialog id="memory-receipt-dialog" class="memory-dialog memory-receipt-dialog" aria-labelledby="memory-receipt-heading"></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

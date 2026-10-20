@@ -1,0 +1,771 @@
+/* Starport rooms: companions in the right panel, the sidebar and the composer, plus their dialogs.
+   Colours come from the active theme's variables, so 星辰大海, 星港航站 and 深空 each keep their own look. */
+:root {
+  --room-radius: 8px;
+  --room-busy: var(--amber, #e8b45a);
+  --room-danger: #c9737b;
+}
+html[data-theme=port] {
+  --room-radius: 3px;
+}
+html[data-theme=deep-space] {
+  --room-radius: 7px;
+}
+
+@keyframes room-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Avatars: the emoji is the only colour a companion brings. */
+.room-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--field);
+  border: 1px solid var(--line);
+  font-size: 15px;
+  line-height: 1;
+}
+.room-avatar.large {
+  width: 42px;
+  height: 42px;
+  font-size: 21px;
+}
+.room-icon,
+.room-presence-clock {
+  display: inline-flex;
+}
+.room-icon svg,
+.room-presence-clock svg {
+  display: block;
+}
+
+/* Right panel ------------------------------------------------------------------------------ */
+.language-switch.room-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 0 0 22px;
+}
+.room-tabs button {
+  height: 28px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.agent-desks-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.room-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.room-head-text {
+  min-width: 0;
+}
+.room-head-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.room-head-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.room-head-routine {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+}
+.room-menu-button {
+  flex: none;
+  min-width: 28px;
+  height: 28px;
+  margin: -3px -6px 0 0;
+  font-size: 18px;
+}
+
+.room-roster {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+  padding: 0;
+}
+.room-member {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 6px;
+  border-radius: var(--room-radius);
+}
+.room-member:hover,
+.room-member:focus-within {
+  background: var(--hover);
+}
+.room-member.mentioned {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.room-member.mentioned::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.room-member-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 0 9px 8px;
+  text-align: left;
+  color: inherit;
+  border-radius: var(--room-radius);
+}
+.room-member-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.room-member-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.room-member-role,
+.room-member-note {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+.room-member-role {
+  color: var(--muted);
+}
+.room-member-note {
+  margin-top: 2px;
+  color: var(--faint);
+}
+
+/* Status and hover tools share one cell, so the row never reflows on hover. */
+.room-member-side {
+  flex: none;
+  display: grid;
+  justify-items: end;
+  align-items: center;
+}
+.room-member-status,
+.room-member-tools {
+  grid-area: 1 / 1;
+}
+.room-member-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.room-member-tools {
+  display: inline-flex;
+  gap: 2px;
+  visibility: hidden;
+}
+.room-member:hover .room-member-tools,
+.room-member:focus-within .room-member-tools {
+  visibility: visible;
+}
+.room-member:hover .room-member-status,
+.room-member:focus-within .room-member-status {
+  visibility: hidden;
+}
+.room-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--faint) 45%, transparent);
+}
+.room-member.done .room-dot {
+  background: var(--accent);
+}
+.room-member.running .room-dot {
+  background: var(--room-busy);
+  animation: room-pulse 1.4s ease-in-out infinite;
+}
+.room-member.running .room-member-status {
+  color: var(--room-busy);
+}
+.room-member.failed .room-dot {
+  background: var(--room-danger);
+}
+.room-member.failed .room-member-status {
+  color: var(--room-danger);
+}
+.room-tool {
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: calc(var(--room-radius) - 2px);
+  font-size: 13px;
+  color: var(--muted);
+}
+.room-tool:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.room-tool[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+.room-invite {
+  align-self: flex-start;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.room-invite:hover {
+  color: var(--accent);
+}
+
+.room-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 4px;
+}
+.room-empty-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+.room-empty-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.room-empty .secondary-button {
+  margin-top: 6px;
+}
+
+/* Sidebar: a room's name is never cut, its companions sit small beside it. -------------------- */
+.group-heading:has(.room-presence) .group-toggle {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+/* The hover-only ＋ and ⋯ take no room at rest, so the name keeps one line beside the companions. */
+@media (hover: hover) {
+  .group:not(:hover) .group-heading:has(.room-presence):not(:focus-within) .icon-button {
+    min-width: 0;
+    width: 0;
+    margin-left: -7px;
+    overflow: hidden;
+  }
+}
+.room-presence {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Flush right, after the hover-only ＋ and ⋯, so every room's stack ends on the same edge. */
+  order: 1;
+  padding: 2px 4px;
+  border-radius: 5px;
+  color: var(--faint);
+}
+.room-presence:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.room-presence-stack {
+  display: inline-flex;
+  align-items: center;
+}
+.room-presence-avatar {
+  width: 17px;
+  height: 17px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--field);
+  box-shadow: 0 0 0 1.5px var(--panel);
+  font-size: 10px;
+  line-height: 1;
+}
+.room-presence-avatar + .room-presence-avatar {
+  margin-left: -4px;
+}
+.room-presence-more {
+  margin-left: 3px;
+  font-size: 9.5px;
+}
+
+/* Composer: companions and the send mode live in its bottom row. ----------------------------- */
+.room-composer-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.room-composer-avatars {
+  display: flex;
+  align-items: center;
+}
+.room-composer-avatar {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: var(--field);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1;
+  transition: transform 0.15s, border-color 0.15s, opacity 0.15s, filter 0.15s;
+}
+.room-composer-avatar:first-child {
+  margin-left: 0;
+}
+/* In 对话 mode the companions are only present; in 分工 mode they are the ones listening. */
+.composer:not(.room-dispatch) .room-composer-avatar {
+  opacity: 0.6;
+  filter: grayscale(0.5);
+}
+.room-composer-avatar:hover {
+  z-index: 1;
+  transform: translateY(-2px);
+  border-color: var(--muted);
+  opacity: 1;
+  filter: none;
+}
+.room-composer-avatar.selected {
+  z-index: 1;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.room-composer-avatar.running::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--room-busy);
+  box-shadow: 0 0 0 2px var(--paper);
+  animation: room-pulse 1.4s ease-in-out infinite;
+}
+.language-switch.room-mode-switch {
+  margin-right: 0;
+}
+.room-mode-switch button {
+  min-width: 38px;
+}
+#composer.room-dispatch {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+
+/* Dialogs: Starport's own heading / body / footer. ------------------------------------------ */
+.agent-desk-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+.agent-desk-dialog.wide {
+  width: min(720px, calc(100vw - 32px));
+}
+.agent-desk-dialog:focus {
+  outline: none;
+}
+.room-dialog-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: 88dvh;
+}
+.room-dialog-shell > .dialog-heading,
+.room-dialog-shell > .dialog-footer {
+  flex: none;
+}
+.room-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.room-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.room-dialog-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.room-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.room-field-label {
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+}
+.room-field-hint {
+  font-size: 11px;
+  color: var(--faint);
+}
+.room-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.room-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agent-desk-dialog :is(input[type='text'], input[type='time'], select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+  background: var(--field);
+  color: var(--ink);
+  font: 12.5px/1.55 var(--sans);
+}
+.agent-desk-dialog textarea {
+  resize: vertical;
+}
+.agent-desk-dialog :is(input, select, textarea):focus {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+.agent-desk-dialog :is(input, select, textarea)::placeholder {
+  color: var(--faint);
+}
+
+.room-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  cursor: pointer;
+}
+.room-check input {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+.room-check.subtle {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.room-duty-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+}
+.room-duty-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.room-duty-list li + li {
+  border-top: 1px solid var(--line);
+}
+.room-duty-list .room-avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+.room-duty-list li > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.room-duty-list strong {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* A companion's desk */
+.room-desk-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.room-desk-meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+.room-desk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.room-text-action {
+  padding: 2px 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+.room-text-action:not(:disabled):hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.room-desk-duty {
+  margin: -6px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.room-desk-log {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.room-desk-empty {
+  margin: 0;
+  padding: 30px 20px;
+  border: 1px dashed var(--line);
+  border-radius: var(--room-radius);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--faint);
+}
+.room-desk-entry {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+}
+.room-desk-entry.user {
+  margin-left: 18%;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.room-desk-entry.error {
+  border-color: color-mix(in srgb, var(--room-danger) 45%, transparent);
+}
+.room-desk-entry.error .room-desk-entry-body {
+  color: var(--room-danger);
+}
+.room-desk-entry header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.room-desk-entry-body {
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-desk-dialog.desk .dialog-footer {
+  align-items: flex-end;
+}
+.agent-desk-dialog.desk .dialog-footer textarea {
+  flex: 1;
+  max-height: 160px;
+  resize: none;
+}
+
+/* Who is in the room */
+.room-roster-manage {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.room-roster-manage li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+}
+.room-roster-manage li + li {
+  border-top: 1px solid var(--line);
+}
+.room-roster-manage .room-member-text {
+  flex: 1;
+}
+.room-roster-manage li:not(.in-room) :is(.room-avatar, .room-member-text) {
+  opacity: 0.55;
+}
+.room-presence-toggle {
+  flex: none;
+  min-width: 84px;
+}
+.room-member-memory {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 5px;
+}
+.room-check.room-memory-check {
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.room-check.room-memory-check input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+.room-presence-toggle[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+/* Deleting a room */
+.room-delete-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.room-delete-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--room-radius);
+  cursor: pointer;
+}
+.room-delete-option:hover {
+  background: var(--hover);
+}
+.room-delete-option.selected {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.room-delete-option.danger.selected {
+  border-color: var(--room-danger);
+  background: color-mix(in srgb, var(--room-danger) 12%, transparent);
+}
+.room-delete-option input {
+  flex: none;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+.room-delete-option.danger input {
+  accent-color: var(--room-danger);
+}
+.room-delete-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.room-delete-option-text strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.room-delete-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.room-delete-folder-controls {
+  display: flex;
+  gap: 8px;
+}
+.room-delete-folder-controls .secondary-button {
+  flex: none;
+}
+
+/* 星港航站 speaks in instrument type. */
+html[data-theme=port] :is(.room-head-meta, .room-member-status, .room-desk-meta, .room-desk-entry header) {
+  font-family: var(--mono);
+  letter-spacing: 0.2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-member.running .room-dot,
+  .room-composer-avatar.running::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .room-composer-avatars {
+    display: none;
+  }
+  .room-field-grid {
+    grid-template-columns: 1fr;
+  }
+  .room-desk-entry.user {
+    margin-left: 0;
+  }
+}

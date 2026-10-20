@@ -1,0 +1,103 @@
+.message-body .local-file-link {
+  color: #9edaff;
+  text-decoration: underline;
+  text-decoration-color: #6eadd26b;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.message-body .local-file-link:hover {
+  color: #d3eeff;
+  text-decoration-color: currentColor;
+}
+
+.message-body .local-file-link:focus-visible {
+  outline: 2px solid #a3d9f5;
+  outline-offset: 4px;
+}
+
+.file-actions-menu {
+  z-index: 100;
+  width: 286px;
+  max-width: calc(100vw - 16px);
+}
+
+.file-actions-menu .file-menu-path {
+  margin: 3px 5px 6px;
+  padding: 7px 6px 10px;
+  border-bottom: 1px solid #36516a;
+  color: #9cb6c9;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.file-menu-path strong {
+  display: block;
+  color: #d4e6f4;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.file-menu-path small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.file-actions-menu button {
+  min-height: 38px;
+}
+
+.file-choice-dialog {
+  width: 680px;
+  max-width: calc(100vw - 28px);
+}
+
+.file-choice-dialog h2 {
+  font-size: 18px;
+}
+
+.file-choice-reference {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.file-choice-list {
+  display: grid;
+  gap: 8px;
+  max-height: 42vh;
+  overflow: auto;
+  padding: 4px;
+}
+
+.file-choice-item {
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.file-choice-item:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.file-choice-item:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .file-actions-menu button {
+    min-height: 44px;
+  }
+}
