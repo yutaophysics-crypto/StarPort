@@ -1,6 +1,6 @@
 # Contributing to StarPort
 
-Contributions are welcome through pull requests.
+Contributions are welcome through pull requests. To report a bug or suggest a change without writing code, [open an issue](https://github.com/yutaophysics-crypto/StarPort/issues/new/choose).
 
 1. Fork this repository and create a branch in your fork.
 2. Keep the change focused. Use fictional data in examples and tests.

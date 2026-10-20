@@ -2,6 +2,8 @@
 
 English | [简体中文](zh-CN/memory-sync.md)
 
+> **Testing:** built and covered by automated tests, but not yet used between two real computers. Before turning it on, export a backup from **Settings → Connections & data → Export all records**.
+
 Starport supports an opt-in shared folder without a Starport account. Your existing cloud drive, file sync application or network share transports the files. Starport has no hosted service, registration, provider-password form or built-in cloud-drive login.
 
 ## Set up two computers
