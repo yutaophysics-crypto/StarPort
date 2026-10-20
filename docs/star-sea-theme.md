@@ -1,5 +1,7 @@
 # Azure
 
+English | [简体中文](zh-CN/star-sea-theme.md)
+
 Visual thesis: a quiet night harbor, with a wide starry sky above a silver-blue ocean; dark reading surfaces and pale blue controls keep the workspace calm.
 
 Content plan: retain independent conversation groups on the left, the working conversation in the center, and harness options on the right. The new-chat view reveals the artwork; active conversations dim it. Do not add decorative product copy or change existing behavior.

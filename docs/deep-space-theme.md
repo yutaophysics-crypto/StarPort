@@ -1,6 +1,6 @@
 # Deep Space
 
-English | [Chinese](zh-CN/deep-space-theme.md)
+English | [简体中文](zh-CN/deep-space-theme.md)
 
 Deep Space is the third independent theme. Select it in the theme switcher; the choice is stored in the current browser and survives reloads. Azure remains the default for a browser with no saved theme.
 

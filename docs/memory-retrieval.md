@@ -1,5 +1,7 @@
 # Open-ended memory retrieval
 
+English | [简体中文](zh-CN/memory-retrieval.md)
+
 Starport does not classify the user's interests into a list of allowed subjects. A confirmed memory is trusted source material, not an instruction that applies to every request.
 
 ## Flow

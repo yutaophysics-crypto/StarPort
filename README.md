@@ -1,25 +1,25 @@
 # StarPort
 
-English | [Chinese](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md)
 
 <img src="public/icon.svg" width="64" height="64" alt="StarPort">
 
-A local workspace for conversations with Codex, Claude Code, Antigravity and DeepSeek Harness. Keep conversations, groups and shared memory together while using each tool's existing local login and models. Group conversations let people invoke agents on their own connected computers and share the replies.
+StarPort is a local workspace for Codex, Claude Code, Antigravity and DeepSeek Harness. Conversations, rooms, shared memory and project instructions live in one place, while each tool keeps its own login, models and permission modes. Companions and workflows let several agents work in the same conversation, and group conversations let people call agents on their own connected computers.
 
-The local workspace does not require a StarPort account. Group conversations use accounts on the server you choose; model credentials stay on each participant's computer. StarPort does not provide model subscriptions or transfer credentials between providers.
+The local workspace does not need a StarPort account. Group conversations use accounts on a server you choose; model credentials stay on each participant's computer. StarPort does not provide model subscriptions or move credentials between providers.
 
 ## Get started
 
 ### Windows
 
 1. Install [Node.js 24 or later](https://nodejs.org/), including npm. Reopen your terminal or launcher after installation.
-2. Choose **Code → Download ZIP** on this repository and extract the complete ZIP, or clone the repository using the address in the **Code** menu.
-3. Double-click **Start StarPort.cmd** in the project folder. The first launch installs the pinned dependencies, then opens StarPort. Later launches reuse the installation.
-4. Install and sign in to whichever supported agent tools you want to use. Open **Settings → Connections & data** to check or configure their locations.
+2. Choose **Code → Download ZIP** on this repository and extract the whole archive, or clone the repository using the address in the **Code** menu.
+3. Double-click **Start StarPort.cmd** in the project folder. The first launch needs an internet connection to install the pinned dependencies; later launches reuse them.
+4. Install and sign in to the agent tools you want to use. **Settings → Connections & data** shows which tools StarPort found and lets you set an executable path.
 
-The default workspace address is **http://127.0.0.1:3210/**. Extract the ZIP before starting; do not run the launcher from inside the archive. Python and a separate MAGI download are not required for normal use.
+The workspace opens at **http://127.0.0.1:3210/**. Run the launcher from the extracted folder, not from inside the ZIP. Python and a separate MAGI download are not needed for normal use.
 
-New installations start in **English**. Choose **Settings → General → Interface language** to switch to Chinese. A previously saved English or Chinese preference is preserved. This changes interface text, not conversation content, filenames in your projects or raw tool output.
+New installations start in English. **Settings → General → Interface language** switches to Chinese, and a saved choice is kept. Only interface text changes; your messages, names, file names and tool output stay as written.
 
 ### macOS
 
@@ -39,38 +39,44 @@ npm ci
 npm run launch
 ```
 
-Each computer needs its own installed and authenticated agent tools. Downloading StarPort does not download conversations, memory, credentials, native tool installations or model access from another computer.
+Each computer needs its own installed and signed-in agent tools. This repository holds source code, theme assets and tests only. It contains no conversations, memory, credentials or tool installations. To bring your own records along, see [Import, export and move to another computer](#import-export-and-move-to-another-computer).
 
-## One workspace, native agent capabilities
+## Agent tools
 
-| Tool | Connection | Configuration |
+| Tool | Connection | Options in StarPort |
 | --- | --- | --- |
-| Codex | Local Codex App Server | Existing Codex login; native models, reasoning levels and permission modes |
-| Claude Code | Official Claude Agent SDK driving the local CLI | Existing Claude login or native configuration; model-specific effort and permissions |
-| Antigravity | Local AGY CLI with streaming JSON | Native login, model options and permissions |
-| DeepSeek Harness | Native SDK / JSON-RPC | Native profiles, providers and models; supports the desktop distribution's CLI runtime |
+| Codex | Local Codex App Server (JSON-RPC) | Model, reasoning effort, plan and goal modes, goal budget, **Ask for approval** / **Approve for me** / **Full access** |
+| Claude Code | Official Claude Agent SDK driving the local CLI | Model, reasoning effort, working mode (including plan, **Auto review** and **Bypass permissions**), separate Git worktree, approvals and questions |
+| Antigravity | Local AGY CLI with streaming JSON | Model, reasoning effort, chat, edit or plan mode, **Allow all tools** or native permissions, agent, terminal sandbox |
+| DeepSeek Harness | Official SDK over JSON-RPC | Model, model provider, reasoning effort; also works with the desktop app's bundled CLI |
 
-Only the tools you install are needed. StarPort discovers available runtimes and lets you specify an executable when discovery is insufficient. Tool and model settings remain independent; unsupported capabilities are explained rather than silently mapped to a different behavior.
+Only the tools you install are needed. Model lists and reasoning levels come from each tool. When StarPort cannot confirm what a model supports, it says so instead of guessing. Permission choices map to the tool's own modes, and the tool can still enforce its rules or ask for approval. Choosing a working folder does not create an operating-system sandbox.
 
-Select models from the current tool's list or enter a supported model identifier. Reasoning levels follow the selected native tool and model. Permission choices include the modes supported by that tool; the native tool can still enforce its own restrictions or require approval. Selecting a working folder alone does not create an operating-system sandbox.
+Approval cards let you allow or decline an action, answer a question, or skip it without granting permission. **Check remaining usage** shows what each vendor's own interface reports; missing fields are not estimated. Sessions that StarPort starts in Antigravity default to **Allow all tools**; choose **Use native permissions** under **Tool permissions** to keep Antigravity's own rules.
 
-The Codex interface includes goal and plan controls where supported. Claude Code supports native approval and question callbacks. Approval cards let you allow or reject actions, answer questions or skip a question without granting permission. Remaining-usage reports show the fields available from each vendor's own interface; missing data is not invented.
+Details: [Agent tools: models, permissions and usage](docs/agents.md).
 
-## Conversations and task progress
+## Conversations
 
-- Organize conversations into groups independently of their working folders. Conversations in one group may use different folders, tools and models.
-- The selected working folder is the project. Conversations in the same folder share its project instructions and memory; subfolders are separate projects.
-- View the final answer alone, a task overview, or detailed available execution records. During a task the overview stays visible; after completion it collapses and can be reopened. Select a step or subagent to inspect its recorded activity.
-- Native reasoning summaries and execution records are shown only when the tool supplies them. StarPort does not invent hidden reasoning or claim to reproduce a vendor's private desktop UI exactly.
-- Running conversations show a spinner; completed replies awaiting review show a blue dot. Native failures, interrupted tasks and unconfirmed completion remain distinct.
-- Messages sent while a task is running enter a queue. Edit, remove or explicitly **Steer** a queued message into the current task. Entered text changes the Stop control into a Send arrow; clearing the input restores Stop.
-- A task is not stopped merely because it is quiet. Explicit time limits, cancellation and native failures retain their own behavior. Subagent completion is tracked before declaring a task finished.
+- **Rooms** in the sidebar group your conversations. Conversations in one room can use different folders, tools and models.
+- The working folder is the project. Conversations in the same folder share project instructions, project memory and workflow ledgers; subfolders are separate projects. Choose or rename the folder from the folder picker below the input.
+- **Activity display** sets how much of a task you see: **Hidden**, **Overview** or **Full**. During a task the overview stays open; afterwards it collapses behind **View activity**. Subagents appear inside the reply they belong to. StarPort shows only what the tool reports and does not invent hidden reasoning.
+- A spinner marks a running conversation; a blue dot marks a finished reply you have not viewed. Failures, stopped tasks and unconfirmed endings are shown separately.
+- Messages you send during a task wait in **Queued messages**, where you can edit or delete them. With Codex and Claude Code, **Steer** hands a queued message to the running task. Queued messages can carry attachments. A task is never stopped just because it is quiet.
+- **Branch from here**, under a finished reply, starts a new conversation with the history up to that reply. **Prompts**, next to the send button, inserts your saved prompts. Each code block has a **Copy** button that copies the original text.
+- The **Context** indicator below the input shows the latest context usage reported by Codex or Claude Code.
 
-When switching tools, StarPort starts or resumes the appropriate native session and supplies conversation context within the configured budget. Older content can be compacted by a selected model; full local history remains available through the history tools and a conversation-specific archive under `.starport/history/`. See **Settings → Context** for budgets and compaction options.
+Details: [Conversations, files and context](docs/workspace.md).
+
+## Long conversations and context
+
+When you keep using the same tool, Codex, Claude Code and Antigravity resume their native sessions, receive only the messages they have not seen and manage their own context. When a new session has to read the history (after you switch tool or model, branch, or change conversation settings, and on every DeepSeek turn, because DeepSeek starts a new SDK session each time), StarPort sends the history within a per-tool budget. If it does not fit, a summarizer model compacts older messages into a structured summary that keeps your own points. The model then receives the summary and the recent messages verbatim. The summary belongs to the conversation and is reused after later switches; StarPort compacts again only when new content no longer fits.
+
+Messages that are not sent verbatim are saved to `.starport/history/<conversation id>.md` in the working folder, where the model can read them; `.starport/` contains its own `.gitignore`. **Settings → Context** turns automatic compaction on or off, sets each tool's budget (by default 100k tokens for Codex and Claude Code, 60k for Antigravity and DeepSeek) and chooses up to three summarizer models. Each request to Antigravity is also capped at 184,000 bytes to avoid truncated input.
 
 ## Shared memory and project instructions
 
-StarPort's memory is independent of provider accounts. It supports candidate extraction, confirmation, retrieval at the start of a new request and additional retrieval during a task. Personal preferences and project instructions are managed separately.
+StarPort's memory is independent of provider accounts, and all four tools share it. It supports candidate extraction, confirmation, retrieval at the start of a new request and additional retrieval during a task. Personal preferences and project instructions are managed separately.
 
 Candidates require confirmation before becoming shared memory. Memory selection is based on relevance to the current request, with no fixed list of supported topics. The model can inspect candidate indexes, read selected entries and retrieve supporting history when more detail is needed.
 
@@ -80,57 +86,68 @@ The memory link beneath a reply opens a receipt for that request: which entries 
 - [Retrieval architecture](docs/memory-retrieval.md)
 - [Sync memory between computers](docs/memory-sync.md)
 
-For personal device sync, select corresponding folders managed by your existing sync service, such as Nutstore, OneDrive or Syncthing. StarPort creates a `StarportMemory` subfolder and checks it every 15 seconds while running. Confirmed memory, candidates, profiles and saved instructions can sync; chats, attachments, logins and working folders stay local. Conflicts retain both versions for review. Use a private sync folder because the files contain memory text and revision history.
+For personal device sync, choose matching folders managed by your existing sync service, such as Nutstore, OneDrive or Syncthing. StarPort creates a `StarportMemory` subfolder and checks it every 15 seconds while running. Confirmed memory, candidates, profiles and saved instructions can sync; chats, attachments, logins and working folders stay local. Conflicts keep both versions for review. Use a private sync folder, because the files contain memory text and revision history.
 
-## Companions, workflows and exams
+## Rooms, companions and workflows
 
-Create named companions with their own tools, models, working modes and memory preferences. Add them to a room and invoke them in a conversation; their saved replies remain visible afterwards.
+Rooms can also hold **companions**: named agents with an avatar, role, personality, tool, model, reasoning effort and an unattended working mode (the tool's native permission mode). Personality changes only the tone a companion uses with you, not its analysis. A companion can join any number of rooms.
 
-Reusable workflows can assign stages and seats to companions, review results and repeat or verify work. Mount a workflow on a conversation and run it manually, on a schedule or at an interval. Schedules run in the StarPort service, so closing the page does not stop them; the service itself must remain running.
+- **Mentions**: type `@name` to give a task to a companion. A single mention goes straight to that companion. When a message mentions several, a planner model first sets the order, for example one companion does the work and another reviews it. **Settings → Workflows** sets three planner models, tried in order; if none responds, the order in your message is used. Each companion has its own desk session in each conversation.
+- **One-way**: the companion receives only this message, plus results from companions earlier in the same mention, and not the conversation history. Its reply still returns to the conversation. This is an instruction, not technical isolation, because the companion shares the working folder.
+- **Workflows** are reusable templates made of stages and seats. Seats in one stage run in parallel, and the next stage sees their results. A review seat can send work back for up to three retries. Manage workflows in the **Workflow library**, then mount one on any conversation and choose a companion for each seat. Companions from outside the room join it automatically.
+- **Triggers**: manual, daily at a set time (optionally on chosen weekdays), or at an interval. Schedules run in the StarPort service, so closing the page does not stop them, but nothing runs while the service is off. A missed run can catch up once or be skipped.
+- **Run cards** record each run in the conversation. Expand a card to follow each step, stop the run, or **Reply** so that your next message includes the run's results. Every run starts fresh desk sessions that do not read the conversation history.
+- **Ledgers** (optional, off by default) carry notes between runs: a PLAN, claims, an append-only CHANGELOG and checks, committed to Git after each run. Companions can only propose PLAN changes, which take effect after you confirm them. Dated predictions are scored with the Brier score. Ledgers live in `.starport/ledgers/` in the working folder and are shared by conversations in that folder that mount the same workflow.
+- **Exams** let companions solve the same task independently, without the conversation's context. The conversation model proposes an exam with `starport_exam_propose`; nothing is copied until you review the proposal and choose **Start exam**. Each seat gets its own copy of the paper under `StarPortExams` on your desktop, with reference material if the seat is open book. Afterwards StarPort checks each seat for changed or added files and for tool calls outside its folder. A seat is not a sandbox: the checks find problems afterwards rather than prevent them, and each tool's global instructions still load.
+- **Memory**: in each room, every companion has two switches, **Read long-term memory** (on by default) and **Propose memory candidates** (off by default). A companion's candidates must quote your own words and still need your confirmation.
 
-Exams let companions solve a task independently. A proposal specifies a paper folder, instructions, seats, optional reference material and per-seat limits. Nothing starts until you review the proposal and choose **Start exam**. Each seat gets a separate folder and session, and results include recorded file changes and boundary checks. These checks are retrospective; a seat is not an operating-system sandbox. Native global tool instructions can still apply.
+Details: [Rooms, companions and workflows](docs/rooms-and-workflows.md).
 
-Notifications show completed or failed tasks with a short summary and a link back to the conversation. The bell controls do-not-disturb; **Settings → Notifications** controls sound and test notices. Explicitly saved language and notification preferences are retained.
+## Notifications and settings
+
+When a task finishes or fails, StarPort shows a notification with the room, conversation title and a short summary; clicking it opens the conversation. On Windows this is a native popup with a short chime, and the taskbar button flashes while StarPort is in the background. Other systems use browser notifications. The conversation you are viewing, tasks you stopped and tasks with messages still queued do not notify. The bell in the top bar turns **Do not disturb** on or off.
+
+**Settings** holds the global options: **General** (language and theme), **Notifications** (sound and a test notice), **Workflows** (planner models, retries and step time limits), **Context** (compaction and budgets) and **Connections & data** (tool locations, the local server and backups).
 
 ## Group conversations and phones
 
-Open **Group chat & mobile**, choose a server and sign in to an account on that server. A group owner shares the server address and invitation code. Each person connects their own computer and selects which folders and tools it exposes.
+Open **Groups & mobile**, choose a server and sign in to an account on that server. A group owner shares the server address and an invitation code. Each person connects their own computer and chooses which folders and tools it exposes.
 
 Participants can chat with each other and invoke agents in the group. Shared replies are visible to the group; only the caller can answer their own approvals or stop their tasks. Calls use that caller's connected computer and native model credentials, not another member's subscription.
 
 The phone interface is a responsive PWA served over HTTPS. A local `127.0.0.1` address cannot reach another computer. Installation depends on the phone and browser; ordinary web access remains available. The repository does not ship native IPA, APK or HAP packages.
 
-Self-host the account and group services from **Settings → Connections & data → This computer's server**, or use the supplied Docker Compose and Caddy deployment. Do not expose the private local workspace on port 3210 to the internet.
+Self-host the account and group services from **Settings → Connections & data → Local server**, or use the supplied Docker Compose and Caddy deployment. Do not expose the private local workspace on port 3210 to the internet.
 
 - [Groups, mobile access and deployment](docs/collaboration.md)
 - [Servers and accounts](docs/account-center.md)
 
 ## Files, browser pages and subtitles
 
-Attach files or folders directly from StarPort. Folder browsing shows folders on the computer running the service. A folder reference does not recursively copy that folder.
+The **+** menu below the input attaches files, folders, browser tabs and video subtitles. It also contains **Work in a project**, the Codex **Goal**, **Plan mode** and a **Draw** canvas. Files are stored as local copies, up to 8 MB each and 16 items or 24 MB per message. A folder is attached as a path and is not copied. The folder browser shows folders on the computer running the service.
 
 The optional [Edge extension](extensions/edge) pairs with StarPort and lets you explicitly attach a browser tab or read Bilibili subtitles using that browser's current login. Browser credentials remain in Edge. The tool reads only the requested pages or videos; it does not read browsing history, password fields or unrelated form input. Missing subtitles or failed authentication produce an explanation, not a fabricated transcript. See the [browser subtitle guide](docs/browser-video-subtitles.md).
 
-Local file links in replies can be opened with the default application. On Windows, the context menu offers **Open file**, **Show in File Explorer** with the file selected, and the system **Open with** chooser. Ambiguous relative filenames require a choice. Rendering a message does not execute a file action, and executable or unknown file types use an application chooser.
+Local file links in replies can be opened with the default application. On Windows, the context menu offers **Open file**, **Show in File Explorer** with the file selected, and the system **Open with** chooser. Ambiguous relative filenames require a choice. Rendering a message never runs a file action, and executable or unknown file types open the application chooser.
 
 ## Import, export and move to another computer
 
-Use **Import conversations** to select local Codex or Claude Code history, preview it and choose a destination group. Imports are independent copies, not live synchronization; they do not inherit native permissions or automatically run tasks. Claude imports read local CLI history, not Claude web history.
+Use **Import conversations** to select local Codex or Claude Code history, preview it and choose a destination room. Imports are independent copies, not live synchronization; they do not inherit native permissions or automatically run tasks. Claude imports read local CLI history, not Claude web history.
 
 For one conversation, choose **Export conversation** from its menu:
 
-- **Session file** (`.starport.json`) carries that conversation's messages, available execution records and supported uploaded attachments. Import it on another computer and choose a local working folder.
-- **Markdown** produces a readable transcript.
+- **Export conversation file** (`.starport.json`) carries that conversation's messages, available execution records and supported uploaded attachments. Import it on another computer and choose a local working folder.
+- **Export Markdown** produces a readable transcript.
 
-A session file does not contain other conversations, shared memory, account logins, native session bindings, permissions or queued jobs. Files generated in the working folder need to be moved separately. Reimporting identical content opens the existing copy rather than overwriting another conversation. Current limits are 120 MB per session file and 8 MB per uploaded attachment.
+A conversation file does not contain other conversations, shared memory, account logins, native session bindings, permissions or queued jobs. Files generated in the working folder need to be moved separately. Reimporting identical content opens the existing copy rather than overwriting another conversation. Current limits are 120 MB per conversation file and 8 MB per uploaded attachment.
 
-**Settings → Connections & data** also exports and imports a complete logical backup of StarPort records. Imported memory requires review and confirmation. Folder references and browser connections need to be configured on the destination computer. Backups must not be committed to Git.
+**Settings → Connections & data → Export all records** creates a complete logical backup of your StarPort records, and **Import backup** restores it on another computer as new copies (up to 128 MB). Imported memory requires review and confirmation. Working folders, folder references and browser connections need to be set up again on the destination computer. Backups must not be committed to Git.
 
-Deleting a conversation removes its StarPort records and its own `.starport/history/` archive. Attachments, generated files, working folders, native tool history, exports and backups remain. Related material must be checked and removed separately. Ordinary deletion does not perform automatic database compaction or promise irreversible erasure.
+Deleting a conversation removes its StarPort records and its own `.starport/history/` archive. Attachments, generated files, working folders, native tool history, exports and backups remain. Check and remove related material separately. Ordinary deletion does not compact the database automatically or promise irreversible erasure.
 
 ## Local storage and maintenance
 
-The local workspace uses relational SQLite tables with WAL mode. The main database is `.data/hub.sqlite`; a single database file is normal SQLite storage. The WAL and SHM files are part of the live database, not disposable leftovers. See [database architecture](docs/database-architecture.md).
+The local workspace uses relational SQLite tables in WAL mode. The main database is `.data/hub.sqlite`; a single database file is normal SQLite storage. The WAL and SHM files are part of the live database, not disposable leftovers. See [database architecture](docs/database-architecture.md).
 
 Use logical exports for routine backups. Before copying database files directly, stop the service normally or use SQLite's consistent backup facilities; copying only a live main file can omit committed WAL data.
 
@@ -169,13 +186,14 @@ The test runner uses an isolated temporary folder and cleans it afterwards. A si
 | `src/storage.mjs`, `src/compaction.mjs` | SQLite records and conversation compaction |
 | `src/workflows.mjs`, `src/workflows/` | Companions, rooms, workflow scheduling, ledgers and exams |
 | `public/app*.js` | Main workspace, views, settings and interaction |
+| `public/agents-room.js`, `public/room-*.js`, `public/workflow*.js` | Rooms, companions and workflow dialogs |
 | `public/i18n.js` | English and Chinese interface translations |
 | `public/mobile/`, `src/collaboration/` | Group and mobile interface, service and execution bridge |
 | `tests/` | Unit, integration and isolated UI fixtures |
 
-The frontend uses ordered plain scripts rather than a framework build. `node tests/ui-fixture.mjs` starts an isolated demonstration server with temporary data and simulated tools. Do not connect tests to personal accounts or production histories.
+The frontend uses ordered plain scripts rather than a framework build. `node tests/ui-fixture.mjs` (port 3211), `node tests/completion-ui-fixture.mjs` (port 3216) and `node tests/interactions-ui-fixture.mjs` (port 3217) start isolated servers with temporary data and simulated tools. `node scripts/live-check.mjs codex antigravity deepseek` makes one real model call per tool and uses your quota. Do not connect tests to personal accounts or production histories.
 
-Optional tool entry points can be installed with `python scripts/install-skills.py`; rerun it after moving the project. In Codex, invoke `$harness-hub`. The entry point opens StarPort's own local interface and does not replace a native tool's UI.
+Optional tool entry points can be installed with `python scripts/install-skills.py`; rerun it after moving the project. In Codex, invoke `$harness-hub`; in other tools, ask them to open StarPort with the harness-hub skill. The entry point opens StarPort's own local interface and does not replace a native tool's UI.
 
 StarPort reuses MAGI's host registration catalog and bundled marked, KaTeX and Archivo resources, preserving their notices. The conversation database, adapters and workspace frontend are implemented here. The complete MAGI repository is not a runtime dependency. To regenerate the catalog, place the pinned [MAGI 2.8.0 source](https://github.com/Misaka16384/magi/tree/e95f14a4a1601008cee9a00aa2b5e78c49842794) in ignored `vendor/magi`, then run `npm run sync-magi`.
 

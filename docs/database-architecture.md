@@ -1,6 +1,6 @@
 # Database architecture
 
-English | [Chinese](zh-CN/database-architecture.md)
+English | [简体中文](zh-CN/database-architecture.md)
 
 StarPort uses relational SQLite. A single main database file is SQLite's normal storage format; it does not mean every record is packed into one table or a JSON document. The local, single-user workspace does not require a separately administered database server or a database per conversation.
 

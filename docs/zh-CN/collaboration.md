@@ -53,7 +53,7 @@
 
 手机需要访问群聊服务的 **HTTPS 地址**，不能用 `127.0.0.1` 访问另一台电脑。先完成下面的部署，再在手机登录同一星港账号，打开 **我的电脑** 选择执行电脑。
 
-账号属于统一账号中心；群聊、成员和邀请码属于对应群聊服务器。两台电脑各自打开 `127.0.0.1:3218` 仍是两个不同服务器。加入同一个群时必须填写群主提供的同一个 HTTPS 群聊地址；两个服务器须信任同一个账号中心，才能使用同一个账号。
+账号属于你登录的服务器；群聊、成员和邀请码属于对应群聊服务器。两台电脑各自打开 `127.0.0.1:3218` 仍是两个不同服务器。加入同一个群时必须填写群主提供的同一个 HTTPS 群聊地址。使用独立账号服务的部署，须信任同一个账号服务才能共用账号。
 
 - **iPhone / iPad**：Safari 打开群聊网址，通过分享菜单添加到主屏幕；提供该选项的版本中开启“作为 Web App 打开”。参考 [Apple 官方说明](https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/27/ios/27)。
 - **Android**：支持的浏览器中选择“安装应用”或“添加到桌面”。本项目包含 manifest、192/512 图标与 service worker，HTTPS 部署满足这些基础安装条件。参考 [Chrome 安装条件](https://web.dev/articles/install-criteria)。
@@ -75,9 +75,9 @@ docker compose --env-file deploy/.env -f deploy/compose.yml up -d --build
 
 Caddy 管理 HTTPS；群聊后端仅在 Docker 内部开放。数据库存放在 `group_data` 卷，不能把旧电脑的 `.data`、CLI 登录、密钥、模型运行时或个人记忆打包进服务器镜像。`.dockerignore` 已排除这些目录。
 
-在 `.env` 中设置 `STARPORT_ACCOUNT_URL=https://你的账号中心/account`。群聊服务不接收账号密码；新账号注册由账号中心的 `STARPORT_ALLOW_REGISTRATION` 控制。群聊仍只允许通过群主邀请加入。
+在 `.env` 中设置 `STARPORT_ACCOUNT_URL=https://accounts.example.com/account`。群聊服务不接收账号密码；新账号注册由账号服务的 `STARPORT_ALLOW_REGISTRATION` 控制。群聊仍只允许通过群主邀请加入。
 
-每台电脑先在本地 **群聊与手机** 登录账号中心，再输入该 HTTPS 地址和邀请码加入。也可设置 `STARPORT_COLLAB_URL=https://groups.example.com` 后启动工作台，以跳过本地群聊服务启动。
+每台电脑先在本地 **群聊与手机** 登录账号服务，再输入该 HTTPS 地址和邀请码加入。也可设置 `STARPORT_COLLAB_URL=https://groups.example.com` 后启动工作台，把这个统一群聊服务设为默认地址。
 
 ### 直接运行 Node
 
@@ -126,7 +126,8 @@ Quick Tunnel 不支持 SSE，设置 `events: "poll"` 后，群聊页面每 5 秒
 - 群聊服务：`.data/collaboration/collaboration.sqlite`，或部署的 `/data`。
 - 电脑连接：`.data/collaboration-link.json`。只保存受保护的设备授权，不保存星港密码或复制模型密钥；Windows 限制为当前用户与 SYSTEM，其他系统使用 0600。
 - 电脑群聊执行记录：`.data/collaboration-workers/<分区>/worker.sqlite`，不读取本地个人聊天和共同记忆。
+- 当前账号与窗口的存储方式见 [服务器与账号部署](account-center.md)。
 
 `npm test` 包含群成员/设备隔离、两位调用者与四个适配器、重复提交、租约/重启、手机审批/停止和原工作台回归测试。`node tests/collaboration-ui-fixture.mjs` 是隔离的界面验收服务，使用模拟工具与测试账号，不调用真实模型。
 
-账号中心的最近群聊记录按账号 UUID 保存，仅包含服务器地址、群 ID 和更新时间。群聊服务器使用与账号、服务器及原登录会话绑定的有限授权来更新此记录；该授权不能登录账号中心、读取账号数据或修改账号设置，原账号登录会话退出或到期后失效。打开窗口时会验证当前成员关系，过期的记录不会绕过加入权限。
+账号服务按账号 UUID 保存最近的群聊记录，仅包含服务器地址、群 ID 和更新时间。群聊服务器使用与账号、服务器及原登录会话绑定的有限授权来更新此记录；该授权不能登录账号服务、读取账号数据或修改账号设置，原账号登录会话退出或到期后失效。打开窗口时会验证当前成员关系，过期的记录不会绕过加入权限。

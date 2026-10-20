@@ -1,6 +1,6 @@
 # Read subtitles with your signed-in Edge browser
 
-English | [Chinese](zh-CN/browser-video-subtitles.md)
+English | [简体中文](zh-CN/browser-video-subtitles.md)
 
 The shared video reader currently supports Bilibili subtitles for all four adapters. It uses the connected browser's login; it does not require another model login.
 
