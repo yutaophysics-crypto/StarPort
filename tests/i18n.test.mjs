@@ -10,12 +10,24 @@ function load(saved=new Map()){
   runInNewContext(source,sandbox);return sandbox.StarportI18n;
 }
 test('language preference survives a new page and falls back safely',()=>{
-  const saved=new Map(),first=load(saved);assert.equal(first.language,'zh');
-  first.setLanguage('en');const next=load(saved);assert.equal(next.language,'en');assert.equal(next.locale,'en-US');
+  const saved=new Map(),first=load(saved);assert.equal(first.language,'en');
+  first.setLanguage('zh');const chinese=load(saved);assert.equal(chinese.language,'zh');assert.equal(chinese.locale,'zh-CN');
+  assert.equal(chinese.t('设置'),'设置');
+  chinese.setLanguage('en');const next=load(saved);assert.equal(next.language,'en');assert.equal(next.locale,'en-US');
   assert.equal(next.t('已导入 {count} 个对话',{count:3}),'Imported 3 conversations');
   assert.equal(next.notice('目标 Token 预算应为正整数'),'Must be a positive integer: Goal token budget');
   assert.equal(next.notice('provider raw diagnostic: 用户原文'),'provider raw diagnostic: 用户原文');
-  next.setLanguage('invalid');assert.equal(next.language,'zh');
+  next.setLanguage('invalid');assert.equal(next.language,'en');
+});
+
+test('a fresh page uses English when storage is absent, unsupported or unavailable',()=>{
+  for(const localStorage of [undefined,{getItem:()=>null},{getItem:()=> 'fr'},
+    {getItem(){throw Error('Storage blocked');},setItem(){throw Error('Storage blocked');}}]){
+    const sandbox={localStorage};runInNewContext(source,sandbox);
+    assert.equal(sandbox.StarportI18n.language,'en');
+    assert.equal(sandbox.StarportI18n.t('设置'),'Settings');
+    assert.equal(sandbox.StarportI18n.setLanguage('zh'),'zh');
+  }
 });
 test('all provider labels, choices and help texts have an English translation',()=>{
   const i18n=load();

@@ -1,6 +1,6 @@
 # Shared memory, preferences and historical retrieval
 
-Starport owns memory independently of provider accounts. Open **共同记忆 / Shared memory** in the sidebar. Indexed memory rows, instructions and a derived FTS5 index live in the existing relational SQLite database. No external memory service, provider configuration change or Codex-global-memory write is needed.
+Starport owns memory independently of provider accounts. Open **Shared memory** in the sidebar. Indexed memory rows, instructions and a derived FTS5 index live in the existing relational SQLite database. No external memory service, provider configuration change or Codex-global-memory write is needed.
 
 ## Four layers
 

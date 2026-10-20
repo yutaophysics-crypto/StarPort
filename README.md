@@ -1,293 +1,188 @@
-# Starport · 星港
+# StarPort
 
-贡献代码请先 Fork 仓库，再向 `main` 提交 Pull Request；合并需要维护者审核。详见 [贡献指南](CONTRIBUTING.md)。
+English | [Chinese](README.zh-CN.md)
 
-<img src="public/icon.svg" width="64" height="64" alt="星港 · Starport">
+<img src="public/icon.svg" width="64" height="64" alt="StarPort">
 
-本地对话工作台与多人群聊：统一管理四种 Agent，手机通过可安装 PWA 调用绑定电脑上的工具，使用调用者自己的模型登录与额度。
+A local workspace for conversations with Codex, Claude Code, Antigravity and DeepSeek Harness. Keep conversations, groups and shared memory together while using each tool's existing local login and models. Group conversations let people invoke agents on their own connected computers and share the replies.
 
-星港的桌面、手机安装图标和 GitHub 项目标识统一使用蔚蓝的「星光与海浪」；应用内的图标随蔚蓝、星港、深空主题切换。主题顺序表达从蔚蓝走向星际文明、再走向宇宙文明的愿景，详见 [品牌标识约定](docs/branding.md)。
+The local workspace does not require a StarPort account. Group conversations use accounts on the server you choose; model credentials stay on each participant's computer. StarPort does not provide model subscriptions or transfer credentials between providers.
 
-## 群聊与手机端（0.2）
+## Get started
 
-点击左侧 **群聊与手机**，在独立窗口填写 **服务器地址、账号、密码**。账号属于所选服务器；不同服务器的同名账号是不同身份。已登录时打开该账号上次查看的群聊。群聊窗口中的 **另一个账号窗口** 可以登录另一台服务器或同一服务器的另一个账号，互不覆盖登录、草稿和 Agent 连接。
+### Windows
 
-**设置 → 连接与数据 → 本机服务器** 可以在星港内启停自己的账号与群聊服务器，配置端口、对外 HTTPS 地址和注册开关，并创建、停用账号或重置密码。首次使用不会自动启动服务器，也没有预设公共账号中心。朋友可连接任何自行部署的星港服务器。群主创建和管理群聊与邀请码；群成员在 **我的电脑 → 设置这台电脑的 Agent** 开放目录与执行权限，调用本人电脑上的模型。模型密钥、私人对话与共同记忆留在本机。
+1. Install [Node.js 24 or later](https://nodejs.org/), including npm. Reopen your terminal or launcher after installation.
+2. Choose **Code → Download ZIP** on this repository and extract the complete ZIP, or clone the repository using the address in the **Code** menu.
+3. Double-click **Start StarPort.cmd** in the project folder. The first launch installs the pinned dependencies, then opens StarPort. Later launches reuse the installation.
+4. Install and sign in to whichever supported agent tools you want to use. Open **Settings → Connections & data** to check or configure their locations.
 
-手机端先以可安装 PWA 交付，适配苹果、安卓与鸿蒙浏览器。手机访问需要可达的 HTTPS 群聊地址；本机回环地址只用于电脑验证。仓库提供独立群聊服务、Docker Compose + Caddy 部署、手机审批与停止、断线队列和防重复执行。安装入口取决于手机系统与浏览器，支持在线网页使用。
+The default workspace address is **http://127.0.0.1:3210/**. Extract the ZIP before starting; do not run the launcher from inside the archive. Python and a separate MAGI download are not required for normal use.
 
-完整步骤见 [群聊、手机安装与自行部署](docs/collaboration.md)。已有私人聊天、共同记忆和 Claude 的本机限制配置保留；群聊使用独立数据库。
+New installations start in **English**. Choose **Settings → General → Interface language** to switch to Chinese. A previously saved English or Chinese preference is preserved. This changes interface text, not conversation content, filenames in your projects or raw tool output.
 
-## 在另一台电脑上使用
+### macOS
 
-Windows：
+Requirements: macOS 14 or later, Node.js 24 or later and Apple Command Line Tools. If needed, install the tools with `xcode-select --install`.
 
-1. 安装 **Node.js 24 或更新版本**（包含 npm）：[Node.js](https://nodejs.org/)。安装后重新打开终端或启动入口。
-2. 在仓库页面选择 **Code → Download ZIP**，将 ZIP 完整解压到本地目录；也可以复制 **Code** 菜单提供的 Git 克隆命令。
-3. 双击项目根目录的 **Start StarPort.cmd**。首次启动会安装锁定版本的依赖，然后打开星港；以后会复用已安装依赖。首次安装需要联网，界面资源已随项目打包。
-4. 在新电脑上分别安装并登录需要使用的 Codex、Claude Code、Antigravity 或 DeepSeek Harness，然后在星港的「设置 → 连接与数据」里重新检查工具。只需安装你要用的工具；星港不会从 GitHub 获取或复用旧电脑的登录凭据。
+```sh
+npm ci
+npm run install:macos
+```
 
-默认地址：<http://127.0.0.1:3210/>。双击前请先解压，不能直接在压缩包中运行。正常启动不需要 Python，也不需要另行下载 MAGI。
+The installer creates **StarPort.app** in `~/Applications` by default. Existing installations are detected and reused, including older localized app names. Open the app from Finder or the Dock; use **File → New Window** or `⌘N` for another window. Closing a window does not stop background tasks. See the [macOS desktop guide](docs/macos-desktop.md).
 
-macOS 独立窗口：安装 Node.js 24+ 和 Apple Command Line Tools 后，在项目目录运行 `npm ci`，再运行 `npm run install:macos`。安装器生成「星港.app」，默认放在用户的 Applications 目录；已有匹配的应用会先备份再更新。首次点击 Dock 打开独立窗口；之后普通点击切回或恢复已有窗口。按 `⌘N` 或选择顶部「文件 → 新建窗口」打开另一个窗口，页面内不增加按钮。多个窗口共用本机记录、分组和工具登录，可以分别查看和处理不同对话。关闭窗口不停止后台任务。没有安装独立应用时，下面的启动命令仍使用浏览器入口。详情见 [Mac 独立窗口](docs/macos-desktop.md)。
-
-手动启动（Windows、macOS、Linux）：
+### Manual launch: Windows, macOS or Linux
 
 ```sh
 npm ci
 npm run launch
 ```
 
-这份仓库保存程序源码、主题资源和测试，**不包含聊天记录、共同记忆、个人偏好、附件、账号凭据及本机工具运行时**。如果也要迁移自己的对话和记忆，请在旧电脑的 **设置 → 连接与数据 → 导出全部记录** 导出备份，通过你自己的方式传到新电脑，再选择 **导入备份**。已确认记忆导入后作为候选，需要核对后确认；个人偏好和项目要求也需要重新保存。工作目录、文件夹附件引用和本机浏览器连接需要在新电脑重新设置。备份无需提交到 GitHub。
+Each computer needs its own installed and authenticated agent tools. Downloading StarPort does not download conversations, memory, credentials, native tool installations or model access from another computer.
 
-可选：需要从各工具调用 `harness-hub` 技能时，安装 Python 3.10+ 后，在项目目录运行 `python scripts/install-skills.py`。安装器按这份项目的新位置生成技能入口；以后移动项目后重新运行它即可。
+## One workspace, native agent capabilities
 
-左侧 **共同记忆** 提供四层记忆：从聊天提出候选、确认后按需读取到后续上下文、检索原对话细节，以及独立管理个人偏好和项目要求。检索支持任意话题：先返回候选索引，再由当前模型判断适用性、读取必要正文，任务中也能追加检索；不预设话题白名单。对话选择的工作文件夹就是项目，无需另行标记：同一文件夹的对话共用项目要求、项目记忆和工作流台账，子文件夹分别是独立项目；分组只整理对话，同一分组可以容纳不同项目的对话。已有对话按当前目录自动归属，已有项目的标识、记忆和要求保留。Codex、Claude Code、Antigravity、DeepSeek 共用这套记忆。AGY/DeepSeek 的检索接口经原工具的命令通道调用，仍受其权限与沙箱限制。详情见 [共同记忆](docs/shared-memory.md) 和 [通用检索架构](docs/memory-retrieval.md)。
+| Tool | Connection | Configuration |
+| --- | --- | --- |
+| Codex | Local Codex App Server | Existing Codex login; native models, reasoning levels and permission modes |
+| Claude Code | Official Claude Agent SDK driving the local CLI | Existing Claude login or native configuration; model-specific effort and permissions |
+| Antigravity | Local AGY CLI with streaming JSON | Native login, model options and permissions |
+| DeepSeek Harness | Native SDK / JSON-RPC | Native profiles, providers and models; supports the desktop distribution's CLI runtime |
 
-**共同记忆 → 跨电脑同步** 可连接你已有的网盘或同步文件夹，无需星港账号或厂商密码。先在一台电脑开启，等 `StarportMemory` 子目录同步到另一台，再在另一台选择对应的父目录。两台路径可以不同。同步已确认记忆、候选、用户画像及已保存的偏好和项目要求；候选仍需确认。每 15 秒检查一次，冲突保留双方版本供核对，离线删除不会被旧副本静默恢复。聊天全文、附件、登录和工作路径保持本地。同步文件含记忆正文及修改历史；选择自己的私有目录。详见 [个人记忆同步](docs/memory-sync.md)。
+Only the tools you install are needed. StarPort discovers available runtimes and lets you specify an executable when discovery is insufficient. Tool and model settings remain independent; unsupported capabilities are explained rather than silently mapped to a different behavior.
 
-## 打开
+Select models from the current tool's list or enter a supported model identifier. Reasoning levels follow the selected native tool and model. Permission choices include the modes supported by that tool; the native tool can still enforce its own restrictions or require approval. Selecting a working folder alone does not create an operating-system sandbox.
 
-双击项目中的 **Start StarPort.cmd**，或运行 `npm run launch`。原有桌面快捷方式及 `python scripts/launch.py` 仍可使用。默认地址为 http://127.0.0.1:3210。
-在 Codex、Claude Code、Antigravity 或 DeepSeek Harness 中调用 **harness-hub** 技能，也会打开同一个应用。
+The Codex interface includes goal and plan controls where supported. Claude Code supports native approval and question callbacks. Approval cards let you allow or reject actions, answer questions or skip a question without granting permission. Remaining-usage reports show the fields available from each vendor's own interface; missing data is not invented.
 
-Codex 可输入 `$harness-hub`；其他工具可说「使用 harness-hub 打开星港」。如果刚安装后技能列表还没有出现，重开对应工具的会话。入口最终打开本机的独立界面，不会更换原工具自己的界面。
+## Conversations and task progress
 
-左侧 **设置 → 通用** 可即时切换中文和英文界面，刷新后会记住该浏览器的选择。菜单、工具选项、设置、目标状态与应用提示会一起切换；你的消息、分组名、对话标题和工具原始输出保持原文。切换语言保留正在输入的消息和审批回答。
+- Organize conversations into groups independently of their working folders. Conversations in one group may use different folders, tools and models.
+- The selected working folder is the project. Conversations in the same folder share its project instructions and memory; subfolders are separate projects.
+- View the final answer alone, a task overview, or detailed available execution records. During a task the overview stays visible; after completion it collapses and can be reopened. Select a step or subagent to inspect its recorded activity.
+- Native reasoning summaries and execution records are shown only when the tool supplies them. StarPort does not invent hidden reasoning or claim to reproduce a vendor's private desktop UI exactly.
+- Running conversations show a spinner; completed replies awaiting review show a blue dot. Native failures, interrupted tasks and unconfirmed completion remain distinct.
+- Messages sent while a task is running enter a queue. Edit, remove or explicitly **Steer** a queued message into the current task. Entered text changes the Stop control into a Send arrow; clearing the input restores Stop.
+- A task is not stopped merely because it is quiet. Explicit time limits, cancellation and native failures retain their own behavior. Subagent completion is tracked before declaring a task finished.
 
-English: Open **Starport · 星港** from the desktop. Open **设置 → 通用** (Settings → General) in the sidebar to change the interface language. Your preference is saved in this browser. Conversation content and group names stay as written.
+When switching tools, StarPort starts or resumes the appropriate native session and supplies conversation context within the configured budget. Older content can be compacted by a selected model; full local history remains available through the history tools and a conversation-specific archive under `.starport/history/`. See **Settings → Context** for budgets and compaction options.
 
-**设置 → 通用** 提供「蔚蓝」「星港」「深空」三套主题，默认蔚蓝，选择会保存在当前浏览器中。「深空」展示轨道船坞与银白色星际飞船，采用石墨灰面板和暖琥珀色灯光；「蔚蓝」展示星空与夜海。进入对话后背景自动压暗，支持系统减少动态效果设置，背景均保存在本机。设计与生成记录见 [深空](docs/deep-space-theme.md)、[星港](docs/spaceport-theme.md) 和 [蔚蓝](docs/star-sea-theme.md)。
+## Shared memory and project instructions
 
-桌面端可拖动左右面板边界调节宽度，双击恢复默认；聚焦边界后也可用左右方向键调节、Home 或 0 重置。宽度保存在当前浏览器，窗口变窄时会自动限制面板宽度，为对话留出空间。左下角功能采用紧凑排列，导入图标固定为 16×16。
+StarPort's memory is independent of provider accounts. It supports candidate extraction, confirmation, retrieval at the start of a new request and additional retrieval during a task. Personal preferences and project instructions are managed separately.
 
-左侧「新对话」下方的 **主页面** 按钮可随时打开封面预览，右上角仍可切换主题。点击 **返回对话**（或按 Esc）继续原来的工作；草稿、光标位置与附件保留，正在运行的任务继续。手机上先展开左上角菜单即可找到入口。
+Candidates require confirmation before becoming shared memory. Memory selection is based on relevance to the current request, with no fixed list of supported topics. The model can inspect candidate indexes, read selected entries and retrieve supporting history when more detail is needed.
 
-第一次使用：选择工具，点击输入框下方的工作目录，填入要处理的目录，然后发送消息。右侧「工具」页的选项会随工具切换。左侧可建立房间（即对话分组）；对话右上角的「⋯」可重命名、移动房间或更改工作目录。
+The memory link beneath a reply opens a receipt for that request: which entries were supplied and which new candidates it produced. It does not present the entire memory collection as if all entries had been used.
 
-## 房间、伙伴与工作流
+- [Shared memory](docs/shared-memory.md)
+- [Retrieval architecture](docs/memory-retrieval.md)
+- [Sync memory between computers](docs/memory-sync.md)
 
-左侧的 **房间** 就是对话分组，可以再住进几位 **伙伴**。伙伴只有名字、头像、角色、性格，以及绑定的工具、模型、思考强度和无人值守时的 **工作方式**（各工具原生的权限模式，例如 Claude 的自动审核）。性格只影响伙伴对你说话的语气，不影响分析和结论。右栏「房间」页列出当前房间的伙伴和挂在这个对话上的工作流；「工具」页是原来的模型与选项。
+For personal device sync, select corresponding folders managed by your existing sync service, such as Nutstore, OneDrive or Syncthing. StarPort creates a `StarportMemory` subfolder and checks it every 15 seconds while running. Confirmed memory, candidates, profiles and saved instructions can sync; chats, attachments, logins and working folders stay local. Conflicts retain both versions for review. Use a private sync folder because the files contain memory text and revision history.
 
-- **点名**：在输入框里 `@伙伴`。只点一位时直接交给它；一条消息点了几位时，先由排程模型排出执行顺序（可以有先后，例如一位做完再由另一位验收），再按顺序运行。排程模型在 **设置 → 工作流** 里设三个，第一选不通用第二选，再不通用第三选；都不通时按原话里的先后顺序。每位伙伴在每个对话里有自己的工位会话，换了对话就从零开始。
-- **单向可见**（可选，按对话记住）：点名时输入框里会出现「单向」开关。打开后，伙伴只收到这条消息（以及同一次点名里排在它前面的伙伴的产出），看不到对话的标题和之前的内容，并且在另一个单向工位里工作，不会带上普通工位记得的对话；它的回答照常作为卡片回到对话，对话模型能看到，也能用历史工具读取单向工位的完整记录。之后的普通点名会补上这些单向回答。伙伴和对话共用工作目录，「不读 `.starport/history` 下的对话存档」只是写在指令里的要求，不是技术隔离；长期记忆仍按房间里的记忆开关。
-- **考场**：让伙伴在没有上下文的独立空间里盲做同一道题。对话模型用 `starport_exam_propose` 出题：指定试卷文件夹、题目说明、考位（同一位伙伴可以坐几个考位）、可选的知识库和每个考位的时限；对话里随即出现一张「待开考」卡片，这时什么都还没复制。你核对后可以增减考位、逐个设开卷或闭卷、改时限，再按「开考」；不按就不会开考，也可以取消。开考后试卷复制到桌面 `StarPortExams` 下的新文件夹，每个考位一份（`.git` 不复制），开卷的考位另有 `知识库/`；各考位同时作答，每位考生在新会话里只收到考场规则和题目说明，看不到这个对话、长期记忆、星港里的个人偏好和其他考位（各工具自己的全局指令，例如 `~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md`，仍会照常加载）。交卷后检查每个考位：试卷文件有没有被改、删，新增了哪些文件，工具调用有没有碰到原工作区、试卷原件、知识库原件、星港数据目录或其他考位。所有答卷和检查结果作为考场卡片回到对话，对话模型能看到，也能用历史工具读取每个考位的完整记录。考位不是沙箱：越界只能事后查出来，不能事前挡住。
-- **工作流**：可复用的流程模板，由阶段和位置组成。同一阶段的位置并行，下一阶段能看到上一阶段的产出；可以设验收位和验收不通过时的重做次数（0–3）。工作流在「工作流库」里管理，可以挂到任意房间的对话上；挂载时决定每个位置坐哪位伙伴，房间外的伙伴会自动加入房间，位置空着时工作流暂停。
-- **触发方式**：只在点它时、每天定时（可选星期）或每隔一段时间。定时器在星港服务里运行，关掉浏览器照样会跑，星港没开时不会跑；错过的运行可以设成开机后补跑一次或跳过。
-- **运行卡片**：每次运行在对话里追加一张卡片，完成的默认折叠，失败或验收不通过的会展开。卡片上可以停止运行、查看每一步的过程，或者「回复」，下一条消息就会带上这次运行的结果。每次运行，各位置都在新的工位会话里从零开始，不读这个对话的历史。
-- **台账**（可选，默认关闭）：工作流在多次运行之间的笔记本，按 Anthropic 长时间运行任务的做法分为 PLAN、命题、只追加的 CHANGELOG 和检查项，每次运行提交一次 git。伙伴只能提议修改 PLAN，要你确认才生效；带截止日的预测用 Brier 分数计分。台账放在工作文件夹的 `.starport/ledgers/`，同一文件夹里挂同一工作流的对话共用一份。对话更换文件夹时，原台账留在原处，之后使用目标文件夹的台账，没有则在运行工作流时新建；旧版数据目录中的私人台账也不自动搬迁。
-- **长期记忆**：在「伙伴进出」里，每个房间的每位伙伴各有「读长期记忆」（默认开）和「提记忆候选」（默认关）两个开关。伙伴提出的候选只能引用你的原话，仍要你确认才会保存。
+## Companions, workflows and exams
 
-## 提示词、分支与代码复制
+Create named companions with their own tools, models, working modes and memory preferences. Add them to a room and invoke them in a conversation; their saved replies remain visible afterwards.
 
-- **提示词**：输入框发送键左边的文档图标列出你保存的提示词，点一条就插入到光标处。菜单里可以把当前输入存为提示词，或新建、改名、排序、删除。提示词保存在星港数据库里。
-- **分支**：鼠标悬停在已结束的 AI 回复下方，点「从这里分支」，会新建一个对话，复制到这条回复为止的记录，房间、工具、模型和工作目录与原对话相同。新对话第一次发消息时，复制过来的记录作为上下文交给模型。
-- **代码复制**：鼠标悬停在代码框上，右上角出现「复制」，复制的是原始代码（TeX 的反斜杠和 `$$` 原样保留）。
+Reusable workflows can assign stages and seats to companions, review results and repeat or verify work. Mount a workflow on a conversation and run it manually, on a schedule or at an interval. Schedules run in the StarPort service, so closing the page does not stop them; the service itself must remain running.
 
-## 通知与勿扰
+Exams let companions solve a task independently. A proposal specifies a paper folder, instructions, seats, optional reference material and per-seat limits. Nothing starts until you review the proposal and choose **Start exam**. Each seat gets a separate folder and session, and results include recorded file changes and boundary checks. These checks are retrospective; a seat is not an operating-system sandbox. Native global tool instructions can still apply.
 
-任务完成或出错时，右下角弹出提醒：显示房间、对话标题和一两行结果摘要，10 秒后自动消失，点正文跳到那条对话；同时响一声短提示音。星港窗口不在最前面时，任务栏图标会闪烁。你正看着的对话、手动停止的任务和排队中还没做完的任务不提醒。顶栏的铃铛一键开关勿扰；**设置 → 通知** 可以单独关掉提示音或发送测试通知。
+Notifications show completed or failed tasks with a short summary and a link back to the conversation. The bell controls do-not-disturb; **Settings → Notifications** controls sound and test notices. Explicitly saved language and notification preferences are retained.
 
-## 长对话的上下文
+## Group conversations and phones
 
-同一个工具接着聊时，Claude Code 和 Codex 续用自己的原生会话，压缩由原工具负责。需要新会话从头读历史时（换了工具或模型、开了分支、改了对话设置，以及每轮都是新会话的 DeepSeek），历史太长就会自动压缩：由写摘要的模型把较早的对话整理成结构化摘要（逐条保留你的原话要点），模型拿到的是摘要加上之后的原文。摘要属于对话，换模型时直接复用，只有新内容又放不下时才再压缩一次。压缩进行中，对话区和底部状态会显示「正在压缩上下文…」。
+Open **Group chat & mobile**, choose a server and sign in to an account on that server. A group owner shares the server address and invitation code. Each person connects their own computer and selects which folders and tools it exposes.
 
-没有直接交给模型的原文另存为工作目录下的 `.starport/history/<对话id>.md`，开着沙箱的工具也能读到；`.starport/` 自带 `.gitignore`。**设置 → 上下文** 可以开关自动压缩、按工具设定新会话最多读入多少历史（默认 Codex、Claude 各 10 万 token，Antigravity、DeepSeek 各 6 万 token），以及选三个写摘要的模型。交给 Antigravity 的单次输入另限 184,000 字节，这是星港为避免输入被截断设的保护值。
+Participants can chat with each other and invoke agents in the group. Shared replies are visible to the group; only the caller can answer their own approvals or stop their tasks. Calls use that caller's connected computer and native model credentials, not another member's subscription.
 
-## 四个适配器
+The phone interface is a responsive PWA served over HTTPS. A local `127.0.0.1` address cannot reach another computer. Installation depends on the phone and browser; ordinary web access remains available. The repository does not ship native IPA, APK or HAP packages.
 
-| 工具 | 实际接入方式 | 当前选项 |
-|---|---|---|
-| Codex | 原生 App Server / JSON-RPC | 模型、思考强度、原生计划与目标模式、目标预算、请求批准 / 帮我批准 / 完全访问权限 |
-| Claude Code | 官方 Agent SDK 驱动本机 CLI | 模型、思考强度、计划模式、编辑策略、Git 工作树、权限审批与提问 |
-| Antigravity | 官方 CLI / stream-json | 模型、思考强度、只读或编辑模式、允许所有工具 / 原生权限、Agent、终端沙箱 |
-| DeepSeek Harness | 发布版官方 SDK / JSON-RPC | 模型、服务、思考强度；默认从 Harness 的模型设置中读取 |
+Self-host the account and group services from **Settings → Connections & data → This computer's server**, or use the supplied Docker Compose and Caddy deployment. Do not expose the private local workspace on port 3210 to the internet.
 
-Windows 的 DeepSeek Harness 桌面版可在原工具中启用 `dsh` 命令。星港会识别 PATH 中的官方 `resources/runtime/cli/bin/dsh.cmd`；若星港在启用命令前已启动，可在「连接与数据」中填入该文件的完整路径。星港直接使用桌面版自带的运行时与已有登录，无需再装一份 CLI。桌面版模型偏好作为默认值，SDK profile 中明确保存的偏好优先；每轮仍使用独立 SDK 会话。DeepSeek 账号登录的额度请在原桌面版查看，它与开放平台 API 余额不同。
+- [Groups, mobile access and deployment](docs/collaboration.md)
+- [Servers and accounts](docs/account-center.md)
 
-思考强度随工具和具体模型变化。Claude 与 Codex 从原生模型目录读取支持的档位，Claude 的 `xhigh` 显示为 **Extra**；DeepSeek 从已安装的适配器读取档位（包括 **Off**）；Antigravity 使用其 CLI 提供的 Low / Medium / High。模型默认只标注已确认的基础档位，不覆盖原工具保存的偏好。Claude SDK 尚不返回精确的用量倍数，因此 Max 显示用量增加提示，不固定声称所有模型都消耗 6 倍。
+## Files, browser pages and subtitles
 
-模型选择「跟随工具默认」、自定义模型或读取失败时，如果无法确认该模型的能力，只提供跟随默认并说明原因；选定具体模型可显示对应列表。切换模型不会偷偷降低已保存的强度：不兼容的旧档位会提示重新选择，发送前再次校验。工具升级后点击模型旁的「刷新列表」重新读取。各个工具的选择独立保存。DeepSeek 的第三方服务只有明确配置了 `reasoningEfforts` 时才展示自定义档位。
+Attach files or folders directly from StarPort. Folder browsing shows folders on the computer running the service. A folder reference does not recursively copy that folder.
 
-Antigravity 自动发现顺序为明确配置、当前 PATH、用户标准安装目录、星港内置副本。查询用量与对话沿用原工具的本地登录环境，不注入 SSH 标记；否则原工具可能改用不同的凭据存储。
+The optional [Edge extension](extensions/edge) pairs with StarPort and lets you explicitly attach a browser tab or read Bilibili subtitles using that browser's current login. Browser credentials remain in Edge. The tool reads only the requested pages or videos; it does not read browsing history, password fields or unrelated form input. Missing subtitles or failed authentication produce an explanation, not a fabricated transcript. See the [browser subtitle guide](docs/browser-video-subtitles.md).
 
-安装状态和真实连接验证分别显示。程序已安装和账号可正常调用是分别检查的状态；新电脑需使用原工具自己的登录方式。
+Local file links in replies can be opened with the default application. On Windows, the context menu offers **Open file**, **Show in File Explorer** with the file selected, and the system **Open with** chooser. Ambiguous relative filenames require a choice. Rendering a message does not execute a file action, and executable or unknown file types use an application chooser.
 
-Codex 目标模式使用原生 `thread/goal/set/get` 状态，本应用在每轮结束后检查目标并继续运行。不是通过普通提示词模拟目标。暂停会更新原生目标并中断当前轮；停止服务会停止执行。重启后需主动继续。当前不提供定时唤醒。
+## Import, export and move to another computer
 
-Antigravity 按用户要求默认「允许所有工具」，每次启动和恢复会话都传入原生 `--dangerously-skip-permissions`，自动批准命令执行和文件读写。在右侧「工具权限」可改为「遵循原工具权限」，此时无批准的操作仍会被拒绝；终端沙箱独立控制，选中时继续生效。只作用于星港启动的 Antigravity，不修改原工具全局设置。原生说明见 [非交互模式权限](https://antigravity.google/docs/cli/headless/#permissions-in-headless-mode)。
+Use **Import conversations** to select local Codex or Claude Code history, preview it and choose a destination group. Imports are independent copies, not live synchronization; they do not inherit native permissions or automatically run tasks. Claude imports read local CLI history, not Claude web history.
 
-Claude Code 通过官方 Agent SDK 的 `canUseTool` 在星港中显示权限请求：选择「请求批准」或「允许编辑文件」时，需要审批的命令可以「允许这一次」或「拒绝」。`AskUserQuestion` 支持原生选项、多选和自由回答。原工具的已授权规则、拒绝规则、计划只读限制继续生效；「普通对话（需审批的操作拒绝）」仍按原生 `dontAsk` 拒绝。停止执行会撤销待处理审批，不自动放行，也不修改全局规则。Codex 的额外权限扩展、MCP 交互认证等尚未覆盖的请求会明确拒绝，并显示原因。
+For one conversation, choose **Export conversation** from its menu:
 
-助手的问题可以在对话下方直接选择或填写回答，再点「提交回答」。Codex 的原生 `requestUserInput` 和 Claude 的 `AskUserQuestion` 直接回传原工具；助手写出的「问题段落 + 两个以上短选项列表」也会生成回答表单，作为你的文字回复发送。后者只是便捷回复入口，不代替权限审批。流式选项尚未完整时不展示；原生问题优先，已提交的回答会留在对话中，输入框草稿和附件保留。
+- **Session file** (`.starport.json`) carries that conversation's messages, available execution records and supported uploaded attachments. Import it on another computer and choose a local working folder.
+- **Markdown** produces a readable transcript.
 
-任务执行时，在输入框按 Enter 或点发送，文字先进入输入框上方的「等待队列」，可以修改或删除；点击修改后，该条消息暂不自动发送，保存或取消后才恢复排队。消息保存在本地数据库，刷新后仍可查看。当前任务成功完成后按顺序逐条开始下一轮；Codex、Claude Code 和 Antigravity 沿用可续接的原生会话，DeepSeek 向下一次 SDK 会话提供当前对话记录，并先等待子任务结束及结果交回。停止、失败或服务重启后，剩余消息保留在队列中，等待用户手动继续。
+A session file does not contain other conversations, shared memory, account logins, native session bindings, permissions or queued jobs. Files generated in the working folder need to be moved separately. Reimporting identical content opens the existing copy rather than overwriting another conversation. Current limits are 120 MB per session file and 8 MB per uploaded attachment.
 
-Codex 和 Claude Code 队列还提供「引导」：输入补充指示、发送到等待队列，再点击该条消息的「引导」，即可交给正在运行的任务。Codex 使用原生 [`turn/steer`](https://learn.chatgpt.com/docs/app-server#steer-an-active-turn)；Claude 使用原生流式输入的 `next` 优先级，在当前工具调用完成后的执行间隙读取指示，不中断正在执行的操作。若本轮已进入最后的文字回复，Claude 会在同一进程和会话中继续处理，发送与结束同时发生时也会等待对应消息的原生结果。Antigravity 和 DeepSeek 暂提供排队、修改、删除及任务结束后继续。原生问题表单仍直接答复原工具；Codex 和 Claude 的文字问题表单也即时提交回答，普通输入框仍默认排队。排队或引导不会自动批准权限；运行中暂支持文字，附件请在任务结束后发送。Claude 只有原生回显或结果确认接收后，才将引导消息显示为已发送。
+**Settings → Connections & data** also exports and imports a complete logical backup of StarPort records. Imported memory requires review and confirmation. Folder references and browser connections need to be configured on the destination computer. Backups must not be committed to Git.
 
-Claude 的「工作方式」还提供「自动审核」（原生 `auto`）和「跳过权限审批」（原生 `bypassPermissions`）。自动审核由 Claude Code 自己判断是否放行，具体可用性取决于原工具的账号、模型和设置；跳过权限审批仅在显式选择时启用 SDK 的 `allowDangerouslySkipPermissions`，允许大部分工具操作直接执行，包括工作目录外文件操作。系统权限、原工具的拒绝规则、强制询问规则及用户提问仍按原生行为处理。原生初始化若未启用所选模式，会明确报告错误，不静默更换模式。权限按对话保存，修改后下一条消息生效，运行中不可修改；默认模式与已有对话设置保留，不修改全局 Claude 设置。
+Deleting a conversation removes its StarPort records and its own `.starport/history/` archive. Attachments, generated files, working folders, native tool history, exports and backups remain. Related material must be checked and removed separately. Ordinary deletion does not perform automatic database compaction or promise irreversible erasure.
 
-在工具列表选择 **Claude Code**，选择模型和工作目录即可发送消息。使用本机 Claude Code 已有的登录；星港不另存账号凭据。支持流式回复、停止执行、原生会话续聊以及在同一星港对话中切换工具。「设置 → 连接与数据」区分已安装、已登录和最近实际调用的结果。若尚未登录，请先在 Claude Code 中完成登录，再点「重新检查工具」。账号受限时会显示服务返回的原因，仍可导入本机历史。
+## Local storage and maintenance
 
-Codex 的输入框下方和右侧「权限」可打开同一个选择器：
+The local workspace uses relational SQLite tables with WAL mode. The main database is `.data/hub.sqlite`; a single database file is normal SQLite storage. The WAL and SHM files are part of the live database, not disposable leftovers. See [database architecture](docs/database-architecture.md).
 
-- **请求批准**：工作目录内执行，需要额外权限时由用户批准或拒绝。
-- **帮我批准**：保持相同的工作目录和命令网络限制，把额外权限请求交给 Codex 原生自动审核；审核可拒绝，不是自动接受所有请求。
-- **完全访问权限**：使用原生完全访问配置，可修改本机可访问文件和联网，不再请求 Codex 执行审批；仍受系统和组织策略限制。
+Use logical exports for routine backups. Before copying database files directly, stop the service normally or use SQLite's consistent backup facilities; copying only a live main file can omit committed WAL data.
 
-选择后点击「应用权限」（完全访问显示「启用完全访问权限」），下一条消息生效，运行中不可切换。权限按对话保存，新建对话从「请求批准」开始。旧对话保留原有只读范围；显式应用新选项后才改变范围。每次原生会话启动、续接和模型轮次都重新发送权限，避免降级后继承旧权限。不修改用户的全局 Codex 设置。自动审核不受本机版本支持时禁用该选项，并拒绝运行；原生服务返回的策略限制或错误不会被静默放行。
+Windows helper files:
 
-原生实现依据：[Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review)、[App Server Turns](https://learn.chatgpt.com/docs/app-server#turns)。
+| File | Purpose |
+| --- | --- |
+| `Start StarPort.cmd` | Install dependencies if needed and start the local workspace |
+| `Restart StarPort.bat` | Wait for active conversations before restarting |
+| `Clean StarPort leftovers.bat` | Explicit, optional checkpoint and compaction of the local database |
 
-DeepSeek Harness 使用已发布的官方 SDK 接入，实际版本取决于本机安装。当前适配器每轮创建独立 SDK 执行会话，并由星港提供所需历史上下文。Codex、Claude Code、Antigravity 保存可恢复的原生会话 ID。切回之前的工具时补入它还没见过的消息。
+The maintenance helper is not run automatically when you delete a conversation. It does not replace checking individual attachments, workspaces or external backups. Do not run maintenance while a task is active.
 
-跨工具共享的是用户消息与完整回复，不是原工具的内部状态或隐式工具缓存。较长对话超过约 180000 字符时会优先附带近期消息并明确提示；所有本地消息仍然完整保留。失败或中断的回复可查看，但不自动当作完成的答案传给下一个工具。
+## Themes
 
-公式支持 `$...$`、`$$...$$` 以及历史消息中的括号式分隔符。先保护公式再解析 Markdown，防止公式中的等号、竖线和下划线被误当成标题、表格或强调；代码块与行内代码保留原文。长公式在自己的区域内横向滚动。不完整或不受支持的公式会原样显示，不影响相邻正文和其他公式；不修改存储的消息。
+The themes are **Azure → Starport → Deep Space**, with Azure as the default. Existing choices are preserved. **Home** opens the theme's welcome view without stopping current tasks. Backgrounds and interface assets are bundled locally; conversation views dim decorative backgrounds for readability and respect reduced-motion preferences.
 
-## 原生思考与执行过程
+[Branding](docs/branding.md) · [Azure](docs/star-sea-theme.md) · [Starport](docs/spaceport-theme.md) · [Deep Space](docs/deep-space-theme.md)
 
-右侧 **执行过程显示** 可选择「隐藏 / 概览 / 完整」，四个工具共用同一选择，刷新后保留。默认概览：运行时展开任务过程，点击步骤或子代理可查看具体记录；完成、失败或停止后自动收起，只留下最终回复及「查看任务过程」入口。再次展开可继续查看概览或切换完整记录。隐藏过程不隐藏批准请求、错误或停止按钮；完整显示仍只包含原工具实际公开的内容。
+## Development
 
-任务结束时直接推送保存后的最终状态，立即清除「正在执行」并恢复工具选择；不等待模型目录或连接检查。断线重连、返回前台时自动核对状态，运行期间每 5 秒补查一次；旧请求不能把已结束的回复改回运行中。补查只读取本地运行状态，不调用模型，也不清空未发送的草稿。
+Requirements: Node.js 24 or later. Python 3.10 or later is optional for skill installation and host-catalog generation.
 
-过程按原工具事件的实际顺序保存和显示，不再把所有工具放在最终回复后面。Codex 显示公开思考摘要、命令的实时输出、退出代码、文件差异和原生计划；Claude 显示公开 thinking 内容、原生工具名称、调用参数和结果。Antigravity 使用原生 `step_index / state / tool_info`；DeepSeek 分开显示 reasoning、回复、步骤和结构化工具结果。工具输入与输出可展开，保留完整内容，刷新后也能查看。
-
-失败、拒绝、停止和未确认结束分别显示。下一步骤开始或对话结束都不作为工具成功的证据。原接口不提供的思考内容不会补写；Codex 的原始 reasoning 协议块与签名不展示。各工具采用对应的过程显示形式，外围仍保留星港主题；厂商未公开的桌面 UI 无法承诺逐像素复制。
-
-Codex 和 Claude 新导入的对话会保留可公开展示的过程。旧星港记录若仍绑定原生会话，会在打开时按唯一匹配的轮次恢复已有过程；仅从原记录读取，不调用模型或重放任何工具和权限。缺少原记录或匹配不明确时保留已有信息并提示限制。
-
-## 子任务进度
-
-子代理显示在所属回复的任务过程内，保留任务说明、原生状态、最新操作、活动时间和运行耗时。概览中点击子代理可查看所属步骤；完整模式展开已有记录及嵌套子任务。耗时每秒更新，结束后固定；失败、停止和未确认结束分别显示，不计入成功。子任务活动也会更新主会话的活动时间。
-
-记录跟随对话保存，刷新和重开后保留。Codex 使用原生协作与子线程通知；Claude 将子任务与原生工具作用域关联；DeepSeek 使用 SDK 的子代理事件；agy 读取本机子任务日志与原生运行状态。各工具提供的细节不同，没有子任务详细步骤时会明确提示，缺少结束证据时显示未确认。旧 agy 对话若保有原生会话 ID 与本地日志，会补回可确认的子任务。读取过程不调用模型，不推测未公开的内部思考内容。
-
-## 当前会话的上下文占用
-
-输入框下方的 **上下文** 显示当前工具最近报告的占用，点击查看 Token 数、窗口容量和统计口径。中英文同步切换，随原生事件更新，不为查询额外调用模型。Codex 使用 `thread/tokenUsage/updated` 的 `last.totalTokens / modelContextWindow`，Claude 使用主会话最近一次请求的输入（包含缓存读写，不包含输出）与实际模型报告的窗口容量，沿用 [Claude Code 状态栏口径](https://code.claude.com/docs/en/statusline#context-window-fields)。累计消耗、子代理和其他模型的窗口不会被混入百分比。
-
-数据按工具的原生会话分别保存。切回原工具可看到上次报告；更换模型、工作目录或原生会话失效后显示「待获取」，下一次原生报告到达时更新。旧对话和导入的对话也需等待新报告。已识别的原生压缩事件会清除旧占用，等待压缩后的报告。尚未发送的草稿、尚未补入的其他工具消息不在此数值内；它不表示账号剩余额度，也不预测自动压缩时机。Antigravity、DeepSeek 的上下文占用尚未接入，显示「暂不支持」，不以累计用量猜测百分比。
-
-跨工具转交本身不调用模型生成摘要：所选历史与最新请求一起发送。180000 字符限制是消息截断，不是语义压缩；原工具自己的上下文管理独立进行。
-
-## 查询剩余用量
-
-右侧「当前工具」点击 **查询剩余用量**。小窗口先点击右上角「☷」展开工具选项。弹窗可切换四个工具、刷新查询，并展开「完整厂商报告」。支持中英文，显示查询时间；无数据、未登录和失败会明确说明，不显示其他账号的历史查询结果。
-
-| 工具 | 查询内容和来源 |
-|---|---|
-| Codex | 原生 `account/rateLimits/read`：各限额桶、剩余比例、窗口重置时间、额外额度和可用重置次数，保留原生返回的其他限额字段 |
-| Claude Code | 官方 SDK 的原生 `/usage` 报告：订阅、会话/周/模型限额、额外用量与支出、本机用量归因 |
-| Antigravity | 原生 `/usage` 和 `/credits` 文本报告，保持原厂格式；需已登录 CLI，其登录与 IDE 分开 |
-| DeepSeek Harness | 官方服务 `/user/balance`：可用状态、总余额、赠送余额和充值余额，保持原始币种和金额精度；第三方服务需在该服务查询 |
-
-查询使用原工具现有登录或服务配置，不创建模型轮次、不发送聊天消息，不修改对话或兑换额度。保留厂商接口实际返回的字段；厂商未开放的数据不会估算。Claude 临时查询会话的零成本不冒充实际对话费用；本机用量归因不覆盖其他设备。原工具可能使用自己的缓存，「查询时间」只表示本次查询结束时间。
-
-Claude 查询保留明确配置的 `--settings`（包含代理和工作目录规则），只为临时查询禁用 hooks，不修改原配置。订阅适用但接口返回空数据时，会重新启动一次原生查询；持续失败会提示检查网络/代理，不再误报为登录方式不支持。
-
-用量 API：`GET /api/providers/{codex|claude|antigravity|deepseek}/usage?workspace=绝对目录`，沿用本地令牌和同源校验。DeepSeek 可附加 `service` 参数，与已选服务一致；自定义服务凭据不会发给官方地址。Claude SDK 用量方法目前为实验接口，版本不兼容时明确报错，升级后需验证。
-
-官方参考：[Codex App Server](https://learn.chatgpt.com/docs/app-server)、[Claude /usage](https://code.claude.com/docs/en/costs#using-the-usage-command)、[Antigravity /usage](https://antigravity.google/docs/cli/commands/usage/)、[AI Credits](https://antigravity.google/docs/cli/credits/)、[DeepSeek 余额](https://api-docs.deepseek.com/api/get-user-balance/)。
-
-## 模型与工作目录
-
-模型可在右侧下拉选择，保留「跟随工具默认」「自定义模型」和刷新入口。Codex 从 [App Server 的 model/list](https://learn.chatgpt.com/docs/app-server#list-models-modellist) 获取目录；Antigravity 从 `agy models` 获取目录；Claude Code 通过官方 SDK 读取本机 CLI 的模型目录，根据 `resolvedModel` 显示完整名称，例如 Claude Opus 5.5、Claude Sonnet 5、Claude Haiku 4.5，实际版本由 CLI 决定，不写死版本号。选择值仍采用原工具的别名或模型标识，兼容已保存对话；1M 和 Plan 模式也显示对应版本。DeepSeek 使用已安装工具的模型目录、用户配置和已保存的默认模型。
-
-目录读取不发送模型消息；Claude 目录查询关闭工具、启动钩子和会话保存。读取失败时明确提示版本尚未确认，并保留别名、默认与自定义模型选项。更新 Claude Code 后点「刷新列表」即可获取新目录。「跟随工具默认」继续沿用 CLI 的设置。具体可用性仍取决于账号和原工具的访问策略。
-
-点击输入框下方的工作目录即可浏览本机文件夹，支持磁盘、主目录、上一级、名称筛选和粘贴完整路径。「对话设置」中的路径框也有「浏览」按钮。只列出文件夹；取消不会修改当前目录。此处显示运行星港服务的电脑上的文件夹。选择的工作文件夹直接作为项目，无需标记；仅浏览不会创建项目。对话换目录时，自己的 `.starport/history/<对话ID>.md` 随之迁移，其他对话的历史、项目标识和共享台账留在原处；迁移失败则不更换目录。旧版本遗留的历史文件会按已知会话路径补迁。也可以「重命名」当前文件夹，磁盘上的文件夹和星港里用到它（含子文件夹）的对话、项目会一起更新。文件夹里有对话正在运行、文件被其他程序占用，或文件夹里有星港自己的程序和数据时，会拒绝改名并说明原因。
-
-## 输入框的「＋」菜单
-
-- **文件和文件夹**：选择/拖放文件、粘贴图片，或浏览本机文件夹。文件保存为本地副本，文件夹只附加路径，不修改工作目录。每项最多 8 MB，每条最多 16 项、合计 24 MB。
-- **附加 Microsoft Edge**：首次在 Edge 的 `edge://extensions` 加载 `extensions/edge`，从星港菜单生成配对码，在扩展中连接。之后直接在星港选择标签页，正文作为可预览附件，发消息时才交给模型。需要用户在扩展中授予网页读取权限；不读取浏览历史、密码框或表单输入，不提供浏览器自动操作。配对令牌与 Starport 主界面令牌分离。
-- **读取视频字幕**：四个工具共用。菜单中输入 B 站视频链接或 BV 号，或直接在消息中发送视频链接/BV 号，发送前会通过已连接的 Edge 读取字幕并附加到该条消息。支持 `?p=2` 等分 P；优先中文字幕，标注自动生成字幕，保留时间戳，可点击附件预览。登录凭据保留在 Edge，签名字幕下载地址不会传给星港或模型。只读取明确指定的视频；缺少字幕、需要登录、超时或内容过长时保留草稿并提示，不用简介替代字幕，也不声称完成音频转写。每条消息最多 3 个视频，字幕最多 90,000 字符且附件总文本不超过 100,000 字符，超限不附加截断结果。读取期间切换对话、工具或修改输入会阻止自动发送，已读取字幕保留在原草稿。扩展默认只请求 B 站权限，附加其他网站需在连接时勾选相应选项。更新已有扩展后须在 Edge 扩展页点击重新加载。
-- **在项目中工作**：列出已有项目文件夹并在其中新建对话，也可以选择新的工作文件夹；项目自动创建，可独立选择对话分组。
-- **目标**：Codex 原生目标模式，可设置目标和可选预算；下一条消息开始执行。
-- **计划模式**：Codex 原生 `collaborationMode: plan`，Claude/Antigravity 使用各自原生计划设置。DeepSeek 当前 SDK 未暴露对应接口，菜单会明确禁用，不用提示词冒充原生模式。
-- **绘图**：鼠标/触控画布，颜色、粗细、橡皮擦、撤销/重做。完成后作为 PNG 附件，Codex 直接接收原生图片输入；Claude 和 DeepSeek 传入各自图片消息结构，Antigravity 使用原文件路径。
-
-左侧的 group 只负责整理对话。**每条对话独立保存目录、工具和模型**；同一个 group 可以包含多个目录及工具。分组标题旁的「＋」直接在该组新建对话；对话设置可以单独调整分组与目录。
-
-鼠标悬停在对话标题上时，右侧显示「⋯」（键盘聚焦或触屏下也可访问）。菜单可将该对话移入已有分组、新建分组或未分组，不切换正在阅读的对话，也不改变目录、模型或运行状态。删除需要确认，只移除星港数据库中该对话的记录、消息、会话映射和导入来源映射，以及工作目录下 `.starport/history/` 里该对话的历史存档；正在运行的对话须先停止。所有附件记录和文件副本（包括独占、共享及未发送附件）、工作目录和生成文件、原工具中的对话、导出和备份均保留。关联内容需逐项检查、另行确认后删除，不自动扫描、删除或重试清理。删除、启动和退出均不再触发数据库物理清除，也忽略旧版的待清理标记；普通删除不承诺不可恢复擦除。删除当前对话会回到新对话，并清除该对话在浏览器中的草稿状态，草稿附件的服务端记录和文件仍保留。
-
-## 打开聊天中的本地文件
-
-助手给出的 `file:///...` 链接、Windows 绝对路径、相对文件路径和普通文件名（如 `PROJECT_NOTES.md`）可在消息中点击。点击用 Windows 默认应用打开；右键菜单提供「打开文件」「在资源管理器中查看」「打开方式」。资源管理器会打开父文件夹并选中文件，不进入重命名状态；打开方式调用 Windows 原生应用选择窗口，使用本机安装的应用列表。附件也支持同样的右键菜单，原有左键预览保留。界面支持中英文，以及 Shift+F10、方向键和 Esc。
-
-相对路径和裸文件名先按该对话的工作目录查找；找不到时，继续查找其子文件夹中的相同路径后缀。例如工作目录下有 `地下城自走棋/预览.html`，助手只写 `预览.html` 时也能找到。完整路径优先；子目录中只有一个匹配项且搜索完整时直接打开，多个同名文件会列出完整相对路径供你选择。绝对路径和指向父目录的路径不作这种替代查找；补充搜索不跟随符号链接或目录联接，也不跨出工作目录。搜索限制为 5 秒、50,000 个目录项和 50 个候选；未能完整检查时，只允许明确选择已找到的路径或提供完整路径，不把部分结果当成唯一匹配。操作前检查文件是否存在，文件移动或删除后会明确提示。代码块、公式和网页链接不转换为本地文件按钮。脚本、程序及未识别类型进入应用选择窗口，避免单击代码文件就运行其关联解释器。
-
-原生操作由认证后的同源 POST 请求触发，不因渲染消息自动执行；文件名作为 UTF-8 数据传递，不拼进 Shell 命令。仅支持本机普通文件，不支持网络路径和设备路径。此功能不修改或删除对话、附件、备份与原文件，也不改变默认文件关联。
-
-Windows 官方接口：[SHOpenFolderAndSelectItems](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenfolderandselectitems)（定位选中）和 [SHOpenWithDialog](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenwithdialog)（系统打开方式）。
-
-## 数据与备份
-
-- 星港采用关系数据库，按分组、对话、消息、原工具会话映射、导入来源、项目、设置和附件分表管理。单个主文件是 SQLite 的正常存储方式；本机应用继续使用 SQLite。表结构、文件组成和备份说明见 [数据库结构](docs/database-architecture.md)。
-- 主数据库：`.data/hub.sqlite`，采用 SQLite WAL。
-- 连接设置和验证结果存于同一数据库；不复制 API Key、登录令牌或账号密码。
-- 「设置 → 连接与数据」可导出/导入全部分组与消息。新版备份同时包含已发送附件和已保存项目，兼容旧版；导入新增副本，不覆盖原记录，也不恢复原生会话或权限。文件夹附件只备份引用路径，不递归复制目录。导入上限 128 MB。
-- 左下角「导入对话」中选择 **Codex / Claude Code**，搜索、预览、勾选所需对话并放入现有或新分组。Codex 可筛选已归档记录；Claude Code 可按标题或原目录搜索，直接读取本机历史，无需账号可用或启动模型。Claude Code 历史通过官方 Agent SDK 读取本机 `.claude/projects`（或 `CLAUDE_CONFIG_DIR` 配置目录），按原记录的消息链恢复；不读取 Claude 网页端云历史。
-- 保留双方文字消息、标题、工作目录和可用时间；图片、音频、文件保留引用，工具执行过程和子代理内部消息不复制。导入是独立副本，不续写原工具对话，不继承原权限或目标。Claude 默认计划模式，Codex 默认请求批准；后续使用星港自己的上下文继续。这不是实时同步，原目录失效时需先在星港重新选择工作目录。
-- 两种来源分别去重；来源记录随星港备份保存。完整读取后再保存，失败时不留下半段记录；批量导入可在当前对话完成后停止。Codex 需要支持 `thread/turns/list` 的本机版本。文字上限每段 64 MB、单条 200 万字符，Claude 原记录上限 128 MB，超出明确报错，不静默截断。
-- 对话右上角「↗」或侧边栏对话「⋯ → 导出对话」可选择 **导出会话文件**（`.starport.json`，可在另一台电脑恢复）或 **导出 Markdown**（供阅读）。会话文件只包含这一段对话，保留消息、时间、已保存的执行过程、上传的图片/文件及网页附件正文；不包含其他对话、共同记忆、账号登录、原工具会话映射、权限或排队任务。正在运行时导出是当时的快照，尚未完成的输出保留为已中断。
-- 在另一台电脑更新星港后，选择 **导入对话 → 导入来源 → 星港会话文件**，选择文件并预览，再指定分组和本机工作目录。导入建立独立副本，使用本机原工具登录，历史消息补入新原生会话上下文；不会自动执行任务。相同内容重复导入打开已有副本，不覆盖其他记录。上传附件随文件迁移；工作目录中的生成文件需另行搬迁，文件夹附件只保留历史路径提示、需在本机重新添加。共同记忆仍使用单独的记忆同步。单个会话文件上限 120 MB，单个上传附件上限 8 MB。
-- 只监听 `127.0.0.1`，有本地会话令牌和跨站请求校验；不提供公网分享或多设备同步。
-- 修改路径后重新运行 `python scripts/install-skills.py` 可更新所有技能入口。
-
-## MAGI 的复用范围
-
-使用独立获取的 [MAGI 2.8.0](https://github.com/Misaka16384/magi)，提交 `e95f14a4a1601008cee9a00aa2b5e78c49842794`。
-
-复用 `core/hosts.py` 导出的宿主注册表和技能安装位置，以及 MAGI 自带的 marked、KaTeX、Archivo 本地资源。新的对话数据库、实时适配器和这个前端为本项目实现；尚未接入 MAGI 的论文摄入、知识图谱或研究任务后端。
-
-运行所需的 Markdown、KaTeX 和 Archivo 文件已保存在 `public/vendor`，原始许可一并保留；宿主表保存在 `src/magi-hosts.json`，下载后可直接使用。完整 MAGI 源码不属于星港的运行依赖。
-
-开发者需要重新生成宿主表时，可将固定提交的 MAGI 源码放入本机 `vendor/magi`，再运行 `npm run sync-magi`；该目录保持在 Git 忽略列表中。
-
-## 开发与验证
-
-DeepSeek 的一轮回复结束不等于整个任务结束。适配器保留 SDK 进程，等待原生父代理空闲、全部已知子代理结束，以及可续跑子代理的完成通知被父代理处理。子代理空闲或主代理说「稍后给你结果」不会触发退出；结果汇总、嵌套子代理和续跑仍在同一个任务中进行。停止按钮仍可中断整棵执行树，原生失败与断连会显示为失败，不冒充完成。
-
-要求 Node.js 24+。Python 3.10+ 只用于可选的技能安装及宿主表生成。服务使用 Node 内置 HTTP 和 SQLite。
-
-```powershell
+```sh
 npm ci
 npm test
 npm start
 ```
 
-首次启动需安装依赖；运行所需的 MAGI 界面资源已包含在仓库中。各工具本身仍需要在当前电脑上分别安装和登录。
+The test runner uses an isolated temporary folder and cleans it afterwards. A single test has a two-minute limit; a test file that does not exit within five minutes is reported and stopped. Run selected files with `npm test -- tests/i18n.test.mjs`. GitHub Actions runs the suite on Windows with Node 24 for pushes to `main` and pull requests.
 
-代码结构（主要模块）：
+| Location | Responsibility |
+| --- | --- |
+| `src/server.mjs` | Local HTTP API and static assets |
+| `src/runner.mjs`, `src/adapters/` | Context assembly, task lifecycle and native adapters |
+| `src/storage.mjs`, `src/compaction.mjs` | SQLite records and conversation compaction |
+| `src/workflows.mjs`, `src/workflows/` | Companions, rooms, workflow scheduling, ledgers and exams |
+| `public/app*.js` | Main workspace, views, settings and interaction |
+| `public/i18n.js` | English and Chinese interface translations |
+| `public/mobile/`, `src/collaboration/` | Group and mobile interface, service and execution bridge |
+| `tests/` | Unit, integration and isolated UI fixtures |
 
-- `src/server.mjs`：HTTP 接口和静态文件；`src/runner.mjs`：调度一轮对话，组装上下文，调用适配器；`src/adapters/`：Codex、Claude Code、Antigravity、DeepSeek 各自的适配器。
-- `src/storage.mjs`：SQLite 中的分组、对话、消息和会话映射，以及上下文组装；`src/compaction.mjs`：上下文压缩。
-- `src/workflows.mjs`：伙伴、房间成员、工作流和挂载的执行与调度；`src/workflows/` 下按职责拆分：`schema`（表结构）、`records`（数据校验）、`planning`（点名排程）、`prompts`（伙伴收到的指令）、`desk`（工位会话）、`ledger`（台账）、`exam`（考位文件夹的复制和交卷检查）、`cards`（运行卡片文字）、`migrate`（从旧版浏览器数据导入）、`routes`（HTTP 接口）。
-- 前端是按顺序加载的普通脚本（见 `public/index.html`），同一功能拆成几个文件，共用一个全局对象：
-  - 主界面：`public/app.js`（共享状态、接口调用、草稿、切换对话），`app-layout.js`（侧栏、顶栏、主题封面、面板宽度），`app-options.js`（工具、模型和思考档位），`app-messages.js`（消息、提问和运行状态），`app-send.js`（发送、引导、停止），`app-folders.js`（文件夹选择器），`app-start.js`（绑定按钮并加载第一屏）。
-  - `public/ui-kit.js`：房间、工作流和提示词共用的弹窗、菜单、表单和模型选择器。
-  - 工作流（`StarportWorkflows`）：`workflows.js`（数据、点名和运行、回复某次运行），`workflow-cards.js`（运行卡片和工位），`workflow-editor.js`（工作流库、编辑器、设置），`workflow-mount.js`（挂到对话），`workflow-ledger.js`（台账），`workflow-exam.js`（考场提议和考位检查）。`context-settings.js`：上下文与压缩设置。
-  - 房间（`StarportAgentsRoom`）：`agents-room.js`（侧栏、右栏、输入框里的点名和工作流入口），`room-companions.js`（伙伴卡片、设置和进出房间），`room-delete.js`（删除房间），`room-migrate.js`（导入旧版浏览器里的伙伴）。
-  - 主界面每次重绘后调用 `StarportAgentsRoom.scheduleRender()`，发送前先问 `routeSend()`，房间不监听主界面的 DOM 变化。
+The frontend uses ordered plain scripts rather than a framework build. `node tests/ui-fixture.mjs` starts an isolated demonstration server with temporary data and simulated tools. Do not connect tests to personal accounts or production histories.
 
-- 单元及集成测试：`npm test`。推送到 `main` 或提交 Pull Request 时，GitHub Actions 会在 Windows 上用 Node 24 运行同一套测试（`.github/workflows/test.yml`）。
-- `npm test` 由 `scripts/run-tests.mjs` 启动：测试在自己的临时文件夹里运行，结束后删除，不在系统临时目录留下文件夹；单个测试超过 2 分钟算失败并显示测试名，某个测试文件 5 分钟后仍未结束会显示文件名并停止本轮。只跑部分文件：`npm test -- tests/videos.test.mjs`。
-- Windows 子进程清理会先结束进程树；清理命令超过 2 秒会回退到直接终止本轮子进程，再等待最多 2 秒确认退出。重复停止请求共用同一次清理；无法确认退出时明确报告清理超时，不无限等待。只有停止任务或原工具结束后的清理会触发，不因任务沉默自动中断。
-- 隔离界面测试服务：`node tests/ui-fixture.mjs`（3211 端口，临时数据库，模拟回复仅用于测试）
-- 完成状态隔离测试：`node tests/completion-ui-fixture.mjs`（3216 端口，模拟四个工具；`DISCONNECT` 模拟结束通知丢失，`FAIL` 模拟失败，连接检查故意延迟 10 秒）
-- 状态及提问隔离测试：`node tests/interactions-ui-fixture.mjs`（3217 端口，模拟执行中转圈、完成待查看蓝点、提问跳过和草稿保留）
-- 实际账号连接测试：`node scripts/live-check.mjs codex antigravity deepseek`（每个工具调用一次模型，会使用原工具的额度）
-- 原生目标接口测试：`node scripts/goal-check.mjs`（不启动模型轮次）
+Optional tool entry points can be installed with `python scripts/install-skills.py`; rerun it after moving the project. In Codex, invoke `$harness-hub`. The entry point opens StarPort's own local interface and does not replace a native tool's UI.
 
-自动测试与隔离界面测试覆盖分组、独立工作目录、附件、项目、计划和目标、绘图、对话管理、历史导入、中英文界面、过程显示、子任务、完成状态、排队与引导、权限、记忆和检索。隔离测试使用模拟回复，不消耗模型用量。Edge 连接需要在当前电脑首次加载扩展并配对；原工具的安装、登录和实际账号可用性应在当前电脑重新验证。
+StarPort reuses MAGI's host registration catalog and bundled marked, KaTeX and Archivo resources, preserving their notices. The conversation database, adapters and workspace frontend are implemented here. The complete MAGI repository is not a runtime dependency. To regenerate the catalog, place the pinned [MAGI 2.8.0 source](https://github.com/Misaka16384/magi/tree/e95f14a4a1601008cee9a00aa2b5e78c49842794) in ignored `vendor/magi`, then run `npm run sync-magi`.
 
-官方参考：[Codex App Server](https://learn.chatgpt.com/docs/app-server)、[Claude Code](https://code.claude.com/docs/en/headless)、[Antigravity CLI](https://antigravity.google/docs/cli/headless/)、[DeepSeek SDK](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/sdk)。
+## Contributing
 
+Fork this repository and open a pull request against `main`. The repository owner reviews and merges contributions. Changes after approval require another review; contributors do not receive direct upstream write access. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## 许可证
+## License
 
-星港自有源码采用 [MIT 许可证](LICENSE)。第三方代码、字体与资源的许可见 [第三方声明](THIRD_PARTY_NOTICES.md)；各厂商 CLI、SDK、模型和订阅服务仍适用各自条款。
-
-发布源码时只导出版本控制中的文件；不要将运行中的整个项目目录压缩发布。私人记录、登录状态、导出和本机配置不属于源码发行包。
+StarPort's own source is licensed under [MIT](LICENSE). Bundled third-party code, fonts and assets retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Vendor CLIs, SDKs, models and subscription services remain subject to their respective terms.

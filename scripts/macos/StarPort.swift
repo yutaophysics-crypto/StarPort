@@ -22,7 +22,7 @@ final class StarPortBridge: NSObject, WKScriptMessageHandler {
               let body = message.body as? [String: String], body["action"] == "openGroup",
               let value = body["url"], let url = owner.groupURL(value) else {
             if source.protocol == "http" && source.port == config.port {
-                owner.showError("群聊地址无效", "请填写 HTTPS 群聊服务地址；本机服务可使用回环地址。")
+                owner.showError("Invalid group server address", "Enter an HTTPS group server address. Local services may use a loopback address.")
             }
             return
         }
@@ -58,7 +58,7 @@ final class StarPortWindow: NSWindowController, NSWindowDelegate, WKUIDelegate, 
         webView = WKWebView(frame: .zero, configuration: configuration)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 820),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "\(groupOrigin == nil ? "星港" : "星港群聊") · 窗口 \(number)"
+        window.title = "\(groupOrigin == nil ? "StarPort" : "StarPort Groups") · Window \(number)"
         window.minSize = NSSize(width: 760, height: 520)
         window.contentView = webView
         window.isReleasedWhenClosed = false
@@ -128,7 +128,7 @@ final class StarPortWindow: NSWindowController, NSWindowDelegate, WKUIDelegate, 
         panel.beginSheetModal(for: window) { result in completionHandler(result == .OK ? panel.url : nil) }
     }
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
-        if (error as NSError).code != NSURLErrorCancelled { hostApplication.showError("下载失败", error.localizedDescription, window: window) }
+        if (error as NSError).code != NSURLErrorCancelled { hostApplication.showError("Download failed", error.localizedDescription, window: window) }
     }
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
@@ -139,20 +139,20 @@ final class StarPortWindow: NSWindowController, NSWindowDelegate, WKUIDelegate, 
     }
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
-        let alert = NSAlert(); alert.messageText = "星港"; alert.informativeText = message; alert.addButton(withTitle: "好")
+        let alert = NSAlert(); alert.messageText = "StarPort"; alert.informativeText = message; alert.addButton(withTitle: "OK")
         present(alert) { _ in completionHandler() }
     }
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
-        let alert = NSAlert(); alert.messageText = "星港"; alert.informativeText = message
-        alert.addButton(withTitle: "确定"); alert.addButton(withTitle: "取消")
+        let alert = NSAlert(); alert.messageText = "StarPort"; alert.informativeText = message
+        alert.addButton(withTitle: "OK"); alert.addButton(withTitle: "Cancel")
         present(alert) { result in completionHandler(result == .alertFirstButtonReturn) }
     }
     func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
-        let alert = NSAlert(); alert.messageText = "星港"; alert.informativeText = prompt
+        let alert = NSAlert(); alert.messageText = "StarPort"; alert.informativeText = prompt
         let field = NSTextField(string: defaultText ?? ""); field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
-        alert.accessoryView = field; alert.addButton(withTitle: "确定"); alert.addButton(withTitle: "取消")
+        alert.accessoryView = field; alert.addButton(withTitle: "OK"); alert.addButton(withTitle: "Cancel")
         present(alert) { result in completionHandler(result == .alertFirstButtonReturn ? field.stringValue : nil) }
     }
     private func present(_ alert: NSAlert, completion: @escaping (NSApplication.ModalResponse) -> Void) {
@@ -174,7 +174,7 @@ final class StarPortApplication: NSObject, NSApplicationDelegate {
             guard let file = Bundle.main.url(forResource: "starport-config", withExtension: "json") else { throw CocoaError(.fileNoSuchFile) }
             configuration = try JSONDecoder().decode(Configuration.self, from: Data(contentsOf: file))
             openWindow()
-        } catch { showError("星港配置无法读取", "请重新安装星港的 Mac 应用入口。"); NSApp.terminate(nil) }
+        } catch { showError("Cannot read StarPort configuration", "Reinstall the StarPort macOS app."); NSApp.terminate(nil) }
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         guard configuration != nil else { return true }
@@ -224,21 +224,21 @@ final class StarPortApplication: NSObject, NSApplicationDelegate {
         let controller = StarPortWindow(owner: self, number: nextNumber, configuration: webConfiguration, groupOrigin: groupOrigin)
         windows.append(controller); controller.showWindow(nil); NSApp.activate(ignoringOtherApps: true)
         if let url = url { controller.webView.load(URLRequest(url: url)); return controller }
-        controller.webView.loadHTMLString("<html lang='zh'><meta charset='utf-8'><body style='font:16px system-ui;background:#0d1725;color:#e3edf5;display:grid;place-items:center;height:90vh'>正在打开星港…</body></html>", baseURL: nil)
+        controller.webView.loadHTMLString("<html lang='en'><meta charset='utf-8'><body style='font:16px system-ui;background:#0d1725;color:#e3edf5;display:grid;place-items:center;height:90vh'>Opening StarPort…</body></html>", baseURL: nil)
         let config = configuration!
         startup.async {
             do {
                 if let audit = config.proxyAudit {
-                    try Self.run(config, config.python, [audit], failure: "请先打开 Clash Verge 和 LuLu，并确认 Claude 固定线路。")
+                    try Self.run(config, config.python, [audit], failure: "The configured network startup check failed. Check your local proxy and firewall configuration.")
                 }
-                try Self.run(config, config.node, [config.root + "/scripts/launch.mjs", "--no-open"], failure: "本机星港服务未能启动，请检查星港目录中的 .data/server.log。")
+                try Self.run(config, config.node, [config.root + "/scripts/launch.mjs", "--no-open"], failure: "The local StarPort service could not start. Check .data/server.log in the project folder.")
                 DispatchQueue.main.async {
                     if self.windows.contains(where: { $0 === controller }) {
                         controller.webView.load(URLRequest(url: URL(string: "http://127.0.0.1:\(config.port)/")!))
                     }
                 }
             } catch {
-                DispatchQueue.main.async { self.showError("星港暂时无法打开", error.localizedDescription, window: controller.window) }
+                DispatchQueue.main.async { self.showError("Cannot open StarPort", error.localizedDescription, window: controller.window) }
             }
         }
         return controller
@@ -261,12 +261,12 @@ final class StarPortApplication: NSObject, NSApplicationDelegate {
         try process.run()
         guard completion.wait(timeout: .now() + 60) == .success else {
             if process.isRunning { process.terminate() }
-            throw NSError(domain: "StarPort", code: 1, userInfo: [NSLocalizedDescriptionKey: failure + "\n启动检查超时，请重试。"])
+            throw NSError(domain: "StarPort", code: 1, userInfo: [NSLocalizedDescriptionKey: failure + "\nStartup check timed out. Please try again."])
         }
         if process.terminationStatus != 0 { throw NSError(domain: "StarPort", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: failure]) }
     }
     func showError(_ title: String, _ message: String, window: NSWindow? = nil) {
-        let alert = NSAlert(); alert.messageText = title; alert.informativeText = message; alert.addButton(withTitle: "好")
+        let alert = NSAlert(); alert.messageText = title; alert.informativeText = message; alert.addButton(withTitle: "OK")
         if let window = window { alert.beginSheetModal(for: window) } else { alert.runModal() }
     }
     private func activeView() -> WKWebView? { windows.first { $0.window === NSApp.keyWindow }?.webView }
@@ -289,21 +289,21 @@ final class StarPortApplication: NSObject, NSApplicationDelegate {
         let bar = NSMenu()
         func menu(_ title: String) -> NSMenu { let item = NSMenuItem(title: title, action: nil, keyEquivalent: ""); let submenu = NSMenu(title: title); item.submenu = submenu; bar.addItem(item); return submenu }
         func add(_ menu: NSMenu, _ title: String, _ action: Selector, _ key: String, target: AnyObject? = nil) { let item = NSMenuItem(title: title, action: action, keyEquivalent: key); item.target = target; menu.addItem(item) }
-        let app = menu("星港")
-        add(app, "关于星港", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "", target: NSApp)
-        app.addItem(.separator()); add(app, "隐藏星港", #selector(NSApplication.hide(_:)), "h", target: NSApp)
-        app.addItem(.separator()); add(app, "退出星港", #selector(NSApplication.terminate(_:)), "q", target: NSApp)
-        let file = menu("文件")
-        add(file, "新建窗口", #selector(newWindow), "n", target: self)
-        add(file, "关闭窗口", #selector(NSWindow.performClose(_:)), "w")
-        let edit = menu("编辑")
-        for (title, action, key) in [("撤销", "undo:", "z"), ("剪切", "cut:", "x"), ("复制", "copy:", "c"), ("粘贴", "paste:", "v"), ("全选", "selectAll:", "a")] { add(edit, title, NSSelectorFromString(action), key) }
-        let view = menu("显示"); add(view, "刷新页面", #selector(reloadPage), "r", target: self)
-        add(view, "返回", #selector(goBack), "[", target: self); add(view, "前进", #selector(goForward), "]", target: self)
-        add(view, "放大", #selector(zoomIn), "+", target: self); add(view, "缩小", #selector(zoomOut), "-", target: self); add(view, "实际大小", #selector(resetZoom), "0", target: self)
-        let window = menu("窗口"); NSApp.windowsMenu = window
-        add(window, "最小化", #selector(NSWindow.performMiniaturize(_:)), "m")
-        add(window, "前置所有窗口", #selector(NSApplication.arrangeInFront(_:)), "", target: NSApp)
+        let app = menu("StarPort")
+        add(app, "About StarPort", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "", target: NSApp)
+        app.addItem(.separator()); add(app, "Hide StarPort", #selector(NSApplication.hide(_:)), "h", target: NSApp)
+        app.addItem(.separator()); add(app, "Quit StarPort", #selector(NSApplication.terminate(_:)), "q", target: NSApp)
+        let file = menu("File")
+        add(file, "New Window", #selector(newWindow), "n", target: self)
+        add(file, "Close Window", #selector(NSWindow.performClose(_:)), "w")
+        let edit = menu("Edit")
+        for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] { add(edit, title, NSSelectorFromString(action), key) }
+        let view = menu("View"); add(view, "Reload Page", #selector(reloadPage), "r", target: self)
+        add(view, "Back", #selector(goBack), "[", target: self); add(view, "Forward", #selector(goForward), "]", target: self)
+        add(view, "Zoom In", #selector(zoomIn), "+", target: self); add(view, "Zoom Out", #selector(zoomOut), "-", target: self); add(view, "Actual Size", #selector(resetZoom), "0", target: self)
+        let window = menu("Window"); NSApp.windowsMenu = window
+        add(window, "Minimize", #selector(NSWindow.performMiniaturize(_:)), "m")
+        add(window, "Bring All to Front", #selector(NSApplication.arrangeInFront(_:)), "", target: NSApp)
         NSApp.mainMenu = bar
     }
 }

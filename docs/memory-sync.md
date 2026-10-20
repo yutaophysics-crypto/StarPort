@@ -4,14 +4,14 @@ Starport supports an opt-in shared folder without a Starport account. Your exist
 
 ## Set up two computers
 
-1. On computer A, open **共同记忆 → 跨电脑同步** (Shared memory → Device sync).
-2. Browse to a private folder already managed by your file sync application, and choose **开启同步** (Enable sync). Starport creates a dedicated `StarportMemory` subfolder.
+1. On computer A, open **Shared memory → Device sync**.
+2. Browse to a private folder already managed by your file sync application, and choose **Enable sync**. Starport creates a dedicated `StarportMemory` subfolder.
 3. Wait until the sync application delivers that subfolder, including `space.json`, to computer B.
 4. On computer B, open the same control, choose the corresponding **parent folder** and enable sync. Local paths may differ. The shared `space.json` identity makes them one memory space.
 
 Start with one device. Do not independently initialize two empty, disconnected folders: each would create its own space. If the space identity changes, Starport pauses instead of replacing local memory. Resolve any cloud-drive conflict involving `space.json` before reconnecting. A local write/check is not proof that the cloud or another computer has received it.
 
-While Starport is running, it checks the folder every 15 seconds. **立即同步** (Sync now) checks immediately. Your other computer receives changes after the external sync application transfers them and its Starport checks the folder. An unavailable folder leaves local records intact; the next successful check records and exports the latest local state. A new task uses the latest synchronized, eligible memory; synchronization does not change the context of a task already running.
+While Starport is running, it checks the folder every 15 seconds. **Sync now** checks immediately. Your other computer receives changes after the external sync application transfers them and its Starport checks the folder. An unavailable folder leaves local records intact; the next successful check records and exports the latest local state. A new task uses the latest synchronized, eligible memory; synchronization does not change the context of a task already running.
 
 ## Shared and local data
 
@@ -28,7 +28,7 @@ Each change identifies the versions it was based on. Concurrent edits keep both 
 
 Deletion is a replicated change, so an offline stale copy cannot silently restore an item. A concurrent edit/delete conflict hides the item and preserves both versions for explicit resolution. Changes to a confirmed item and approval of a proposed update remain guarded: a proposal based on an older confirmed version cannot overwrite a newer one.
 
-**停用同步** (Disable sync) retains local memory, queued changes and the shared files. It does not delete cloud data, chats, attachments or directories. Reconnecting to the same space retains the previous causal history. A copied backup with identical memory content is linked to the existing remote identity where possible; conflicting versions and ambiguous duplicates require review.
+**Disable sync** retains local memory, queued changes and the shared files. It does not delete cloud data, chats, attachments or directories. Reconnecting to the same space retains the previous causal history. A copied backup with identical memory content is linked to the existing remote identity where possible; conflicting versions and ambiguous duplicates require review.
 
 ## File and database contract
 

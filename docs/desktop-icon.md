@@ -6,6 +6,6 @@ The vector is rendered separately at 16, 20, 24, 32, 40, 48, 64, 96, 128 and 256
 
 `scripts/build-brand-icons.mjs` uses Sharp to render and package the assets. It accepts an optional first argument pointing to a Sharp module when using a bundled runtime. Previous generated variants and their full prompts are retained in [desktop-icon-v1.md](desktop-icon-v1.md) and [desktop-icon-v2.md](desktop-icon-v2.md).
 
-`scripts/set-desktop-icon.ps1` updates the existing `Starport · 星港.lnk` IconLocation, backs up the shortcut under `.data/source-backups/desktop-icon-azure-20261012`, verifies launcher properties, notifies Windows Shell and exports the resolved icon to `.data/desktop-icon-azure-shell.png`. Use `-VerifyOnly` to inspect the shortcut. Restore the saved shortcut to undo the change.
+`scripts/set-desktop-icon.ps1` updates the existing StarPort shortcut's IconLocation (English names first, with support for the legacy localized name), backs up the shortcut under `.data/source-backups/desktop-icon-azure-20261012`, verifies launcher properties, notifies Windows Shell and exports the resolved icon to `.data/desktop-icon-azure-shell.png`. Use `-VerifyOnly` to inspect the shortcut. Restore the saved shortcut to undo the change.
 
 Windows API references: [SHChangeNotify](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shchangenotify), [SHGetFileInfoW](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shgetfileinfow).

@@ -16,8 +16,8 @@ const SUPERSCRIPT={'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 
 // A plain-text summary of a Markdown reply, short enough for two popup lines.
-export function excerpt(text,limit=120,language='zh'){
-  const words=TEXT[language]||TEXT.zh;
+export function excerpt(text,limit=120,language='en'){
+  const words=TEXT[language]||TEXT.en;
   const plain=String(text||'')
     .replace(/```[\s\S]*?(?:```|$)/g,` ${words.code} `)
     .replace(/\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]/g,` ${words.formula} `)
@@ -62,7 +62,7 @@ export class Notifications{
     Object.assign(this,{store,notifier,broadcast,now});
     this.pages=new Map();this.pending=null;
     const look=store.setting('notifications-look',{})||{};
-    this.look={theme:THEMES.includes(look.theme)?look.theme:'sea',language:look.language==='en'?'en':'zh'};
+    this.look={theme:THEMES.includes(look.theme)?look.theme:'sea',language:look.language==='zh'?'zh':'en'};
     if(notifier)notifier.onOpen=event=>this.opened(event);
   }
   get native(){return !!this.notifier?.available;}

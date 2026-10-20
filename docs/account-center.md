@@ -1,37 +1,39 @@
-# 星港服务器与账号
+# Servers and accounts
 
-## 从星港内启用服务器
+English | [Chinese](zh-CN/account-center.md)
 
-打开 **设置 → 连接与数据 → 本机服务器**。选择本机端口（默认 3218），需要跨网络使用时先填好稳定的 HTTPS 对外地址，然后点击 **启动服务器**。账号服务和群聊服务一起启动，账号接口位于同一地址的 `/account`；无需安装另一套星港服务器软件。
+## Start a server from StarPort
 
-每个服务器独立保存账号、密码验证信息、群成员、聊天记录和邀请码。管理员可以在这个面板查看账号、创建账号、开关自主注册、停用或重新启用账号，以及重置密码。密码经过 scrypt 加盐保存，界面不会展示原密码。停用和重置密码会退出该账号的已有登录并撤销其 Agent 连接，其他账号不受影响。群成员和聊天记录仍保留。
+Open **Settings → Connections & data → This computer's server**. Choose a local port (3218 by default), configure a stable public HTTPS address if other networks need access, then start the server. Account and group services start together; account endpoints use `/account` on the same public address.
 
-服务器已有账号后，不允许直接修改其身份地址。换地址需要先备份并进行发行者迁移，避免把同名账号误当成旧成员。关闭注册不影响已有账号登录，管理员仍可创建账号。服务器有等待、领取或执行中的 Agent 任务时拒绝停止。停止保留数据库，重新启动后继续使用。
+Each server owns its accounts, password verification data, group members, messages and invitations. Administrators can create accounts, control self-registration, disable or re-enable accounts and reset passwords. Passwords use salted scrypt hashes and are not displayed. Disabling an account or resetting its password revokes that account's existing logins and agent connections; other accounts and saved group messages remain intact.
 
-普通新安装把服务器设置保存在工作台数据目录的 `server-hosting.json`，账号和群聊数据库在 `hosted-server/accounts`、`hosted-server/groups` 下。登录客户端的保存连接在 `server-accounts/<profileId>`，窗口凭证在 `group-windows.json`，均为私密运行时文件，不得放入源码或公开备份。正常关闭桌面窗口不会关闭本地 Node 后台；重启电脑后打开星港时恢复已启用的服务器。
+Once accounts exist, changing the issuer address requires backup and an explicit issuer migration. A same-named account at a different issuer must not acquire an old member's permissions. Closing registration does not prevent existing logins or administrator-created accounts. A server with queued, claimed or running agent jobs cannot be stopped from this panel. Stopping retains its databases.
 
-## 公网入口
+New local deployments store settings in `server-hosting.json` inside the workspace data directory. Hosted databases live under `hosted-server/accounts` and `hosted-server/groups`. Saved client connections use `server-accounts/<profileId>`; local window credentials use `group-windows.json`. These are private runtime files, not source or public backup material. Closing the desktop window does not stop the Node service. Opening StarPort after a reboot restores enabled local services.
 
-服务器默认只监听本机回环地址。将 Caddy、你自己的反向代理或 HTTPS 隧道指向群聊端口，提供与设置中一致的外部地址。不要把私人工作台的 3210 端口暴露到公网。HTTPS 入口同时转发群聊与 `/account`，无需公开内部账号端口。
+## Public HTTPS access
 
-公网服务器要保持开机、联网且不休眠。临时 Quick Tunnel 适合测试，退出后可能更换地址，不能保证长期账号发行者地址稳定。已有账号的正式服务器应使用固定域名和持久入口。星港不会自动购买域名或创建第三方隧道。
+The service binds to loopback by default. Put Caddy, your reverse proxy or an HTTPS tunnel in front of the group port, using the public address configured in StarPort. Forward both group and `/account` routes. Do not publish the personal workspace on port 3210 or expose internal account ports unnecessarily.
 
-## 登录与独立窗口
+The server computer must remain awake, connected and running. Temporary Quick Tunnels are suitable for testing; their URLs can change and should not become the permanent issuer for established accounts. StarPort does not purchase domains or create third-party tunnels automatically.
 
-群聊窗口填写服务器地址、账号、密码。桌面端先校验该地址的服务，再仅向这个服务器的 `/account` 发送登录请求，不跟随重定向，也不自动接受服务器推荐的另一个账号中心。浏览器直接访问服务器的群聊页面时同样使用其本服务器账号；改填其他地址会先前往该地址，不携带密码。
+## Sign-in and separate windows
 
-桌面为每个「服务器＋账号」保存独立登录与 Agent 桥接。群聊页面在本机独立窗口运行，后端仅代理明确允许的群聊接口。浏览器中不保存远程账号令牌或会话 Cookie；窗口有各自随机凭证，即使同一服务器的两个账号也不会覆盖 Cookie。退出当前窗口只解除该窗口登录；忘记保存的连接则撤销这个账号的本机会话及 Agent 绑定。私人工作台与原工具登录独立运行。
+Enter the server address, username and password in the group window. The desktop validates that server and sends credentials only to its `/account` endpoint, without following a redirect or silently accepting a different account center suggested by the server. Navigating to another server does not carry the password there.
 
-账号身份使用服务器发行者和稳定 UUID，不凭同名账号授予旧群成员或电脑权限。上次查看的群聊由该服务器的账号记录，换电脑登录同一账号后可恢复。草稿按服务器、账号和群聊隔离。
+Desktop connections are separated by server and account. Each local group window has its own random credential and its own remote cookies. Remote account tokens and session cookies are not stored in browser storage. Signing out of one window leaves other connections alone; forgetting a saved connection revokes that account's local session and agent binding. The personal workspace and native tool logins remain independent.
 
-模型凭据、私人对话、个人记忆和 Agent 工作目录留在参与者自己的电脑。只有账号本人发起的群聊任务可以调用其绑定电脑。只读和执行权限继续遵循各 CLI 的限制和审批。
+Identity uses the server issuer and a stable UUID, not a username alone. The server remembers the last viewed group for that account, so it can be restored on another computer. Drafts are isolated by server, account and group.
 
-每个群默认每 24 小时更新邀请码，群主可选择 1–8760 小时或永久，并随时换码或关闭邀请。修改周期、换码与关闭后重新开启使旧码失效，现有成员保留。
+Model credentials, personal conversations, memory and working folders remain on the participant's own computer. Only calls from the bound account can invoke that computer. CLI permissions and approvals still apply.
 
-## 已有 Mac 后台部署
+Invitation codes rotate every 24 hours by default. Group owners can choose a period from 1 to 8760 hours or a permanent code, replace the code or disable invitations. Changing the period, rotating a code or re-enabling invitations invalidates the old code without removing existing members.
 
-已有 `.data/local-services.json` 同时启用 `server`、`accountServer` 的部署会被识别为现有服务器，继续使用原数据库和 LaunchAgent，不复制或更换账号身份。面板管理原来两个后台任务；Mac 登录后由 LaunchAgent 自动启动，退出桌面应用也继续服务。
+## Existing macOS background deployments
 
-后台程序和数据库在 `~/Library/Application Support/StarPort/services/`。更新前在线备份数据库并确认没有活动任务，然后使用 Node 24 运行 `node scripts/install-macos-services.mjs` 更新程序快照。该脚本保留已有账号 ID、群主、成员、消息、设备和绑定；拒绝身份冲突。旧程序版本及部署前备份保留。
+Deployments whose `.data/local-services.json` enables both `server` and `accountServer` retain their existing databases, identity and LaunchAgents. The panel manages those original services; they start at macOS login and remain available after the desktop window closes.
 
-账号数据库、签名私钥、客户端登录与设备令牌都不应提交到 Git。数据目录仅当前系统用户可访问，数据库、私钥和登录文件使用私密文件权限。保留旧外部账号中心登录协议以兼容既有部署；新的桌面三字段流程使用同一个服务器的自有账号。
+Background code and data live in `~/Library/Application Support/StarPort/services/`. Before updating, make an online database backup and ensure there are no active jobs. Run `node scripts/install-macos-services.mjs` with Node 24 to update the program snapshot. The installer preserves account IDs, owners, members, messages, devices and bindings, and rejects identity conflicts. Older program versions and deployment backups are retained.
+
+Do not commit account databases, signing keys, saved logins or device tokens. Data directories are private to the current system user. The older external account-center protocol remains available for existing deployments; new desktop sign-ins use accounts on the chosen server itself.

@@ -5,7 +5,8 @@ $ErrorActionPreference = 'Stop'
 $taskProjectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $taskIconPath = Join-Path $taskProjectRoot 'public\assets\starport-desktop-azure.ico'
 $taskDesktopPath = [Environment]::GetFolderPath('Desktop')
-$taskShortcutPath = Join-Path $taskDesktopPath 'Starport · 星港.lnk'
+$taskShortcutPath = @('StarPort.lnk', 'Starport.lnk', 'Starport · 星港.lnk') | ForEach-Object { Join-Path $taskDesktopPath $_ } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+if (!$taskShortcutPath) { throw 'Starport desktop shortcut was not found' }
 if (!(Test-Path -LiteralPath $taskShortcutPath -PathType Leaf)) { throw 'Starport desktop shortcut was not found' }
 if (!(Test-Path -LiteralPath $taskIconPath -PathType Leaf)) { throw 'Starport icon was not found' }
 $taskShell = New-Object -ComObject WScript.Shell

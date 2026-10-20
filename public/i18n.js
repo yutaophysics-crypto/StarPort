@@ -593,11 +593,11 @@ const english = {
   "请输入文件夹的完整路径": "Enter an absolute folder path",
   "没有权限打开这个文件夹": "You do not have permission to open this folder",
   "文件夹不存在或无法访问": "The folder does not exist or cannot be accessed",
-  "星港 · Starport": "Starport · 星港",
+  "星港 · Starport": "Starport",
   "失败": "Failed",
   "版本未知": "Version unavailable",
   "星港": "Starport",
-  "STARPORT": "星港",
+  "STARPORT": "STARPORT",
   "跳到对话": "Skip to conversation",
   "对话分组": "Conversation groups",
   "新对话": "New chat",
@@ -1035,8 +1035,8 @@ const english = {
   "{count} 个没有完成": "{count} unfinished",
   "{count} 个需要核对": "{count} to check"
 };
-  let language='zh';
-  try {if(localStorage.getItem('starport-language')==='en')language='en';}catch{}
+  let language='en';
+  try {if(localStorage.getItem('starport-language')==='zh')language='zh';}catch{}
   function t(source, values={}) {
     const template=language==='en' ? english[source]??source : source;
     return String(template??'').replace(/\{(\w+)\}/g,(match,key)=>Object.hasOwn(values,key)?String(values[key]):match);
@@ -1063,5 +1063,5 @@ const english = {
     return String(source??''); // Retain raw provider diagnostics without guessing their meaning.
   }
   return {t,notice,english, get language(){return language;},get locale(){return language==='en'?'en-US':'zh-CN';},
-    setLanguage(value){language=value==='en'?'en':'zh';try{localStorage.setItem('starport-language',language);}catch{}return language;}};
+    setLanguage(value){language=value==='zh'?'zh':'en';try{localStorage.setItem('starport-language',language);}catch{}return language;}};
 })();

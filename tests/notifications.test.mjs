@@ -4,7 +4,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHub } from '../src/server.mjs';
-import { excerpt, chimeWav } from '../src/notifications.mjs';
+import { excerpt, chimeWav, Notifications } from '../src/notifications.mjs';
 
 const registry={resolve:()=>({command:process.execPath,prefixArgs:[]}),probe:async()=>({loggedIn:true,nativeAutoReview:true}),models:async()=>({models:[]}),record(){},list:async()=>[]};
 const until=async check=>{for(let i=0;i<400;i++){if(check())return;await new Promise(r=>setTimeout(r,5));}throw Error('Fixture did not reach expected state');};
@@ -12,7 +12,7 @@ const gate=()=>{let resolve;return {promise:new Promise(r=>resolve=r),resolve:()
 
 test('popup text is a short plain summary of the Markdown reply',()=>{
   assert.equal(excerpt('**闭合误差**已经算完：在 $L=64$ 时误差降到 $3.2\\times10^{-3}$，$\\epsilon$ 很小。'),'闭合误差已经算完：在 L=64 时误差降到 3.2×10⁻³，ϵ 很小。');
-  assert.equal(excerpt('# 结果\n\n- 第一项 `fit.py`\n- 见 [文档](http://example.com)\n\n```python\nprint(1)\n```\n$$E=mc^2$$\n完成 *好*'),'结果 第一项 fit.py 见 文档 [代码] [公式] 完成 好');
+  assert.equal(excerpt('# 结果\n\n- 第一项 `fit.py`\n- 见 [文档](http://example.com)\n\n```python\nprint(1)\n```\n$$E=mc^2$$\n完成 *好*'),'结果 第一项 fit.py 见 文档 [code] [formula] 完成 好');
   assert.equal(excerpt('```js\nconsole.log(1)\n```','120','en'),'[code]');
   const long=excerpt('长'.repeat(300));
   assert.equal([...long].length,120);assert.ok(long.endsWith('…'));
@@ -28,7 +28,7 @@ test('the chime is a short, quiet WAV',()=>{
   assert.ok(Math.abs(wav.readInt16LE(wav.length-2))<200,'ends without a click');
 });
 
-async function fixture(){
+async function fixture({language='zh'}={}){
   const dataDir=await mkdtemp(join(tmpdir(),'starport-notify-')),holds=new Map();
   const notifier={available:true,shown:[],dismissed:0,show(item){this.shown.push(item);},dismiss(){this.dismissed++;},close(){}};
   // Only the end of the prompt is the new message; earlier turns come before it as context.
@@ -40,6 +40,7 @@ async function fixture(){
     const text='**闭合误差**已经算完，宏观层基本自洽。';emit({type:'replace',text});emit({type:'final-answer',text});
   };
   const hub=createHub({port:0,dataDir,registry,implementations:{codex},notifier});
+  if(language)hub.notifications.report('fixture-language',{language});
   const port=await hub.listen(),base='http://127.0.0.1:'+port,headers={'X-Hub-Token':hub.token,'Content-Type':'application/json'};
   const api=async(path,method='GET',data)=>{const response=await fetch(base+'/api'+path,{method,headers,body:data?JSON.stringify(data):undefined});return {status:response.status,data:await response.json()};};
   const room=hub.store.group('科研');
@@ -56,6 +57,19 @@ async function fixture(){
   const run=async(id,text)=>{const started=await hub.runner.start(id,text);await started.done.catch(()=>{});await until(()=>!hub.runner.active.has(id));return started;};
   return {hub,notifier,api,chat,other,page,run,holds,close:()=>hub.close()};
 }
+
+test('new installations notify in English and retain an explicit Chinese preference',async()=>{
+  const f=await fixture({language:null});
+  try{
+    assert.equal(f.hub.notifications.look.language,'en');
+    await f.run(f.chat.id,'A fresh installation');
+    assert.equal(f.notifier.shown[0].language,'en');
+    assert.equal(f.notifier.shown[0].state,'Done');
+    f.hub.notifications.report('fixture-language',{language:'zh'});
+    const restored=new Notifications({store:f.hub.store});
+    assert.equal(restored.look.language,'zh');
+  }finally{await f.close();}
+});
 
 test('a finished task reports its chat, room and result, plays the chime and flashes the taskbar',async()=>{
   const f=await fixture();
