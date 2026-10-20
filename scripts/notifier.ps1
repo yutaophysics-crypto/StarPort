@@ -3,7 +3,7 @@
 # and flashes the Starport taskbar button until the window is brought forward.
 # Reads one base64 JSON message per line on stdin; writes {"type":"open",...}
 # when the popup body is clicked. -Snapshot renders a sample popup to a PNG.
-param([string]$Snapshot = '', [string]$Theme = 'sea', [string]$Tone = 'complete', [string]$Language = 'zh', [string]$Icon = '')
+param([string]$Snapshot = '', [string]$Theme = 'sea', [string]$Tone = 'complete', [string]$Language = 'en', [string]$Icon = '')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
 

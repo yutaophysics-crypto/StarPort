@@ -1,26 +1,30 @@
-# 使用已登录的 Edge 读取视频字幕
+# Read subtitles with your signed-in Edge browser
 
-目前支持 B 站视频字幕。四个工具共用这个入口，不要求重新登录模型账号。
+English | [Chinese](zh-CN/browser-video-subtitles.md)
 
-## 首次连接
+The shared video reader currently supports Bilibili subtitles for all four adapters. It uses the connected browser's login; it does not require another model login.
 
-1. 在已经登录 B 站的 Edge 中打开 `edge://extensions`，开启「开发人员模式」。
-2. 点击「加载解压缩的扩展」，选择当前 StarPort 项目目录中的 `extensions/edge` 文件夹。已有 Starport 扩展时，点击该扩展的「重新加载」。
-3. 刷新星港，点击输入框旁「＋」→「附加 Microsoft Edge」→「连接 Edge」，复制生成的配对码。
-4. 打开 Edge 工具栏中的 Starport 扩展，粘贴配对码，点击「连接并允许读取 B 站」。默认只授权 B 站；需要附加其他网站时才勾选相应选项。
+## Connect once
 
-## 读取
+1. In Edge, sign in to Bilibili. Open `edge://extensions` and enable **Developer mode**.
+2. Choose **Load unpacked** and select `extensions/edge` in this StarPort checkout. Reload the extension after updating an existing installation.
+3. Refresh StarPort. Open **+ → Attach Microsoft Edge → Connect Edge**, then copy the pairing code.
+4. Open the StarPort extension, paste the code and allow Bilibili access. Other-site access is optional and must be enabled explicitly.
 
-在星港「＋」→「读取视频字幕」中输入链接或 BV 号，点击「读取并附加」。点击字幕附件可预览。
+## Read a video
 
-也可以直接发送 `请分析这个视频 BV1XLbr65EZ4`。星港会先读取字幕，再向当前工具发送你的消息和字幕。视频多 P 时用 `https://www.bilibili.com/video/BV1XLbr65EZ4/?p=2`。
+Choose **+ → Read video subtitles**, enter a video URL or BV identifier and select **Read and attach**. Open the resulting attachment to preview its contents.
 
-没有字幕、登录未生效、网络失败或内容过长时，星港保留草稿并提示，不用视频简介代替字幕。字幕来自平台，可能有识别错误或遗漏画面信息；此功能不下载视频，也不进行音频转写。
+You can also put a video URL or BV identifier directly in a message. StarPort reads the subtitles first, then sends the message and attachment to the chosen tool. For multipart videos, include the part number, for example `https://www.bilibili.com/video/BV1XLbr65EZ4/?p=2`.
 
-## 数据边界
+Missing subtitles, authentication failures, network errors and excessive length leave the draft intact and explain what happened. A video description is not substituted for subtitles. Platform subtitles can omit visual information or contain transcription errors. This feature neither downloads the video nor transcribes its audio.
 
-登录 Cookie、账户令牌和字幕签名地址留在 Edge；星港保存视频链接、标题、字幕语言、时间戳与文字。字幕附件随消息进入四个工具的共有上下文，并按星港现有附件规则保存。只读取指定的视频；复用对应的视频标签页，或在同一浏览器配置中打开临时后台标签页并在读取后关闭，不关闭用户已有标签页。
+## Data boundaries
 
-## 本地检查
+Cookies, account tokens and signed subtitle-download URLs remain in Edge. StarPort stores the requested video URL, title, language, timestamps and subtitle text. The attachment enters the selected conversation's shared context and follows normal attachment retention rules.
 
-`node scripts/check-video-browser.mjs` 检查连接状态。追加一个视频链接或 BV 号会实际读取该视频，生成一个可预览的字幕附件；不会调用模型或发送聊天消息。输出只包含连接状态和字幕计数，不输出登录凭据。
+Only explicitly requested videos are read. The reader reuses a matching video tab or temporarily opens one in the same browser profile and closes only that temporary tab afterwards.
+
+## Local diagnostic
+
+`node scripts/check-video-browser.mjs` reports the connection state. Adding a URL or BV identifier actually reads that video and creates a previewable subtitle attachment; it does not invoke a model or send a chat message. Diagnostic output contains connection status and subtitle counts, not browser credentials.

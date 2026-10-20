@@ -1,4 +1,4 @@
-# 蔚蓝 · Azure
+# Azure
 
 Visual thesis: a quiet night harbor, with a wide starry sky above a silver-blue ocean; dark reading surfaces and pale blue controls keep the workspace calm.
 

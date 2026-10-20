@@ -1,49 +1,49 @@
-# 星港的数据结构
+# Database architecture
 
-星港使用 SQLite 关系数据库。一个主数据库文件是 SQLite 的标准存储方式，不代表所有内容混在一张表或一段 JSON 中。本机、单用户的工作台继续使用 SQLite；不按对话或分组拆数据库，也暂不增加一个需要独立维护的数据库服务器。
+English | [Chinese](zh-CN/database-architecture.md)
 
-## 表与关联
+StarPort uses relational SQLite. A single main database file is SQLite's normal storage format; it does not mean every record is packed into one table or a JSON document. The local, single-user workspace does not require a separately administered database server or a database per conversation.
 
-| 表 | 内容 | 关联 |
-|---|---|---|
-| groups | 对话分组 | chats 与 projects 可引用分组 |
-| chats | 标题、目录、工具、该对话的设置 | 可属于一个分组 |
-| messages | 用户与助手消息、状态、原生执行信息 | 必须属于一个对话 |
-| sessions | 星港与原工具的会话映射、上下文游标 | 每个对话与工具一条映射 |
-| history_imports | 原工具导入来源及去重记录 | 指向对应的星港对话 |
-| chat_transfers | 星港会话文件的内容摘要与导入去重记录 | 指向对应的星港副本，删除对话时同时移除 |
-| projects | 对话所选的工作文件夹 | 同一具体文件夹的对话属于同一项目，子文件夹各自独立 |
-| history_archive_locations | 待清理的对话历史文件位置 | 更换工作文件夹时保留清理失败的旧路径，供下次启动或删除对话时重试 |
-| settings | 应用设置与连接配置 | 按设置键读取 |
-| attachments | 附件内容、元数据及副本位置 | 消息保存附件引用 |
-| chat_summaries | 上下文压缩生成的对话摘要及覆盖范围 | 每个对话一条，随对话删除 |
-| companions | 伙伴：名字、性格、工具、模型和工作方式 | 通过 room_members 住进房间 |
-| room_members | 房间里的伙伴及其长期记忆开关 | 引用分组和伙伴 |
-| workflows | 可复用的工作流定义（阶段、位置、验收） | 通过 workflow_mounts 挂到对话 |
-| workflow_mounts | 工作流挂在哪个对话、位置坐谁、触发方式 | 引用对话和工作流 |
-| companion_desks | 伙伴在每个对话里的工位会话 | 工位本身是隐藏的对话，随父对话删除 |
-| prediction_scores | 台账里到期预测的 Brier 分数 | 按挂载和命题记录 |
+## Tables and relationships
 
-对话与消息等使用主键；会话映射和导入来源使用复合主键。数据库启用外键检查，消息有 `chat_id, created` 查询索引。对话目录与分组相互独立，同组中的对话可使用不同目录、模型或工具。
+| Table | Purpose | Relationships |
+| --- | --- | --- |
+| `groups` | Conversation groups | Referenced by conversations and projects |
+| `chats` | Title, workspace, tool and conversation settings | May belong to a group |
+| `messages` | User/assistant messages, status and native execution details | Belong to a conversation |
+| `sessions` | Native session mapping and context cursor | One mapping per conversation and tool |
+| `history_imports` | Native import provenance and deduplication | Points to the imported conversation |
+| `chat_transfers` | Session-file digests and import deduplication | Points to the local copy |
+| `projects` | Selected working folders | Exact folder identity; subfolders are separate projects |
+| `history_archive_locations` | Historical conversation-archive locations | Tracks old locations needing retry after a workspace move |
+| `settings` | Application and connection settings | Retrieved by key |
+| `attachments` | Attachment data, metadata and copied-file locations | Referenced by messages |
+| `chat_summaries` | Compaction summaries and their coverage | One per conversation; removed with it |
+| `companions` | Companion identity, tool, model and working mode | Joined to rooms through membership |
+| `room_members` | Room membership and memory options | References groups and companions |
+| `workflows` | Reusable stages, seats and verification | Mounted on conversations |
+| `workflow_mounts` | Conversation placement, seat assignments and triggers | References workflows and conversations |
+| `companion_desks` | Companion sessions within a conversation | Hidden desk conversations follow the parent |
+| `prediction_scores` | Brier scores for matured ledger predictions | Stored per mount and proposition |
 
-## 文件位置
+Primary and composite keys identify records and native mappings. Foreign-key checks are enabled; messages are indexed by conversation and creation time. Groups organize conversations independently of folders and models. Memory and synchronization add their own relational tables and indexes; inspect the schema modules for the full current schema.
 
-- `.data/hub.sqlite`：主数据库。
-- `.data/hub.sqlite-wal`：运行中的 WAL 写入日志，可能包含尚未写回主文件的已提交数据。
-- `.data/hub.sqlite-shm`：WAL 的辅助共享索引。
-- `.data/attachments/`：附件文件副本；附件内容与元数据也由数据库记录管理。
-- 原工具的历史与用户工作目录由各自工具管理，不属于星港数据库。
+## Files
 
-WAL 和 SHM 是数据库运行的组成部分，不是多余垃圾。星港当前消息详情使用 JSON 字段保存随工具变化的原生执行信息，工作流的运行记录也作为运行卡片消息存在这里；标题、消息、分组与会话映射仍按独立关系表管理。
+- `.data/hub.sqlite`: the main local database.
+- `.data/hub.sqlite-wal`: the live write-ahead log; it can contain committed data not yet copied into the main file.
+- `.data/hub.sqlite-shm`: the WAL shared-memory index.
+- `.data/attachments/`: attachment file copies managed alongside database metadata.
+- Native tool histories and user workspaces are managed separately.
 
-## 管理与增长
+WAL and SHM are live database components, not garbage. JSON fields retain provider-specific execution details and workflow run-card records; conversation titles, messages, groups and mappings remain separate relational records.
 
-日常使用「设置 → 连接与数据」中的导出功能做逻辑备份。若要复制完整数据库文件，应先正常退出星港，或使用 SQLite 的一致性备份机制；不要只复制运行中的主文件并遗漏 WAL。
+## Backup and growth
 
-数据增长时，应按实际查询开销增加索引、分页和维护工具。若以后要支持多台机器访问或大量并发写入，再评估独立数据库服务；文件数量不是迁移依据。
+Use **Settings → Connections & data** for logical exports. To copy database files directly, stop the service normally or use SQLite's consistent backup mechanism. Do not copy only a running main file while omitting its WAL.
 
-删除对话只移除该对话在星港中的记录及其消息、会话映射、导入映射。附件、工作目录、原工具历史、导出与备份仍保留，关联文件需逐项确认后处理。本次检查没有迁移、压缩、清理或改写生产数据。
+Add indexes, pagination or maintenance based on measured query costs. Consider a separate database service when multi-machine access or substantial concurrent writing requires it, rather than basing a migration on the number of files.
 
-2026-10-05 的只读检查：8 张业务表，`quick_check` 正常，外键检查无错误。检查结果是当时的状态，后续数据量会随使用增加。
+Deleting a conversation removes that conversation's StarPort records, messages and mappings, plus its own history archive. Attachments, workspaces, native histories, exports and backups remain. Related files require separate inspection and explicit removal. Automatic checkpoint/VACUUM is not part of normal conversation deletion.
 
-参考：[SQLite 的适用场景](https://www.sqlite.org/whentouse.html)、[单文件数据库](https://www.sqlite.org/onefile.html)、[WAL](https://www.sqlite.org/wal.html)。
+References: [SQLite use cases](https://www.sqlite.org/whentouse.html), [single-file database](https://www.sqlite.org/onefile.html), [WAL](https://www.sqlite.org/wal.html).

@@ -10,7 +10,7 @@ import { chimeWav } from './notifications.mjs';
 // after a quiet spell. Messages are base64 JSON lines, so Chinese text never
 // depends on the console code page.
 const IDLE_MS=15*60*1000;
-export const WINDOW_TITLES=['星港 · Starport','Starport · 星港'];
+export const WINDOW_TITLES=['Starport','StarPort','星港 · Starport','Starport · 星港'];
 
 export class WindowsNotifier{
   constructor({root,dataDir,url,spawnProcess=spawn,platform=process.platform}){
