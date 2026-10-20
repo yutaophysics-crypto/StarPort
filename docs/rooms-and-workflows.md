@@ -28,6 +28,8 @@ The same settings decide how many times a mention is redone when a review fails 
 
 ## One-way mentions
 
+> **Testing:** not yet used much in real work, and how well the companion actually stays within this limit has not been checked.
+
 When a message mentions companions, a **One-way** switch appears in the input. StarPort remembers it per conversation. With it on, the companion receives only this message, plus the results of companions earlier in the same mention. It does not see the conversation title or earlier messages, and it works in a separate one-way desk that does not carry the memory of its normal desk.
 
 The reply still comes back as a card. The conversation model can see it and can read the one-way desk's full record with the history tools, and later normal mentions include these one-way replies. The companion shares the conversation's working folder, so "do not read conversation archives under `.starport/history`" is an instruction, not technical isolation. Long-term memory still follows the room's memory switches.
@@ -56,6 +58,8 @@ Each run starts every seat in a fresh desk session that does not read the conver
 
 ## Ledgers
 
+> **Testing:** built and covered by automated tests, but not yet used in real work.
+
 A ledger is an optional notebook a workflow keeps across runs. It is off by default and is turned on per workflow. Following Anthropic's practice for long-running agent work, it is split into a PLAN, claims, an append-only CHANGELOG and checks, and it is committed to Git after each run.
 
 Companions can only propose changes to the PLAN; a change takes effect after you confirm it. Claims can carry dated predictions, which are scored with the Brier score when they resolve. A workflow can provide a PLAN template.
@@ -63,6 +67,8 @@ Companions can only propose changes to the PLAN; a change takes effect after you
 Ledgers are stored in `.starport/ledgers/` inside the working folder. Conversations in the same folder that mount the same workflow share one ledger. When a conversation moves to another folder, the old ledger stays where it was and the conversation uses the destination folder's ledger, which is created on the next run if needed. Private ledgers in older versions' data folders are not moved automatically.
 
 ## Exams
+
+> **In development:** exams are not finished. Expect bugs, and expect behavior and the exam folder layout to change.
 
 An exam lets companions solve the same task independently, without the conversation's context, so you can compare their answers.
 

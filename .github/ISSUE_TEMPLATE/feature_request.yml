@@ -1,0 +1,25 @@
+name: Suggestion / 功能建议
+description: An idea, or something you would like to work differently. / 想要的新功能，或希望某个功能换个做法。
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste conversations, memory, credentials, tokens or private file paths; replace them with placeholders.
+
+        请不要贴出对话内容、记忆、凭据、令牌或私人文件路径，换成占位文字即可。
+  - type: textarea
+    id: goal
+    attributes:
+      label: What would you like to do? / 你想做到什么
+      description: The task or problem, not only the solution. / 说说要完成的事或遇到的问题，不只是解决办法。
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How might it work? / 你设想的做法
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else / 其他补充

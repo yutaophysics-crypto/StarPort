@@ -39,7 +39,7 @@ async function body(req,limit=20*1024*1024){
 }
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
 
-export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || join(root,'.data'),port=Number(process.env.HARNESS_HUB_PORT||3210),registry:customRegistry,implementations,historyConnect,claudeHistory,fileActions:customFileActions,windowLauncher:customWindowLauncher,accountCenter=null,notifier:customNotifier=null,nativeNotifications=false,examRoot=process.env.STARPORT_EXAM_ROOT||null}={}) {
+export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || join(root,'.data'),port=Number(process.env.HARNESS_HUB_PORT||3210),registry:customRegistry,implementations,historyConnect,claudeHistory,antigravityHistory,deepseekHistory,fileActions:customFileActions,windowLauncher:customWindowLauncher,accountCenter=null,notifier:customNotifier=null,nativeNotifications=false,examRoot=process.env.STARPORT_EXAM_ROOT||null}={}) {
   mkdirSync(dataDir,{recursive:true});
   // The launcher compares this with the code on disk to find a server still running old code.
   const startedAt=Date.now();
@@ -50,7 +50,7 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
   const fileActions=customFileActions||new FileActions();
   const windowLauncher=customWindowLauncher||new GroupWindowLauncher();
   const edge=new EdgeBridge(store);
-  const history=new HistoryImporter(store,registry,root,historyConnect,claudeHistory);
+  const history=new HistoryImporter(store,registry,root,historyConnect,claudeHistory,{...antigravityHistory?{antigravity:antigravityHistory}:{},...deepseekHistory?{deepseek:deepseekHistory}:{}});
   const token=randomBytes(32).toString('hex');const clients=new Set();
   const broadcast=(event,data)=>{
     const payload=`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;

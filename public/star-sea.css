@@ -358,6 +358,7 @@ dialog::backdrop { background: #020813b8; backdrop-filter: blur(6px); }
 .history-row-meta { display: flex; gap: 10px; font-size: 10px; color: var(--muted); margin-top: 5px; }
 .history-row-meta span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-row-meta span:first-child { flex-shrink: 0; }
+.history-row-meta .history-origin { flex-shrink: 0; padding: 0 5px; border: 1px solid var(--line); border-radius: 999px; }
 .history-imported { background: #93bee111; color: #a6c9ea; border: 1px solid #a6c9ea24; padding: 4px 7px; border-radius: 5px; font-size: 10px; white-space: nowrap; }
 .history-preview { padding: 20px 24px; border-left: 1px solid var(--line); max-height: 46vh; overflow: auto; min-width: 0; }
 .history-preview h3 { font-size: 15px; line-height: 1.6; margin: 0 0 8px; }

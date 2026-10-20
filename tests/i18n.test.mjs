@@ -17,6 +17,8 @@ test('language preference survives a new page and falls back safely',()=>{
   assert.equal(next.t('已导入 {count} 个对话',{count:3}),'Imported 3 conversations');
   assert.equal(next.notice('目标 Token 预算应为正整数'),'Must be a positive integer: Goal token budget');
   assert.equal(next.notice('provider raw diagnostic: 用户原文'),'provider raw diagnostic: 用户原文');
+  assert.equal(next.notice('Antigravity 报错：quota exceeded\nretry later'),'Antigravity reported an error: quota exceeded\nretry later');
+  assert.equal(next.notice('DeepSeek 本轮未正常结束：interrupted'),'DeepSeek did not finish this turn normally: interrupted');
   next.setLanguage('invalid');assert.equal(next.language,'en');
 });
 

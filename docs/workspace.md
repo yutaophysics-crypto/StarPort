@@ -72,13 +72,19 @@ Scripts, programs and unrecognized file types open the application chooser, so c
 
 ## Importing history
 
-**Import conversations** reads local Codex or Claude Code history. Search, preview and select conversations, then add them to an existing or new room. Codex can include archived threads; Claude Code can be searched by title or original folder. Claude history is read from local `.claude/projects` (or `CLAUDE_CONFIG_DIR`) through the official Agent SDK, following each record's message chain, with no model call and no working account needed. Claude web history is not read.
+> **Testing:** importing from Claude Code, Antigravity and DeepSeek has not been used in real work yet. Codex import is in regular use.
 
-Imports keep both sides' text, titles, working folders and available times. Images, audio and files are kept as references; tool activity and subagents' internal messages are not copied. An import is an independent copy that does not continue the original thread or inherit its permissions or goals. Imported Claude conversations start in plan mode and Codex conversations in **Ask for approval**. If the original folder no longer exists, choose a working folder again in StarPort.
+**Import conversations** reads local Codex, Claude Code, Antigravity or DeepSeek history. Search, preview and select conversations, then add them to an existing or new room. Codex can include archived threads; the other sources can be searched by title or original folder. Claude history is read from local `.claude/projects` (or `CLAUDE_CONFIG_DIR`) through the official Agent SDK, following each record's message chain, with no model call and no working account needed. Claude web history is not read.
 
-Each source is deduplicated, and import mappings are kept in StarPort backups. A conversation is saved only after it has been read completely, so a failure never leaves half a record. Codex imports need a version that supports `thread/turns/list`. Limits: 64 MB of text per conversation, 2 million characters per message and 128 MB per Claude source file. Larger content reports an error rather than being truncated.
+Antigravity history is read from the conversation index and transcripts under `~/.gemini/antigravity-cli`, and DeepSeek history from `~/.dsh/sessions` (or `DSH_HOME`), both read-only. Conversations that StarPort still holds and subagent tasks are not listed, and neither are the DeepSeek sessions StarPort opens for each of its own turns. An Antigravity conversation that StarPort started but no longer holds is marked **From Starport**; importing it removes the instructions StarPort added and turns the history it passed along back into messages.
+
+Imports keep both sides' text, titles, working folders and available times, plus a record of tool calls that is never run again. Images, audio and files are kept as references; hidden reasoning and subagents' internal messages are not copied. An import is an independent copy that does not continue the original thread or inherit its permissions or goals. Imported Claude conversations start in plan mode and Codex conversations in **Ask for approval**. If the original folder no longer exists, choose a working folder again in StarPort.
+
+Each source is deduplicated, and import mappings are kept in StarPort backups. A conversation is saved only after it has been read completely, so a failure never leaves half a record. Codex imports need a version that supports `thread/turns/list`. Limits: 64 MB of text per conversation, 2 million characters per message and 128 MB per Claude, Antigravity or DeepSeek source file. Larger content reports an error rather than being truncated.
 
 ## Moving a conversation to another computer
+
+> **Testing:** built and covered by automated tests, but not yet used between two real computers.
 
 Choose **↗** at the top right of a conversation, or **⋯ → Export conversation** in the sidebar, then **Export conversation file** (`.starport.json`, restorable on another computer) or **Export Markdown** (for reading). A conversation file contains only that conversation: messages, times, saved activity, uploaded images and files, and web attachment text. Exporting a running conversation saves a snapshot, with unfinished output marked as interrupted.
 

@@ -2,6 +2,8 @@
 
 English | [简体中文](zh-CN/collaboration.md)
 
+> **In development:** group conversations, the phone interface and the self-hosted server are not finished. Expect bugs, and expect behavior and stored data to change.
+
 StarPort has a separate multi-user account and group service. Phones use an installable PWA; desktops keep the local workspace and CLI adapters. The group and phone pages are currently available in Chinese only, so their labels below give the on-screen Chinese in parentheses.
 
 ## Start locally

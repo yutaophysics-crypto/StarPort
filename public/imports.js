@@ -1,5 +1,12 @@
 'use strict';
 globalThis.StarportImports = (() => {
+  const SOURCES = {
+    codex: { name: 'Codex', heading: '从 Codex 导入', search: '搜索 Codex 对话标题' },
+    claude: { name: 'Claude Code', heading: '从 Claude Code 导入', search: '搜索对话标题或目录', note: '直接读取本机 Claude Code 历史，无需账号连接。' },
+    antigravity: { name: 'Antigravity', heading: '从 Antigravity 导入', search: '搜索对话标题或目录', note: '直接读取本机 Antigravity 历史，无需账号连接。星港里还在的对话和子任务不显示。' },
+    deepseek: { name: 'DeepSeek', heading: '从 DeepSeek 导入', search: '搜索对话标题或目录', note: '直接读取本机 DeepSeek 历史，无需账号连接。星港每轮自动开的会话和子任务不显示。' }
+  };
+  const NAMES = { codex: 'Codex', claude: 'Claude Code', antigravity: 'Antigravity', deepseek: 'DeepSeek' };
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   for (const [k, v] of Object.entries({
     viewBox: '0 0 24 24',
@@ -49,7 +56,7 @@ globalThis.StarportImports = (() => {
     let selected = new Map();
     let loading = false;
     let activePreview = null;
-    let sourceId = currentId() === 'claude' ? 'claude' : 'codex';
+    let sourceId = Object.hasOwn(SOURCES, currentId()) ? currentId() : 'codex';
 
     const close = el('button', { type: 'button', class: 'icon-button', text: '×', 'aria-label': t('关闭') });
     close.onclick = () => dialog.close();
@@ -57,6 +64,8 @@ globalThis.StarportImports = (() => {
     const source = el('select', { id: 'history-source', 'aria-label': t('导入来源') }, [
       el('option', { value: 'codex', text: 'Codex' }),
       el('option', { value: 'claude', text: 'Claude Code' }),
+      el('option', { value: 'antigravity', text: 'Antigravity' }),
+      el('option', { value: 'deepseek', text: 'DeepSeek' }),
       el('option', { value: 'starport', text: t('星港会话文件') })
     ]);
     source.value = sourceId;
@@ -124,7 +133,7 @@ globalThis.StarportImports = (() => {
       el('div', { class: 'history-body' }, [
         el('div', { class: 'history-intro' }, [
           el('p', { text: t('把已有的对话带到星港。') }),
-          el('p', { class: 'muted', text: t('复制文字消息、标题、时间和工作目录。图片、文件仅保留引用，工具过程不复制。原对话保持不变；后续在星港独立继续。') })
+          el('p', { class: 'muted', text: t('复制文字消息、标题、时间、工作目录和工具调用记录；工具调用只作记录，不会重新执行。图片、文件仅保留引用，隐藏的思考过程不复制。原对话保持不变；后续在星港独立继续。') })
         ]),
         sourceRow,
         searchForm,
@@ -149,11 +158,12 @@ globalThis.StarportImports = (() => {
     dialog.showModal();
 
     function sourceLabels() {
-      heading.textContent = t(sourceId === 'claude' ? '从 Claude Code 导入' : '从 Codex 导入');
-      search.placeholder = t(sourceId === 'claude' ? '搜索对话标题或目录' : '搜索 Codex 对话标题');
+      const labels = SOURCES[sourceId];
+      heading.textContent = t(labels.heading);
+      search.placeholder = t(labels.search);
       search.setAttribute('aria-label', search.placeholder);
       archive.hidden = sourceId !== 'codex';
-      sourceNote.textContent = sourceId === 'claude' ? t('直接读取本机 Claude Code 历史，无需账号连接。') : '';
+      sourceNote.textContent = labels.note ? t(labels.note) : '';
     }
 
     function controls() {
@@ -194,6 +204,9 @@ globalThis.StarportImports = (() => {
         title.onclick = () => showPreview(row);
         const meta = el('div', { class: 'history-row-meta' }, [
           el('span', { text: new Date(row.updated).toLocaleDateString(i18n.locale) }),
+          row.origin === 'starport'
+            ? el('span', { class: 'history-origin', text: t('星港发起'), title: t('这段对话由星港发起，星港里已没有它') })
+            : null,
           el('span', { text: row.workspace, title: row.workspace })
         ]);
         const item = el('div', { class: 'history-row' + (activePreview === row.id ? ' selected' : '') }, [
@@ -275,7 +288,7 @@ globalThis.StarportImports = (() => {
         for (const message of result.messages) {
           preview.append(
             el('article', { class: 'history-preview-message' }, [
-              el('b', { text: message.role === 'user' ? t('你') : sourceId === 'claude' ? 'Claude Code' : 'Codex' }),
+              el('b', { text: message.role === 'user' ? t('你') : NAMES[message.provider] || SOURCES[sourceId].name }),
               el('div', { text: message.content })
             ])
           );
