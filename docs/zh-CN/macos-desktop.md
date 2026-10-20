@@ -23,13 +23,13 @@ npm run install:macos
 
 第一次点击 Dock 图标启动应用和页面，之后普通点击切回已有窗口；上次使用的窗口被最小化时会恢复它。使用 `⌘N` 或屏幕顶部菜单栏的「文件 → 新建窗口」打开新的独立窗口。页面内没有增加新建窗口按钮；Shift + 点击 Dock 不是新窗口入口。窗口菜单列出已打开的窗口，`⌘W` 关闭当前窗口，`⌘Q` 退出窗口应用；后台星港服务和已经开始的任务继续运行。关闭全部窗口后，再点击 Dock 会打开一个窗口。
 
-每个窗口有自己的页面状态，可以停留在不同对话。数据库、分组、对话记录和工具登录共用；这是多窗口，不是不同账号或不同数据目录的隔离实例。草稿仍沿用星港现有按对话保存的规则。窗口共用 WebKit 的持久化网站存储，主题、语言和群聊登录可复用；浏览器原有的网站存储不会复制进原生应用。
+每个窗口有自己的页面状态，可以停留在不同对话。数据库、分组、对话记录和工具登录共用；这是多窗口，不是不同账号或不同数据目录的隔离实例。草稿仍沿用星港现有按对话保存的规则。窗口共用 WebKit 的持久化网站存储，主题、语言等设置可复用；浏览器原有的网站存储不会复制进原生应用。
 
 文件选择、附件和备份下载、网页确认框使用原生系统对话框。外部文档链接由默认浏览器打开，本机星港页面在应用中显示。
 
-在桌面工作台的「群聊与手机」中点击「打开群聊 / 创建账号」，群聊会成为同一个星港应用中的独立窗口，公网 HTTPS 服务也可使用。个人工作台和群聊共用 Dock 图标与窗口菜单。`⌘N` 根据当前窗口类型打开新的工作台或群聊窗口；普通点击 Dock 仍恢复当前窗口。每个群聊窗口只在所选群聊服务的同源地址内导航，外部网页交给浏览器。
+在桌面工作台的「群聊与手机」中点击「打开群聊」，群聊会成为同一个星港应用中的独立窗口，公网 HTTPS 服务也可使用。个人工作台和群聊共用 Dock 图标与窗口菜单。`⌘N` 根据当前窗口类型打开新的工作台或群聊窗口；普通点击 Dock 仍恢复当前窗口。每个群聊窗口只在所选群聊服务的同源地址内导航，外部网页交给浏览器。
 
-Safari 的登录不会自动复制进星港原生窗口。第一次在原生群聊窗口登录后，同一服务的其他星港群聊窗口共用该登录。手机和直接通过浏览器访问群聊的方式继续可用。
+群聊窗口使用你在星港中登录的服务器账号打开，不需要在每个窗口重新登录。Safari 的登录不会复制进星港原生窗口。手机和直接通过浏览器访问群聊的方式继续可用。
 
 ## 本机代理检查与群聊地址
 
@@ -41,6 +41,6 @@ npm run install:macos -- --proxy-audit /absolute/path/claude-proxy-audit.py
 
 应用在每个新建工作台窗口加载前运行这个脚本，非零退出时停止打开工作台并提示检查代理。重新安装会保留已配置的检查脚本，除非显式改成其他路径。它不修改 CLI 设置、代理节点或防火墙规则。
 
-应用的本机配置在 `Contents/Resources/starport-config.json` 中。安装时可用 `--node`、`--python`、`--port` 指定运行环境，用 `--collaboration-url https://groups.example.com` 指向统一群聊服务，以跳过各台 PC 自己的群聊服务器启动。
+应用的本机配置在 `Contents/Resources/starport-config.json` 中。安装时可用 `--node`、`--python`、`--port` 指定运行环境，用 `--collaboration-url https://groups.example.com` 把统一群聊服务设为默认群聊地址。
 
 实现参考：[Apple WKUIDelegate](https://developer.apple.com/documentation/webkit/wkuidelegate)、[Dock 再次启动事件](https://developer.apple.com/documentation/appkit/nsapplicationdelegate/applicationshouldhandlereopen(_:hasvisiblewindows:))、[WKDownloadDelegate](https://developer.apple.com/documentation/webkit/wkdownloaddelegate)。

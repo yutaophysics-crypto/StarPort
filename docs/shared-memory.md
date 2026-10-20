@@ -1,5 +1,7 @@
 # Shared memory, preferences and historical retrieval
 
+English | [简体中文](zh-CN/shared-memory.md)
+
 Starport owns memory independently of provider accounts. Open **Shared memory** in the sidebar. Indexed memory rows, instructions and a derived FTS5 index live in the existing relational SQLite database. No external memory service, provider configuration change or Codex-global-memory write is needed.
 
 ## Four layers
@@ -13,7 +15,7 @@ Starport owns memory independently of provider accounts. Open **Shared memory** 
 
 - **Candidates** show proposed text, the user quote, source and original memory for updates. Edit or dismiss before **Confirm and share**. Confirmation atomically replaces the original entry; a stale revision fails rather than overwriting a newer edit.
 - **Confirmed** supports addition, editing, scope filters, search and removal. **Your profile** includes confirmed global facts, preferences, goals and values. Project entries and unconfirmed inferences are excluded.
-- **Personal preferences** and **Project requirements** have separate editors and local drafts. Drafts survive closing/reopening and switching panels until page reload. Explicitly saved requirements take effect on the next task.
+- **Personal preferences** and **Project instructions** have separate editors and local drafts. Drafts survive closing/reopening and switching panels until page reload. Explicitly saved requirements take effect on the next task.
 - A chat's project is its exact working folder; there is no marking step or separate project selector. Browsing folders does not create projects. The folder holds a small `.starport/project.json` identity marker (`.starport/` ignores itself in git), so a project renamed or moved outside Starport is found again; a copied folder gets its own identity. Renaming a folder in the picker updates every chat and project path inside it. Older projects without a local folder retain their memories and requirements and can be reattached. When a chat's folder first becomes a project, its native session is kept: it held only global context, and the project's requirements arrive with each turn. The project chip above the composer opens its requirements.
 - Changing a chat's working folder relocates only its history archive; markers, shared workflow ledgers and other chats' archives remain in their folders. Destination preparation and database updates roll back on failure. Startup repairs older stranded files using known session workspace paths. Failed old-file cleanup remains tracked for retry and conversation deletion. Internal desks and exam seats do not create ordinary projects.
 - **History search** allows manual non-project, selected-project or all-records searches. Read excerpts or open and highlight their original message.

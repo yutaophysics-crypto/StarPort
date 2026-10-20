@@ -1,5 +1,7 @@
 # Personal memory sync
 
+English | [简体中文](zh-CN/memory-sync.md)
+
 Starport supports an opt-in shared folder without a Starport account. Your existing cloud drive, file sync application or network share transports the files. Starport has no hosted service, registration, provider-password form or built-in cloud-drive login.
 
 ## Set up two computers

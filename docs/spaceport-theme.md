@@ -1,6 +1,6 @@
 # Starport theme
 
-English | [Chinese](zh-CN/spaceport-theme.md)
+English | [简体中文](zh-CN/spaceport-theme.md)
 
 This theme depicts an interstellar spacecraft port rather than a maritime harbor. It coexists with Azure and Deep Space. The selection uses `localStorage['starport-theme']`; a new browser defaults to Azure and retains later choices.
 

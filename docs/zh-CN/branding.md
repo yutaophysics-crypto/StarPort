@@ -2,12 +2,12 @@
 
 [English](../branding.md) | 简体中文
 
-星港面向应用外的主打标识统一使用蔚蓝主题的「星光与海浪」，原始素材为 `public/icon.svg`。桌面快捷方式、手机 PWA 安装图标、GitHub 项目说明及后续宣传素材都以此图案为准。
+星港在应用外的标识是 `public/icon.svg` 中蔚蓝主题的「星光与海浪」。桌面快捷方式、手机 PWA 安装图标、仓库标识和其他应用外的素材都使用它。
 
-应用内的标识随当前主题切换：蔚蓝使用 `public/icon.svg`，星港使用 `public/assets/spaceport-icon.svg`，深空使用 `public/assets/deep-space-icon.svg`。侧栏标识和当前应用页面的 favicon 跟随主题，应用外的桌面/安装图标保持蔚蓝。
+在应用内，侧栏标识和网页图标跟随所选主题：蔚蓝使用 `public/icon.svg`，星港使用 `public/assets/spaceport-icon.svg`，深空使用 `public/assets/deep-space-icon.svg`。已安装应用的图标保持蔚蓝标识。
 
-主题从左到右为 **蔚蓝 → 星港 → 深空**；没有保存选择时默认蔚蓝。已有主题偏好继续按用户选择应用。
+主题顺序是 **蔚蓝 → 星港 → 深空**。没有保存的选择时默认蔚蓝；已有的选择会保留。
 
 这条顺序表达星港的愿景：陪伴人类文明从蔚蓝走向星港时代（星际文明），再走向深空时代（宇宙文明）。
 
-`scripts/build-brand-icons.mjs` 从蔚蓝 SVG 生成 Windows ICO 与手机安装图标。新增外部标识或应用入口时复用蔚蓝素材；应用内保留三套主题各自的图标、背景和装饰。
+`scripts/build-brand-icons.mjs` 从蔚蓝 SVG 生成 Windows ICO 和手机安装图标。新增应用外的入口时复用这份素材；应用内保留每个主题各自的图标、背景和装饰。
