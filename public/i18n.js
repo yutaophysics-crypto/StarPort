@@ -1090,8 +1090,8 @@ const english = {
     if((m=/^(\d+) 个操作未获权限，未执行。$/.exec(source)))return t('{count} 个操作未获权限，未执行。',{count:m[1]});
     if((m=/^(.+) 响应超时$/.exec(source)))return t('等待响应超时：{method}',{method:m[1]});
     if((m=/^工具退出代码 (.+)$/.exec(source)))return t('工具退出代码 {code}',{code:m[1]});
-    if((m=/^Antigravity 报错：([sS]+)$/.exec(source)))return t('Antigravity 报错：{error}',{error:m[1]});
-    if((m=/^DeepSeek 本轮未正常结束：([sS]+)$/.exec(source)))return t('DeepSeek 本轮未正常结束：{reason}',{reason:m[1]});
+    if((m=/^Antigravity 报错：([\s\S]+)$/.exec(source)))return t('Antigravity 报错：{error}',{error:m[1]});
+    if((m=/^DeepSeek 本轮未正常结束：([\s\S]+)$/.exec(source)))return t('DeepSeek 本轮未正常结束：{reason}',{reason:m[1]});
     return String(source??''); // Retain raw provider diagnostics without guessing their meaning.
   }
   return {t,notice,english, get language(){return language;},get locale(){return language==='en'?'en-US':'zh-CN';},
