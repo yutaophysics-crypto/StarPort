@@ -188,6 +188,11 @@ export class Store {
     return row ? JSON.parse(row.value) : fallback;
   }
   setSetting(key, value) { this.db.prepare('INSERT OR REPLACE INTO settings VALUES(?,?)').run(key, JSON.stringify(value)); }
+  // Native sessions Starport has run, found through the session ids its replies record.
+  nativeSessionIds(provider) {
+    const rows=this.db.prepare("SELECT DISTINCT json_extract(details,'$.sessionId') AS id FROM messages WHERE provider=? AND json_extract(details,'$.sessionId') IS NOT NULL").all(provider);
+    return new Set([...rows.map(r=>r.id),...this.db.prepare('SELECT native_id FROM sessions WHERE provider=?').all(provider).map(r=>r.native_id)]);
+  }
   historyImport(provider, id) { return this.db.prepare('SELECT * FROM history_imports WHERE provider=? AND source_id=?').get(provider,id); }
   importHistory(provider, source, groupId=null) {
     if(groupId&&!this.db.prepare('SELECT id FROM groups WHERE id=?').get(groupId))throw new Error('目标分组不存在，请重新选择');
@@ -199,7 +204,8 @@ export class Store {
       const chat=this.newChat({group_id:groupId,title:source.title,provider,workspace:source.workspace,
         options:provider==='codex'?{codex:{permissionMode:'ask',sandbox:'workspace-write',mode:'chat'}}:{}});
       const insert=this.db.prepare('INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)');
-      for(const m of source.messages)insert.run(randomUUID(),chat.id,m.role,provider,m.content,m.status,JSON.stringify(m.details),m.created);
+      // A reply from another model, unpacked from a Starport prompt, keeps its own label.
+      for(const m of source.messages)insert.run(randomUUID(),chat.id,m.role,m.role==='assistant'&&['codex','claude','antigravity','deepseek'].includes(m.provider)?m.provider:provider,m.content,m.status,JSON.stringify(m.details),m.created);
       this.db.prepare('UPDATE chats SET created=?,updated=? WHERE id=?').run(source.created,source.updated,chat.id);
       this.db.prepare('INSERT INTO history_imports VALUES(?,?,?,?)').run(provider,source.id,chat.id,new Date().toISOString());
       this.db.exec('COMMIT');

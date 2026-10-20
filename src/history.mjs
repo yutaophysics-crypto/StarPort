@@ -1,5 +1,7 @@
 import { connectCodex } from './adapters/codex.mjs';
 import { ClaudeHistory } from './claude-history.mjs';
+import { AntigravityHistory } from './antigravity-history.mjs';
+import { DeepseekHistory } from './deepseek-history.mjs';
 import { parseCodexActivity } from './adapters/codex-events.mjs';
 import { mergeActivity, settleActivity } from './activity.mjs';
 
@@ -48,8 +50,9 @@ export function convertTurns(turns, fallback) {
 }
 
 export class HistoryImporter {
-  constructor(store,registry,root,connect=connectCodex,claudeHistory=new ClaudeHistory()){this.store=store;this.registry=registry;this.root=root;this.connect=connect;this.claudeHistory=claudeHistory;this.connections=new Set();this.closing=false;}
-  validateProvider(provider){if(!['codex','claude'].includes(provider))throw new Error('目前支持从 Codex 和 Claude Code 导入对话');if(this.closing)throw new Error('工具连接已关闭');}
+  // Codex history is read through its app server; the other tools' files are read directly.
+  constructor(store,registry,root,connect=connectCodex,claudeHistory=new ClaudeHistory(),{antigravity=new AntigravityHistory(),deepseek=new DeepseekHistory()}={}){this.store=store;this.registry=registry;this.root=root;this.connect=connect;this.claudeHistory=claudeHistory;this.local={claude:claudeHistory,antigravity,deepseek};this.connections=new Set();this.closing=false;}
+  validateProvider(provider){if(!['codex','claude','antigravity','deepseek'].includes(provider))throw new Error('目前支持从 Codex、Claude Code、Antigravity 和 DeepSeek 导入对话');if(this.closing)throw new Error('工具连接已关闭');}
   validateId(id){if(typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,200}$/.test(id))throw new Error('对话标识无效');}
   async use(provider,work){
     this.validateProvider(provider);if(this.closing)throw new Error('工具连接已关闭');
@@ -62,8 +65,10 @@ export class HistoryImporter {
   async list(provider,{cursor=null,search='',archived=false}={}){
     this.validateProvider(provider);
     if(typeof search!=='string'||search.length>300||cursor!==null&&(typeof cursor!=='string'||cursor.length>4000)||typeof archived!=='boolean')throw new Error('搜索条件无效');
-    if(provider==='claude'){
-      const result=await this.claudeHistory.list({cursor,search,archived});
+    if(this.local[provider]){
+      // Antigravity and DeepSeek sessions that Starport ran for a chat it still has are not offered again.
+      const exclude=provider==='claude'?undefined:this.store.nativeSessionIds(provider);
+      const result=await this.local[provider].list({cursor,search,archived,exclude});
       return {...result,data:result.data.map(row=>({...row,importedChatId:this.store.historyImport(provider,row.id)?.chat_id||null}))};
     }
     return this.use(provider,async rpc=>{
@@ -73,7 +78,7 @@ export class HistoryImporter {
   }
   async read(provider,id,{preview=false}={}){
     this.validateProvider(provider);this.validateId(id);
-    if(provider==='claude')return this.claudeHistory.read(id,{preview});
+    if(this.local[provider])return this.local[provider].read(id,{preview});
     return this.use(provider,async rpc=>{
       const {thread}=await rpc.request('thread/read',{threadId:id,includeTurns:false});
       if(thread.id!==id)throw new Error('Codex 返回了不匹配的对话');

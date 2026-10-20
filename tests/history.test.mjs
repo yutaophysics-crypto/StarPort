@@ -51,7 +51,7 @@ test('deduplication survives restart and backup restore; malformed provenance ro
 test('invalid selections and failing reads leave no partial chat; connections close on errors',async t=>{
   const store=new Store(':memory:');t.after(()=>store.close());const calls=[],history=new HistoryImporter(store,registry,process.cwd(),fixtureHistoryConnect(calls));
   await assert.rejects(()=>history.import('codex',{id:'history-0',group_id:'absent'}),/分组/);assert.equal(calls.length,0);
-  await assert.rejects(()=>history.import('antigravity',{id:'history-0'}),/Codex/);
+  await assert.rejects(()=>history.import('gemini',{id:'history-0'}),/Codex/);
   await assert.rejects(()=>history.read('codex','../secret'),/标识/);
   await assert.rejects(()=>history.import('codex',{id:'history-3'}),/unavailable/);assert.equal(calls.at(-1).method,'close');assert.equal(store.list().chats.length,0);
   const loop=new HistoryImporter(store,registry,process.cwd(),async()=>({request:async(method)=>method==='thread/read'?{thread:{id:'loop'}}:{data:[],nextCursor:'same'},close:async()=>{}}));
@@ -72,5 +72,5 @@ test('history HTTP requires token and same origin; import and preview routes rou
   const list=await(await fetch(base+'/api/history/codex',{headers})).json();assert.equal(list.data.length,2);
   const preview=await(await fetch(base+'/api/history/codex/preview?id=history-0',{headers})).json();assert.equal(preview.messages.length,2);
   const imported=await(await fetch(base+'/api/history/codex/import',{method:'POST',headers,body:'{"id":"history-0"}'})).json();assert.equal(imported.status,'imported');assert.equal(imported.messages,4);
-  assert.equal((await fetch(base+'/api/history/antigravity',{headers})).status,400);
+  assert.equal((await fetch(base+'/api/history/gemini',{headers})).status,400);
 });
