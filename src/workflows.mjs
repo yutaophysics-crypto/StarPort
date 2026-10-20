@@ -66,7 +66,7 @@ export class Workflows {
 
   // --- records ---
   decode(row){return row?{id:row.id,...JSON.parse(row.data),created:row.created,updated:row.updated}:null;}
-  companions(){return this.db.prepare('SELECT * FROM companions ORDER BY created,id').all().map(row=>this.companionView(row));}
+  companions(){return this.db.prepare('SELECT * FROM companions ORDER BY created,rowid').all().map(row=>this.companionView(row));}
   companion(id){return typeof id==='string'?this.companionView(this.db.prepare('SELECT * FROM companions WHERE id=?').get(id)):null;}
   // Older companions only have a preset; a choice the tool no longer offers falls back to it too.
   companionView(row){
@@ -75,7 +75,7 @@ export class Workflows {
     catch{companion.options=companionOptions(companion.provider,null,companion.access);}
     return companion;
   }
-  workflows(){return this.db.prepare('SELECT * FROM workflows ORDER BY created,id').all().map(row=>this.decode(row));}
+  workflows(){return this.db.prepare('SELECT * FROM workflows ORDER BY created,rowid').all().map(row=>this.decode(row));}
   workflow(id){return typeof id==='string'?this.decode(this.db.prepare('SELECT * FROM workflows WHERE id=?').get(id)):null;}
   mountRow(row){return row?{id:row.id,chatId:row.chat_id,workflowId:row.workflow_id,...JSON.parse(row.data),created:row.created,updated:row.updated}:null;}
   mounts(chatId=null){return (chatId?this.db.prepare('SELECT * FROM workflow_mounts WHERE chat_id=? ORDER BY created').all(chatId):this.db.prepare('SELECT * FROM workflow_mounts ORDER BY created').all()).map(row=>this.mountRow(row));}
