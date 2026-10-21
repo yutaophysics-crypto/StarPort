@@ -29,7 +29,7 @@ globalThis.StarportSharedContext=(()=>{
   }
   // Each exact working folder is a project, created automatically when chosen for a chat.
   async function projects(projectId=null){
-    const version=++requestVersion,root=shell('项目要求');dialog.append(root);root.append(tr('p','工作文件夹就是项目。同一文件夹共享要求、记忆和台账；子文件夹各自独立。',{class:'memory-explainer'}));
+    const version=++requestVersion,root=shell('项目要求');dialog.append(root);root.append(tr('p','工作文件夹就是项目。同一文件夹里的对话共用项目要求和项目记忆；子文件夹各自独立。',{class:'memory-explainer'}));
     if(projectId){try{const record=await api('/projects/'+projectId+'/requirements');if(version===requestVersion&&dialog.open)editInstructions(record,projectId);}catch(e){if(version===requestVersion)error(root,e.message);}return;}
     try{const rows=await api('/projects');if(version!==requestVersion||!dialog.open)return;state.projects=rows;
       if(!rows.length)root.append(tr('p','选择对话的工作文件夹后会自动创建项目。',{class:'memory-empty'}));

@@ -2,7 +2,7 @@
 // Translate application chrome only. User messages, names and tool output stay intact.
 globalThis.StarportI18n = (() => {
 const english = {
-  "工作文件夹就是项目。同一文件夹共享要求、记忆和台账；子文件夹各自独立。": "Your working folder is the project. Conversations in the same folder share instructions, memory and ledgers; subfolders are separate projects.",
+  "工作文件夹就是项目。同一文件夹里的对话共用项目要求和项目记忆；子文件夹各自独立。": "Your working folder is the project. Conversations in the same folder share project instructions and project memory; subfolders are separate projects.",
   "仅用于工作目录恰好是这个文件夹的对话。": "Applies only to conversations whose working directory is this exact folder.",
   "选择对话的工作文件夹后会自动创建项目。": "A project is created automatically when you choose a conversation's working folder.",
   "项目已保存，但无法写入文件夹标识。在星港以外移动文件夹后，需要重新关联。": "The project is saved, but its folder marker could not be written. Reattach the folder if you move it outside Starport.",
@@ -11,7 +11,6 @@ const english = {
   "属于项目「{name}」": "In project “{name}”",
   "不属于任何项目": "Not in a project",
   "给当前文件夹改名，星港里用到它的对话和项目会一起更新": "Rename the current folder. Conversations and projects in Starport that use it are updated too.",
-  "在这个文件夹和子文件夹里工作的对话共用项目要求、项目记忆和工作流台账": "Conversations working in this folder or its subfolders share project instructions, project memory and workflow ledgers",
   "项目「{name}」": "Project “{name}”",
   "转到项目文件夹": "Go to project folder",
   "在项目「{name}」里": "Inside project “{name}”",
@@ -25,7 +24,6 @@ const english = {
   "标记项目文件夹": "Mark a project folder",
   "还没有项目。选一个文件夹标记为项目即可。": "No projects yet. Choose a folder and mark it as a project.",
   "仅用于在这个项目文件夹（含子文件夹）里工作的对话。": "Applies only to conversations working in this project folder or its subfolders.",
-  "项目是标记过的文件夹：在这个文件夹和子文件夹里工作的对话共用项目要求、项目记忆和工作流台账。分组只整理对话。": "A project is a marked folder: conversations working in it or its subfolders share project instructions, project memory and workflow ledgers. Groups only organize conversations.",
   "还没有项目。标记一个项目文件夹后即可设置要求。": "No projects yet. Mark a project folder to set its instructions.",
   "选择项目文件夹": "Choose project folder",
   "没有关联文件夹，项目记忆和要求仍保留": "No folder linked. Project memory and instructions are kept.",
