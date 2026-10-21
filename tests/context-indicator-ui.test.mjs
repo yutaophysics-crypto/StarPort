@@ -29,6 +29,7 @@ test('context details identify the denominator and all limits, refresh even when
   assert.match(text,/本次采用：星港历史交接预算/);assert.ok(calls.some(p=>p.endsWith('refresh=1')));
   value={...value,windowTokens:50000,percent:406};f.tick();await flush();
   assert.equal(f.state.context.percent,406);assert.match(f.nodes['#context-indicator'].title,/50,000/);
+  assert.ok(calls.at(-1).endsWith('refresh=1')); // Do not defer to a nearly-expired cache for another interval.
   assert.equal(f.nodes['#context-indicator'].children[0].children[0].style.width,'100%');
 });
 
@@ -43,4 +44,12 @@ test('a late limits reply cannot overwrite a different chat or model selection',
   pending[2].resolve({binding:f.binding(),percent:777});await request;
   assert.equal(f.state.context.percent,10); // The next chat's view will fetch its own counters.
   pending.at(-1).resolve(null);await flush();
+});
+
+test('a slow refresh cannot roll back a more recent native usage event in the same chat',async()=>{
+  let reply;const f=ui(()=>new Promise(resolve=>reply=resolve));
+  f.state.chat={id:'fictional-chat',workspace:f.state.workspace};f.context.StarportContext.render();await flush();
+  f.state.context={binding:f.binding(),status:'ready',usedTokens:200,windowTokens:1000,percent:20,updatedAt:'2026-01-01T00:00:02Z'};
+  reply({binding:f.binding(),status:'ready',usedTokens:100,windowTokens:1000,percent:10,updatedAt:'2026-01-01T00:00:01Z'});await flush();
+  assert.equal(f.state.context.usedTokens,200);
 });

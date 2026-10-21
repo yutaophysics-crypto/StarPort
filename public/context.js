@@ -6,14 +6,16 @@ globalThis.StarportContext=(()=>{
   const pending=new Map();let lastKey=null;
   const binding=()=>{const options=opts();return JSON.stringify([currentId(),state.chat?.workspace||state.workspace,options.worktree||false,options.model||'',options.provider||'']);};
   const key=()=>JSON.stringify([state.chat?.id,binding()]);
-  async function refresh(force=false){
+  async function refresh(force=false,notify=force){
     if(!state.chat)return;
     const requestKey=key(),chatId=state.chat.id;if(pending.has(requestKey))return pending.get(requestKey);
     const request=(async()=>{
       try{
         const data=await api('/chats/'+encodeURIComponent(chatId)+'/context'+(force?'?refresh=1':''));
-        if(requestKey===key())state.context=data;
-      }catch(error){if(force&&requestKey===key())toast(error.message);}
+        // A slower HTTP reply must not roll back a newer native usage event.
+        const previous=state.context?.binding===binding()?Date.parse(state.context.updatedAt)||0:0;
+        if(requestKey===key()&&(!previous||(Date.parse(data?.updatedAt)||0)>=previous))state.context=data;
+      }catch(error){if(notify&&requestKey===key())toast(error.message);}
       finally{pending.delete(requestKey);render();}
     })();pending.set(requestKey,request);render();return request;
   }
@@ -61,6 +63,6 @@ globalThis.StarportContext=(()=>{
     dialog.replaceChildren(el('div',{class:'dialog-heading'},[el('h2',{id:'context-heading',text:t('上下文占用')}),close]),el('div',{id:'context-body',class:'dialog-body'}));
     details(current());dialog.showModal();refresh(true);
   };
-  setInterval(()=>{if(!document.hidden&&state.chat)refresh();},30000);
+  setInterval(()=>{if(!document.hidden&&state.chat)refresh(true,false);},30000);
   render();return {render,refresh};
 })();
