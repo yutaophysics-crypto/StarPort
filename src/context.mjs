@@ -5,8 +5,23 @@ import { HISTORY_CONTEXT_POLICY } from './history-context.mjs';
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:null;
 export function contextSample({usedTokens,windowTokens,model=null,basis,status='ready'}) {
   const used=count(usedTokens),capacity=count(windowTokens);
-  return {status:status==='ready'&&used===null?'waiting':status,usedTokens:used,windowTokens:capacity>0?capacity:null,
+  return {status:status==='ready'&&used===null?'waiting':status,usedTokens:used,modelWindowTokens:capacity>0?capacity:null,windowTokens:capacity>0?capacity:null,
     percent:used!==null&&capacity>0?used/capacity*100:null,model,basis,updatedAt:new Date().toISOString()};
+}
+// Project raw native counters onto the current limits. Never persist the
+// effective denominator as if it were the native model's physical window.
+export function effectiveContext(sample,starportTokens,native={status:'unavailable'}){
+  const positive=value=>count(value)>0?value:null;
+  const modelWindowTokens=positive(Object.hasOwn(sample,'modelWindowTokens')?sample.modelWindowTokens:sample.windowTokens);
+  const limits={starportTokens:positive(starportTokens),modelWindowTokens,
+    nativeWindowTokens:positive(native.nativeWindowTokens),nativeAutoCompactTokens:positive(native.nativeAutoCompactTokens),
+    autoCompactScope:native.autoCompactScope||'total',status:native.status||'unavailable'};
+  const comparable=Object.entries(limits).filter(([key,value])=>key.endsWith('Tokens')&&positive(value)&&
+    (key!=='nativeAutoCompactTokens'||limits.autoCompactScope==='total'));
+  const windowTokens=comparable.length?Math.min(...comparable.map(([,value])=>value)):null;
+  return {...sample,modelWindowTokens,windowTokens,limits,
+    limitSources:comparable.filter(([,value])=>value===windowTokens).map(([key])=>key),
+    percent:sample.usedTokens!=null&&windowTokens&&sample.status==='ready'?sample.usedTokens/windowTokens*100:null};
 }
 export function codexContext(usage,model) {
   // `total` is cumulative billing usage. `last` describes the latest request.

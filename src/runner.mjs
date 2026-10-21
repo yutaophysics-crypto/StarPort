@@ -12,7 +12,7 @@ import { mergeActivity, settleActivity } from './activity.mjs';
 import { ActivityHistory, recoverActivity } from './activity-history.mjs';
 import { redact } from './process.mjs';
 import { validateEffort } from './effort.mjs';
-import { contextBinding, emptyContext, sessionFingerprint } from './context.mjs';
+import { contextBinding, emptyContext, sessionFingerprint, effectiveContext } from './context.mjs';
 import { validateInput, validateReply } from './interactions.mjs';
 import { contextToolHost,contextCommandBridge,contextToolInstructions,MEMORY_READ_TOOLS,MEMORY_PROPOSE_TOOLS } from './context-tools.mjs';
 
@@ -40,6 +40,12 @@ export class Runner {
     return {chatId:chat?.id||null,chat,active:[...this.active.keys()],providerVerifications:this.registry.verifications?.()||{},message,inputs:chat?this.store.interactionMessages(chatId,runId):[],...chat?this.store.queue.snapshot(chatId):{},runId,run:chat?this.state(chatId):null,context:chat?this.context(chatId):null};
   }
   snapshot(chatId){return {chat:this.store.chat(chatId),messages:this.store.messages(chatId),...this.store.queue.snapshot(chatId),run:this.state(chatId),context:this.context(chatId)};}
+  async refreshContext(chatId,refresh=false){
+    const chat=this.store.chat(chatId);if(!chat)return null;
+    const options=validateOptions(chat.provider,chat.options[chat.provider]),sample=this.context(chatId);
+    await this.registry.contextLimits?.(chat.provider,chat.workspace,sample.model||options.model,refresh);
+    return this.context(chatId);
+  }
   context(chatId) {
     const chat=this.store.chat(chatId);if(!chat)return null;
     const options=validateOptions(chat.provider,chat.options[chat.provider]);
@@ -50,7 +56,9 @@ export class Runner {
     const message=active?.message||(current(session?.fingerprint)?this.store.messageById(chatId,session.cursor):null);
     const saved=message?.details?.context,activeFingerprint=active?.message?.details?.context?.fingerprint;
     const valid=saved&&saved.binding===binding&&(activeFingerprint?saved.fingerprint===activeFingerprint:current(saved.fingerprint))&&(!session||active||message.details.sessionId===session.native_id);
-    return {provider:chat.provider,binding,...valid?saved:emptyContext(chat.provider)};
+    const sample={provider:chat.provider,binding,...valid?saved:emptyContext(chat.provider)};
+    return effectiveContext(sample,this.compactor?.settings().budgets[chat.provider]*1000,
+      this.registry.cachedContextLimits?.(chat.provider,chat.workspace,sample.model||options.model));
   }
   // A conversation whose folder becomes part of a project keeps its session: so far it carried
   // only global context, and the project's requirements and memories arrive with every turn.

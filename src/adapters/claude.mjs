@@ -10,7 +10,7 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
   const queued=[],inFlight=new Map();
   const abortController=new AbortController(),pending=new Map();
   const inputDone=new Promise(resolve=>finishInput=resolve);
-  const state={model:initialContext?.model,windowTokens:initialContext?.windowTokens};
+  const state={model:initialContext?.model,windowTokens:initialContext&&Object.hasOwn(initialContext,'modelWindowTokens')?initialContext.modelWindowTokens:initialContext?.windowTokens};
   const initialId=randomUUID();
   let initialPending=true,modelActivity=false,previousTaskNotice=false,unrelatedResults=0;
   const userContent=(text,images)=>{

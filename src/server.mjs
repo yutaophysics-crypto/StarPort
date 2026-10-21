@@ -152,6 +152,7 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
         if(path==='/api/live'&&req.method==='GET'){
           const id=url.searchParams.get('chatId');
           if(id&&(!/^[\w-]{1,100}$/.test(id)||!store.chat(id)))throw Object.assign(new Error('对话不存在'),{status:404});
+          if(id)runner.refreshContext(id).catch(()=>{});
           json(res,{...runner.live(id),chatStatuses:store.chatStatus.summaries()});return;
         }
         if(path==='/api/memory-sync'&&req.method==='GET'){json(res,memorySync.status());return;}
@@ -283,9 +284,10 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           if(item&&action==='steer'&&req.method==='POST'){json(res,await runner.steerQueued(id,item,await body(req)));return;}
           if(item&&action==='send'&&req.method==='POST'){const data=await body(req);await runner.dispatchQueue(id,item,data.revision);json(res,store.queue.snapshot(id));return;}
         }
-        const route=path.match(/^\/api\/chats\/([\w-]+)(?:\/(messages|guidance|stop|approval|goal|export|reset-session|read|question-skip|branch))?$/);
+        const route=path.match(/^\/api\/chats\/([\w-]+)(?:\/(messages|guidance|stop|approval|goal|export|reset-session|read|question-skip|branch|context))?$/);
         if(route){
           const[,id,action]=route,chat=store.chat(id);if(!chat)throw Object.assign(new Error('对话不存在'),{status:404});
+          if(action==='context'&&req.method==='GET'){json(res,await runner.refreshContext(id,url.searchParams.get('refresh')==='1'));return;}
           if(!action&&req.method==='GET'){await runner.messages(id);json(res,runner.snapshot(id));return;}
           if(!action&&req.method==='DELETE'){
             if(runner.active.has(id))throw Object.assign(new Error('请先停止当前任务再删除对话'),{status:409});

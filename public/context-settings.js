@@ -113,6 +113,7 @@ globalThis.StarportContextSettings = (() => {
           .map(({ provider, model, effort }) => ({ provider, model, effort }));
         const values = Object.fromEntries(Object.entries(budgetInputs).map(([id, input]) => [id, Number(input.value)]));
         await api('/context/settings', 'PUT', { enabled: enabled.value === 'on', budgets: values, summarizers });
+        await globalThis.StarportContext?.refresh();
         toast('已保存上下文设置');
         closeDialog();
       }
