@@ -12,7 +12,7 @@ Choose a tool, select the working folder below the input, then send a message. T
 
 Rooms only organize conversations. Each conversation keeps its own working folder, tool and model, so one room can contain conversations from several folders and tools. The **+** next to a room's title starts a new conversation in that room.
 
-The working folder is the project; nothing needs to be marked. Conversations in the same folder share project instructions, project memory and workflow ledgers. Subfolders are separate projects. Existing conversations belong to the project of their current folder.
+The working folder is the project; nothing needs to be marked. Conversations in the same folder share project instructions and project memory. Subfolders are separate projects. If a workflow has its [ledger](rooms-and-workflows.md#ledgers) turned on, the ledger is also stored in the working folder. Existing conversations belong to the project of their current folder.
 
 Select the working folder below the input to browse folders on the computer running the service: drives, the home folder, the parent folder, a name filter, or a pasted full path. **Conversation settings** has the same browser. Only folders are listed, and cancelling leaves the current folder unchanged. Browsing alone does not create a project.
 

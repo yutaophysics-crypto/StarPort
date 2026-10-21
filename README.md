@@ -84,7 +84,7 @@ Details: [Agent tools: models, permissions and usage](docs/agents.md).
 ## Conversations
 
 - **Rooms** in the sidebar group your conversations. Conversations in one room can use different folders, tools and models.
-- The working folder is the project. Conversations in the same folder share project instructions, project memory and workflow ledgers; subfolders are separate projects. Choose or rename the folder from the folder picker below the input.
+- The working folder is the project. Conversations in the same folder share project instructions and project memory; subfolders are separate projects. Choose or rename the folder from the folder picker below the input.
 - **Activity display** sets how much of a task you see: **Hidden**, **Overview** or **Full**. During a task the overview stays open; afterwards it collapses behind **View activity**. Subagents appear inside the reply they belong to. StarPort shows only what the tool reports and does not invent hidden reasoning.
 - A spinner marks a running conversation; a blue dot marks a finished reply you have not viewed. Failures, stopped tasks and unconfirmed endings are shown separately.
 - Messages you send during a task wait in **Queued messages**, where you can edit or delete them. With Codex and Claude Code, **Steer** hands a queued message to the running task. Queued messages can carry attachments. A task is never stopped just because it is quiet.

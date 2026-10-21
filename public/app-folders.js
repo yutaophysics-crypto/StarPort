@@ -198,7 +198,7 @@ function openFolderPicker(initial, onSelect, title = '选择工作目录', optio
     projectLine.classList.add('is-project');
     projectLine.replaceChildren(
       el('strong', { text: t('项目「{name}」', { name: project?.name || baseName(current.path) }) }),
-      el('small', { text: t('工作文件夹就是项目。同一文件夹共享要求、记忆和台账；子文件夹各自独立。') })
+      el('small', { text: t('工作文件夹就是项目。同一文件夹里的对话共用项目要求和项目记忆；子文件夹各自独立。') })
     );
   }
 
