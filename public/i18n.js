@@ -1012,6 +1012,7 @@ const english = {
   "正在等待后台更新，稍后会自动重新检查。": "Waiting for the backend update. This will be checked again automatically.",
   "正在检查后台更新状态…": "Checking backend update status…",
   "正在压缩上下文…": "Compacting context…",
+  "正在等待后台任务…": "Waiting for background tasks…",
   "正在整理较早的对话，保留最近消息；完成后继续回答。": "Summarizing earlier conversation and keeping recent messages. The reply will continue afterwards.",
   "第 {part} / {parts} 段": "Part {part} / {parts}",
   "换模型时新会话最多读多少历史、放不下时是否压缩成摘要、由哪个模型写摘要。": "How much history a new session reads after a model switch, whether older history is compacted into a summary when it doesn't fit, and which model writes it.",
