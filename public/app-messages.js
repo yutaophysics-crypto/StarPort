@@ -279,8 +279,12 @@ function runStatusLine(run) {
   if (!run) return '';
   const approvals = run.approvals?.length;
   const compacting = run.phase === 'compacting';
-  const parts = [t(approvals ? '等待你的决定' : compacting ? '正在压缩上下文…' : '正在处理…')];
-  if (!approvals && !compacting) {
+  // The reply is in; Claude Code continues once its background agents report.
+  const background = run.phase === 'background';
+  const parts = [
+    t(approvals ? '等待你的决定' : compacting ? '正在压缩上下文…' : background ? '正在等待后台任务…' : '正在处理…')
+  ];
+  if (!approvals && !compacting && !background) {
     const tools = [...state.messages].reverse().find(m => m.role === 'assistant')?.details?.tools || [];
     const current = tools.filter(tool => tool.status === 'running').pop();
     if (current) parts.push(t('正在执行：{name}', { name: current.name || t('工具') }));
