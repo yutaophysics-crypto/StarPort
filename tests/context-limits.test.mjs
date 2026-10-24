@@ -8,17 +8,18 @@ import {ContextLimits,readContextLimits} from '../src/context-limits.mjs';
 import {claudeControl} from '../src/claude-control.mjs';
 import {createHub} from '../src/server.mjs';
 
-test('percentage uses the minimum known limit without replacing raw native capacity',()=>{
+test('percentage uses the reported model window independently of handoff and compaction settings',()=>{
   const sample=contextSample({usedTokens:203000,windowTokens:1000000,basis:'claude-input'});
   const native={status:'ready',nativeAutoCompactTokens:300000,nativeWindowTokens:500000};
   const value=effectiveContext(sample,400000,native);
-  assert.ok(Math.abs(value.percent-203/3)<1e-10);assert.equal(value.windowTokens,300000);
-  assert.equal(value.modelWindowTokens,1000000);assert.deepEqual(value.limitSources,['nativeAutoCompactTokens']);
+  assert.equal(value.percent,20.3);assert.equal(value.windowTokens,1000000);
+  assert.equal(value.modelWindowTokens,1000000);assert.deepEqual(value.limitSources,['modelWindowTokens']);
   const smaller=effectiveContext(value,100000,native);
-  assert.ok(Math.abs(smaller.percent-203)<1e-10);assert.equal(smaller.modelWindowTokens,1000000);
+  assert.equal(smaller.percent,20.3);assert.equal(smaller.modelWindowTokens,1000000);
+  assert.equal(smaller.limits.starportTokens,100000);
   assert.ok(Math.abs(sample.percent-20.3)<1e-10); // Original persisted sample is untouched.
-  assert.equal(effectiveContext(sample,800000,{nativeWindowTokens:200000}).windowTokens,200000);
-  assert.equal(effectiveContext(sample,2000000,native).windowTokens,300000);
+  assert.equal(effectiveContext(sample,800000,{nativeWindowTokens:200000}).windowTokens,1000000);
+  assert.equal(effectiveContext(sample,2000000,native).windowTokens,1000000);
   assert.equal(effectiveContext({...sample,windowTokens:123,modelWindowTokens:0},null,{}).percent,null);
 });
 
@@ -26,9 +27,21 @@ test('unknown limits, scoped growth, compacting and zero usage do not invent a p
   const sample=contextSample({usedTokens:0,windowTokens:1000000});
   assert.equal(effectiveContext(sample,100000,{nativeAutoCompactTokens:0}).percent,0);
   const growth=effectiveContext({...sample,usedTokens:50000},200000,{nativeAutoCompactTokens:100000,autoCompactScope:'body_after_prefix'});
-  assert.equal(growth.percent,25);assert.equal(growth.limits.nativeAutoCompactTokens,100000);
+  assert.equal(growth.percent,5);assert.equal(growth.limits.nativeAutoCompactTokens,100000);
   assert.equal(effectiveContext(contextSample({status:'compacting'}),100000).percent,null);
   assert.equal(effectiveContext(contextSample({usedTokens:5}),NaN,{nativeWindowTokens:'100000'}).windowTokens,null);
+  const unknown=effectiveContext(contextSample({usedTokens:50000}),200000,{nativeWindowTokens:500000,nativeAutoCompactTokens:300000});
+  assert.equal(unknown.usedTokens,50000);assert.equal(unknown.windowTokens,null);assert.equal(unknown.percent,null);
+  const transport=effectiveContext(contextSample({status:'unavailable'}),200000,{},184000);
+  assert.equal(transport.percent,null);assert.equal(transport.limits.starportBytes,184000);
+});
+
+test('inconsistent raw usage is retained for diagnosis without displaying an impossible percentage',()=>{
+  const sample=contextSample({usedTokens:200001,windowTokens:200000});
+  assert.equal(sample.status,'inconsistent');assert.equal(sample.percent,null);assert.equal(sample.usedTokens,200001);
+  const legacy=effectiveContext({...sample,status:'ready',percent:100.0005},80000);
+  assert.equal(legacy.status,'inconsistent');assert.equal(legacy.percent,null);
+  assert.equal(effectiveContext({...legacy,modelWindowTokens:1000000},80000).status,'ready');
 });
 
 test('Codex reads effective layered settings in the chat workspace and only returns allowed numeric fields',async()=>{
@@ -37,7 +50,7 @@ test('Codex reads effective layered settings in the chat workspace and only retu
     request:async(method,params)=>{calls.push({method,params});return {config:{model_context_window:900000,model_auto_compact_token_limit:250000,secret:'fictional-secret'}};},
     close:async()=>closed++};};
   const value=await readContextLimits('codex',{command:'fake'},'fictional-workspace','test',{connect});
-  assert.deepEqual(value,{nativeWindowTokens:900000,nativeAutoCompactTokens:250000,autoCompactScope:'total'});
+  assert.deepEqual(value,{nativeWindowTokens:900000,nativeAutoCompactTokens:250000,autoCompactScope:'total',compactionKind:'threshold'});
   assert.deepEqual(calls,[{method:'config/read',params:{cwd:'fictional-workspace',includeLayers:false}}]);assert.equal(closed,1);
   await assert.rejects(readContextLimits('codex',{},'',null,{connect:async()=>({request:async()=>{throw Error('fail');},close:async()=>closed++})}));
   assert.equal(closed,2);
@@ -48,7 +61,7 @@ test('Claude obtains resolved compaction policy for the selected model without u
   const query=({options:opts})=>{options=opts;return {getContextUsage:async opts=>{assert.deepEqual(opts,{detail:'summary'});return{totalTokens:999999,rawMaxTokens:300000,maxTokens:267000,model:'test-model'};},close:()=>closed++};};
   const control=(runtime,cwd,read,_query,timeout,opts)=>claudeControl(runtime,cwd,read,query,timeout,opts);
   const result=await readContextLimits('claude',{command:'fake',prefixArgs:[]},process.cwd(),'test-model',{control});
-  assert.deepEqual(result,{nativeWindowTokens:null,nativeAutoCompactTokens:300000,autoCompactScope:'total'});
+  assert.deepEqual(result,{nativeWindowTokens:null,nativeAutoCompactTokens:300000,autoCompactScope:'total',compactionKind:'window'});
   assert.equal(options.model,'test-model');assert.equal(options.persistSession,false);assert.deepEqual(options.tools,[]);assert.equal(closed,1);
 });
 
@@ -83,9 +96,11 @@ test('context API recalculates saved usage after settings/native changes without
     await hub.runner.start(chat.id,'fictional question');await hub.runner.active.get(chat.id).done;
     const messages=hub.store.messages(chat.id),session=hub.store.session(chat.id,'codex');
     const read=async suffix=>(await fetch(base+'/api/chats/'+chat.id+'/context'+suffix,{headers})).json();
-    assert.equal((await read('')).percent,50);
-    limit=200000;assert.equal((await read('?refresh=1')).percent,75);assert.equal(refresh,true);
-    hub.store.setSetting('context.settings',{budgets:{codex:100}});assert.equal((await read('')).percent,150);
+    assert.equal((await read('')).percent,15);
+    limit=200000;const refreshed=await read('?refresh=1');assert.equal(refreshed.percent,15);assert.equal(refresh,true);
+    assert.equal(refreshed.limits.nativeAutoCompactTokens,200000);
+    hub.store.setSetting('context.settings',{budgets:{codex:100}});const adjusted=await read('');assert.equal(adjusted.percent,15);
+    assert.equal(adjusted.limits.starportTokens,100000);
     assert.deepEqual(hub.store.messages(chat.id),messages);assert.deepEqual(hub.store.session(chat.id,'codex'),session);
     assert.equal((await fetch(base+'/api/chats/'+chat.id+'/context')).status,401);
     assert.equal((await fetch(base+'/api/chats/missing/context',{headers})).status,404);

@@ -2,7 +2,12 @@
 
 // Settings → 上下文与压缩: how much history a new session reads, and which models write the summary.
 globalThis.StarportContextSettings = (() => {
-  const { el, field, textAction, showDialog, closeDialog, modelPicker, PROVIDER_LABELS } = globalThis.StarportUI;
+  const ui = globalThis.StarportUI;
+  const { closeDialog, modelPicker, PROVIDER_LABELS } = ui;
+  const el = (tag, attrs = {}, children = []) => ui.el(tag, { ...attrs, ...attrs.text ? { text: t(attrs.text) } : {} }, children);
+  const field = (label, control, hint = '') => ui.field(t(label), control, t(hint));
+  const textAction = (label, action) => ui.textAction(t(label), action);
+  const showDialog = options => ui.showDialog({ ...options, eyebrow: t(options.eyebrow), title: t(options.title) });
 
   async function open() {
     let settings;
@@ -33,10 +38,10 @@ globalThis.StarportContextSettings = (() => {
         });
         const cap = settings.byteCaps?.[id];
         return field(
-          `${label}（千 token）`,
+          t('{provider}（千 token）', { provider: label }),
           budgetInputs[id],
           cap
-            ? `星港另设 ${cap.toLocaleString()} 字节的单次输入保护（避免已观察到的截断），这不是模型窗口；调高 token 预算不会解除这项保护。`
+            ? t('星港另设 {bytes} 字节的单次输入保护（避免已观察到的截断），这不是模型窗口；调高 token 预算不会解除这项保护。', { bytes: cap.toLocaleString(i18n.locale) })
             : ''
         );
       })
@@ -71,7 +76,11 @@ globalThis.StarportContextSettings = (() => {
           class: 'room-dialog-note',
           text: '以下是星港交接历史时的预算，单位是估算 token，不是汉字数，也不是模型的完整上下文窗口。'
         }),
-        field('自动压缩', enabled),
+        el('p', {
+          class: 'room-dialog-note',
+          text: '这些设置只管理星港的新会话历史交接，不改变底栏的模型窗口占用率，也不修改 Claude Code 或 Codex 的原生压缩设置。'
+        }),
+        field('星港交接时生成摘要', enabled),
         el('div', { class: 'room-field' }, [
           el('div', { class: 'room-field-head' }, [
             el('span', { class: 'room-field-label', text: '新会话最多读多少历史' }),
@@ -114,7 +123,7 @@ globalThis.StarportContextSettings = (() => {
         const values = Object.fromEntries(Object.entries(budgetInputs).map(([id, input]) => [id, Number(input.value)]));
         await api('/context/settings', 'PUT', { enabled: enabled.value === 'on', budgets: values, summarizers });
         await globalThis.StarportContext?.refresh();
-        toast('已保存上下文设置');
+        toast(t('已保存上下文设置'));
         closeDialog();
       }
     });

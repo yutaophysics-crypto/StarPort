@@ -17,7 +17,7 @@ function ui(api){
 }
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 
-test('context details identify the denominator and all limits, refresh even when idle, and preserve >100% text',async()=>{
+test('context details separate native usage, compaction and handoff, including with the previous backend',async()=>{
   let value,calls=[];const f=ui(async path=>{calls.push(path);return value;});
   f.state.chat={id:'fictional-chat',workspace:f.state.workspace};
   value={binding:f.binding(),status:'ready',usedTokens:203000,windowTokens:100000,percent:203,model:'test',
@@ -25,12 +25,31 @@ test('context details identify the denominator and all limits, refresh even when
   f.state.context=value;f.context.StarportContext.render();await flush();
   f.nodes['#context-indicator'].onclick();await flush();
   const text=f.all(f.nodes['#context-dialog']).map(n=>n.text||'').join('\n');
-  assert.match(text,/计算百分比的上限/);assert.match(text,/100,000 tokens/);assert.match(text,/1,000,000 tokens/);assert.match(text,/203%/);
-  assert.match(text,/本次采用：星港历史交接预算/);assert.ok(calls.some(p=>p.endsWith('refresh=1')));
+  assert.match(text,/模型窗口占用/);assert.match(text,/原工具自动压缩/);assert.match(text,/星港历史交接/);
+  assert.match(text,/100,000 tokens/);assert.match(text,/1,000,000 tokens/);assert.match(text,/20.3%/);assert.doesNotMatch(text,/203%/);
+  assert.ok(calls.some(p=>p.endsWith('refresh=1')));
   value={...value,windowTokens:50000,percent:406};f.tick();await flush();
-  assert.equal(f.state.context.percent,406);assert.match(f.nodes['#context-indicator'].title,/50,000/);
+  assert.equal(f.state.context.percent,406);assert.match(f.nodes['#context-indicator'].title,/20.3%/);
+  assert.match(f.nodes['#context-indicator'].title,/1,000,000/);
   assert.ok(calls.at(-1).endsWith('refresh=1')); // Do not defer to a nearly-expired cache for another interval.
-  assert.equal(f.nodes['#context-indicator'].children[0].children[0].style.width,'100%');
+  assert.equal(f.nodes['#context-indicator'].children[0].children[0].style.width,'20.3%');
+});
+
+test('invalid native capacity shows diagnostics; missing capacity, zero and compacting remain distinct',async()=>{
+  let value;const f=ui(async()=>value);f.state.chat={id:'fixture',workspace:f.state.workspace};
+  const show=async data=>{value={binding:f.binding(),...data};f.state.context=value;f.context.StarportContext.render();await flush();};
+  await show({status:'ready',usedTokens:250000,windowTokens:200000,percent:125});
+  assert.match(f.nodes['#context-indicator'].title,/计量异常/);assert.doesNotMatch(f.nodes['#context-indicator'].title,/%/);
+  assert.equal(f.nodes['#context-indicator'].children[0].children.length,0);
+  f.nodes['#context-indicator'].onclick();await flush();
+  const text=f.all(f.nodes['#context-dialog']).map(n=>n.text||'').join('\n');
+  assert.match(text,/250,000 tokens/);assert.match(text,/200,000 tokens/);assert.match(text,/暂不显示百分比/);
+  await show({status:'ready',usedTokens:50000,windowTokens:200000,modelWindowTokens:null,limits:{starportTokens:200000,nativeAutoCompactTokens:300000}});
+  assert.match(f.nodes['#context-indicator'].title,/50,000 tokens/);assert.doesNotMatch(f.nodes['#context-indicator'].title,/%/);
+  await show({status:'ready',usedTokens:0,modelWindowTokens:1000000});assert.match(f.nodes['#context-indicator'].title,/0%/);
+  await show({status:'compacting',usedTokens:950000,modelWindowTokens:1000000});assert.match(f.nodes['#context-indicator'].title,/正在压缩/);
+  await show({status:'waiting'});assert.match(f.nodes['#context-indicator'].title,/待获取/);
+  await show({status:'unavailable'});assert.match(f.nodes['#context-indicator'].title,/暂不支持/);
 });
 
 test('a late limits reply cannot overwrite a different chat or model selection',async()=>{

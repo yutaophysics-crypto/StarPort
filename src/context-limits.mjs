@@ -11,7 +11,7 @@ export async function readContextLimits(provider,runtime,cwd,model,{connect=conn
       const {config={}}=await rpc.request('config/read',{cwd,includeLayers:false},12000);
       return {nativeWindowTokens:positive(config.model_context_window),
         nativeAutoCompactTokens:positive(config.model_auto_compact_token_limit),
-        autoCompactScope:config.model_auto_compact_token_limit_scope||'total'};
+        autoCompactScope:config.model_auto_compact_token_limit_scope||'total',compactionKind:'threshold'};
     }finally{await rpc.close();}
   }
   if(provider==='claude')return control(runtime,cwd,async session=>{
@@ -20,7 +20,9 @@ export async function readContextLimits(provider,runtime,cwd,model,{connect=conn
     // must never replace the real conversation's per-request input counters.
     const report=await session.getContextUsage({detail:'summary'});
     if(!positive(report.rawMaxTokens))throw new Error('Context metadata unavailable');
-    return {nativeWindowTokens:null,nativeAutoCompactTokens:report.rawMaxTokens,autoCompactScope:'total'};
+    // rawMaxTokens is the resolved policy window, not the physical model window
+    // or an exact trigger. Keep it out of the usage denominator.
+    return {nativeWindowTokens:null,nativeAutoCompactTokens:report.rawMaxTokens,autoCompactScope:'total',compactionKind:'window'};
   },undefined,15000,{model});
   return {};
 }

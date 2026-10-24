@@ -59,3 +59,27 @@ test('context persists per native session, streams during execution, and invalid
     const copy=store.import(store.export());assert.ok(copy.chats);for(const c of store.list().chats.filter(c=>c.id!==chat.id))assert.equal(runner.context(c.id).usedTokens,null);
   }finally{store.close();}
 });
+
+test('a new native session discards the previous session usage before its first fresh report',async()=>{
+  const store=new Store(':memory:'),chat=store.newChat({workspace:process.cwd()});
+  let turn=0,release,reached;
+  const fake=async({emit})=>{
+    emit({type:'session',id:++turn===1?'first-native':'replacement-native'});
+    if(turn===2){reached();await new Promise(resolve=>release=resolve);}
+    emit({type:'context',context:contextSample({usedTokens:turn===1?900:20,windowTokens:1000})});
+    emit({type:'replace',text:'answer'});
+  };
+  const runner=new Runner(store,registry,()=>{},{codex:fake});
+  try{
+    await runner.start(chat.id,'first');await runner.active.get(chat.id).done;
+    assert.equal(runner.context(chat.id).percent,90);
+    const observed=new Promise(resolve=>reached=resolve);
+    await runner.start(chat.id,'next');const done=runner.active.get(chat.id).done;await observed;
+    assert.equal(runner.context(chat.id).usedTokens,null);assert.equal(runner.context(chat.id).percent,null);
+    release();await done;assert.equal(runner.context(chat.id).percent,2);
+    const active={phase:'compacting',message:store.messageById(chat.id,store.session(chat.id,'codex').cursor)};
+    runner.active.set(chat.id,active);
+    assert.equal(runner.context(chat.id).status,'compacting');assert.equal(runner.context(chat.id).percent,null);
+    runner.active.delete(chat.id);
+  }finally{release?.();store.close();}
+});

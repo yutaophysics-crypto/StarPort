@@ -57,8 +57,9 @@ export class Runner {
     const saved=message?.details?.context,activeFingerprint=active?.message?.details?.context?.fingerprint;
     const valid=saved&&saved.binding===binding&&(activeFingerprint?saved.fingerprint===activeFingerprint:current(saved.fingerprint))&&(!session||active||message.details.sessionId===session.native_id);
     const sample={provider:chat.provider,binding,...valid?saved:emptyContext(chat.provider)};
+    if(active?.phase==='compacting')Object.assign(sample,{status:'compacting',usedTokens:null});
     return effectiveContext(sample,this.compactor?.settings().budgets[chat.provider]*1000,
-      this.registry.cachedContextLimits?.(chat.provider,chat.workspace,sample.model||options.model));
+      this.registry.cachedContextLimits?.(chat.provider,chat.workspace,sample.model||options.model),INPUT_BYTE_LIMITS[chat.provider]);
   }
   // A conversation whose folder becomes part of a project keeps its session: so far it carried
   // only global context, and the project's requirements and memories arrive with every turn.
@@ -141,7 +142,7 @@ export class Runner {
       if(!compaction)assemble();
       run.phase=compaction?'compacting':'answering';
       const assistant=this.store.message(chatId,'assistant',chat.provider,'','running',{runId:run.id,liveRevision:0,activity:[],tools:[],subagents:[],notices:compaction?[]:contextNotices(),...(compaction?{contextCompaction:{status:'running',startedAt:Date.now(),covered:compaction.covered}}:{})});
-      assistant.details.context={...this.context(chatId),binding,fingerprint};
+      assistant.details.context={...session?this.context(chatId):emptyContext(chat.provider),binding,fingerprint};
       assistant.details.memory={epoch:recall.epoch,ids:recall.items.map(row=>row.id),omitted:recall.omitted,candidates:[],sources:[],browsed:(recall.index||[]).map(({id,title,kind})=>({id,title,kind})),reads:[],projectId:memoryChat.project_id||null,preferencesRevision:this.store.instructions.get().revision,projectRevision:chat.project_id?this.store.instructions.get(chat.project_id).revision:0};
       run.message=assistant;
       if(chat.title==='新对话')this.store.updateChat(chatId,{title:text.replace(/\s+/g,' ').slice(0,36)});
@@ -161,9 +162,12 @@ export class Runner {
         if(e.type==='delta')assistant.content+=e.text||'';
         if(e.type==='replace')assistant.content=e.text||'';
         if(e.type==='final-answer')assistant.details.finalAnswer=e.text||'';
-        if(e.type==='session'){nativeId=e.id;assistant.details.sessionId=e.id;if(e.model)assistant.details.model=e.model;}
+        if(e.type==='session'){
+          if(nativeId!==e.id)assistant.details.context={...emptyContext(chat.provider),provider:chat.provider,binding,fingerprint};
+          nativeId=e.id;assistant.details.sessionId=e.id;if(e.model)assistant.details.model=e.model;
+        }
         if(e.type==='usage')assistant.details.usage=e.usage;
-        if(e.type==='context')assistant.details.context={...e.context,provider:chat.provider,binding,fingerprint};
+        if(e.type==='context')assistant.details.context={...e.context,sessionId:nativeId,provider:chat.provider,binding,fingerprint};
         if(e.type==='tool'){
           const event=JSON.parse(redact(JSON.stringify(e)));delete event.type;
           const old=assistant.details.tools.find(t=>t.id===event.id);
