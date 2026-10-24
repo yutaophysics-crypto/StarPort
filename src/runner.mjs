@@ -179,6 +179,7 @@ export class Runner {
           assistant.details.diagnostics=[...(assistant.details.diagnostics||[]),{...entry,at:new Date().toISOString()}].slice(-40);
         }
         if(e.type==='goal'){run.goal=e.goal;assistant.details.goal=e.goal;}
+        if(e.type==='phase'&&['answering','background'].includes(e.phase))run.phase=e.phase;
         if(e.type==='approval')run.approvals.set(e.request.id,e.request);
         if(e.type==='approval-resolved')run.approvals.delete(e.id);
         this.store.saveMessage(assistant);
