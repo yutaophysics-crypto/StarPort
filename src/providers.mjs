@@ -6,6 +6,7 @@ import { ModelCatalog } from './models.mjs';
 import { CODEX_PERMISSIONS, codexPermissionSelection } from './codex-permissions.mjs';
 import { UsageReader } from './usage.mjs';
 import { deepseekDesktopRuntime } from './deepseek-desktop.mjs';
+import { ContextLimits } from './context-limits.mjs';
 
 const magi = JSON.parse(readFileSync(new URL('./magi-hosts.json', import.meta.url), 'utf8'));
 const select = (key, label, values, value = '') => ({ key, label, type: 'select', default: value,
@@ -119,7 +120,9 @@ export function claudeCapabilities(version){
 }
 
 export class ProviderRegistry {
-  constructor(root, dataDir, store) { this.root=root; this.dataDir=dataDir; this.store=store; this.cache=new Map();this.modelCatalog=new ModelCatalog(root);this.usageReader=new UsageReader(root); }
+  constructor(root, dataDir, store) { this.root=root; this.dataDir=dataDir; this.store=store; this.cache=new Map();this.modelCatalog=new ModelCatalog(root);this.usageReader=new UsageReader(root);this.contextLimitsReader=new ContextLimits(); }
+  contextLimits(id,cwd,model,refresh=false){return this.contextLimitsReader.get(id,this.resolve(id),cwd,model,refresh);}
+  cachedContextLimits(id,cwd,model){return this.contextLimitsReader.peek(id,this.resolve(id),cwd,model);}
   usage(id,cwd,options={}){return this.usageReader.get(id,this.resolve(id),cwd,options);}
   models(id,cwd,refresh=false){return this.modelCatalog.get(id,this.resolve(id),cwd,refresh);}
   resolve(id) {

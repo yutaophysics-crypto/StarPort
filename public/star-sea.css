@@ -411,6 +411,10 @@ dialog::backdrop { background: #020813b8; backdrop-filter: blur(6px); }
 .context-dialog{width:min(540px,calc(100vw - 24px))}.context-dialog p{line-height:1.7}.context-summary{font-size:19px;color:var(--ink)}
 .context-facts{display:grid;grid-template-columns:1fr auto;gap:12px;padding:18px 0;border-block:1px solid var(--line)}
 .context-facts dt{color:var(--muted)}.context-facts dd{margin:0;font-variant-numeric:tabular-nums}
+.context-section-title{margin:24px 0 8px;font-size:13px;font-weight:600;color:var(--ink)}
+.context-dialog .context-facts{padding:10px 0;gap:8px 16px;font-size:13px}
+.context-dialog .context-facts dt{min-width:0;overflow-wrap:anywhere}
+.context-dialog .context-facts dd{text-align:right;white-space:nowrap}
 @media(max-width:600px){.composer-foot #context-indicator{max-width:none}.composer-foot>span:last-child{display:none}.composer-foot{justify-content:space-between}}
 /* Long equations scroll locally; invalid/incomplete TeX stays readable without red error blocks. */
 .message-body .katex-display{max-width:100%;overflow-x:auto;overflow-y:hidden;padding:8px 2px}

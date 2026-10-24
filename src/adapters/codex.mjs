@@ -4,9 +4,10 @@ import { codexContext, contextSample } from '../context.mjs';
 import { parseCodexActivity } from './codex-events.mjs';
 
 export async function connectCodex(runtime, cwd, handlers={}) {
-  const rpc=new JsonRpc(runtime.command,[...runtime.prefixArgs,'app-server','--stdio'],{cwd,...handlers});
+  const {initializeTimeoutMs=60000,...callbacks}=handlers;
+  const rpc=new JsonRpc(runtime.command,[...runtime.prefixArgs,'app-server','--stdio'],{cwd,...callbacks});
   try {
-    await rpc.request('initialize',{clientInfo:{name:'harness_hub',title:'Harness Hub',version:'0.1.0'},capabilities:{experimentalApi:true}});
+    await rpc.request('initialize',{clientInfo:{name:'harness_hub',title:'Harness Hub',version:'0.1.0'},capabilities:{experimentalApi:true}},initializeTimeoutMs);
     rpc.notify('initialized');return rpc;
   } catch(e) {await rpc.close();throw e;}
 }
