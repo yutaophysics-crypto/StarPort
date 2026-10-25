@@ -140,6 +140,7 @@ function renderHeader() {
   const workspace = state.chat?.workspace || state.workspace;
   $('#workspace-label').textContent = workspace.split(/[\\/]/).filter(Boolean).pop() || t('选择工作目录');
   $('#workspace-button').title = workspace || t('设置工作目录');
+  globalThis.StarportExternalTools?.sync();
   $('#export-chat').hidden = coverOpen || !state.chat;
   $('#chat-settings').hidden = coverOpen || !state.chat;
   $('#features-toggle').hidden = coverOpen;

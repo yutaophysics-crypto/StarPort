@@ -29,6 +29,9 @@ import { Compactor } from './compaction.mjs';
 import { PromptSnippets } from './prompt-snippets.mjs';
 import { Notifications, chimeWav } from './notifications.mjs';
 import { WindowsNotifier } from './notifier-windows.mjs';
+import { ExternalTools, toolPathKey } from './external-tools.mjs';
+import { externalToolCapability } from './external-tools-claude.mjs';
+import { runWorkspaceCommand, quotePowerShell } from './workspace-terminal.mjs';
 
 export const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 function equal(a,b){const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);}
@@ -45,6 +48,7 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
   const startedAt=Date.now();
   const store=new Store(join(dataDir,'hub.sqlite'));
   const registry=customRegistry||new ProviderRegistry(root,dataDir,store);
+  const externalTools=registry.externalTools||new ExternalTools({root,dataDir});
   const attachments=new Attachments(store,dataDir);
   const chatTransfer=new ChatTransfer(store,attachments);
   const fileActions=customFileActions||new FileActions();
@@ -206,6 +210,33 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           if(['folder','web'].includes(row.kind)){json(res,{...attachments.metadata(row),text:row.kind==='web'?row.data:''});return;}
           const inline=attachmentRoute[2]==='preview'&&row.mime.startsWith('image/');
           res.writeHead(200,{'Content-Type':inline?row.mime:'application/octet-stream','Content-Disposition':`${inline?'inline':'attachment'}; filename*=UTF-8''${encodeURIComponent(row.name)}`,'Cache-Control':'private, no-store'});res.end(Buffer.from(row.data,'base64'));return;
+        }
+        const toolsRoute=path.match(/^\/api\/projects\/([\w-]+)\/external-tools(?:\/([\w-]+)(?:\/(verify))?)?$/);
+        if(toolsRoute){
+          const [,projectId,toolId,action]=toolsRoute,project=store.project(projectId);
+          if(!project?.workspace)throw Object.assign(Error('项目不存在'),{status:404});
+          const busy=()=>store.list().chats.some(chat=>toolPathKey(chat.workspace)===toolPathKey(project.workspace)&&isBusy(chat.id));
+          const capability=await externalToolCapability(registry.resolve('claude'),project.workspace,registry.resolve('codex')?.command);
+          const status=()=>({...externalTools.view(project.workspace),catalog:externalTools.catalog(),supported:capability.supported,reason:capability.reason||'',busy:busy()});
+          if(req.method==='GET'&&!toolId){json(res,status());return;}
+          if(!capability.supported)throw Error(capability.reason);
+          if(busy())throw Object.assign(Error('请等待此项目的任务结束后修改或验证工具权限'),{status:409});
+          if(req.method==='POST'&&!toolId){
+            const input=await body(req,16384);
+            if(busy())throw Object.assign(Error('请等待此项目的任务结束后修改或验证工具权限'),{status:409});
+            if(input?.catalogId!==undefined)await externalTools.use(project.workspace,input.catalogId);else await externalTools.add(project.workspace,input);
+            json(res,status(),201);return;
+          }
+          if(req.method==='DELETE'&&toolId&&!action){await externalTools.remove(project.workspace,toolId);json(res,status());return;}
+          if(req.method==='POST'&&action==='verify'){
+            await body(req,1024);const snapshot=externalTools.snapshot(project.workspace),tool=snapshot.tools.find(tool=>tool.id===toolId);
+            if(!tool)throw Object.assign(Error('工具不存在'),{status:404});
+            const command=`Get-ChildItem -LiteralPath ${quotePowerShell(tool.canonical)} -Force | Select-Object -First 5 Name; `+
+              (tool.canonicalExecutable?`$item=Get-Item -LiteralPath ${quotePowerShell(tool.canonicalExecutable)}; [pscustomobject]@{Executable=$item.FullName;Version=$item.VersionInfo.ProductVersion} | ConvertTo-Json -Compress`:'');
+            const result=await runWorkspaceCommand({workspace:snapshot.workspace,snapshot,command,sandboxExecutable:capability.sandboxExecutable,timeoutMs:20000});
+            json(res,{ok:result.exitCode===0&&!result.timedOut,result});return;
+          }
+          throw Object.assign(Error('请求方法无效'),{status:405});
         }
         if(path==='/api/projects'&&req.method==='GET'){json(res,projectFolders.list());return;}
         // Explicitly adding a folder remains available before starting its first chat.

@@ -241,3 +241,7 @@ Fork this repository and open a pull request against `main`. The repository owne
 ## License
 
 StarPort's own source is licensed under [MIT](LICENSE). Bundled third-party code, fonts and assets retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Vendor CLIs, SDKs, models and subscription services remain subject to their respective terms.
+
+## Project external development tools
+
+Click **External tools** beside the workspace folder below the message box to grant the current project's Claude Code session read/run access to an installed SDK or engine on Windows, while keeping installation files read-only. See [project tool access](docs/external-tools.md).

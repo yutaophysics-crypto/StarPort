@@ -241,3 +241,7 @@ Fork 这个仓库，向 `main` 提交 Pull Request。仓库所有者负责审核
 ## 许可证
 
 星港自有源码采用 [MIT 许可证](LICENSE)。随附的第三方代码、字体和资源保留各自的许可证，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。各厂商的 CLI、SDK、模型和订阅服务仍适用各自的条款。
+
+## 项目级外部开发工具
+
+输入框下方工作文件夹右侧的「外部工具」可为当前项目的 Claude Code 授权读取和运行 Windows 上已安装的引擎或 SDK，安装文件保持只读。详见 [项目工具权限](docs/zh-CN/external-tools.md)。

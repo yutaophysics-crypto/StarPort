@@ -25,10 +25,11 @@
   <link rel="stylesheet" href="/collaboration.css?v=0.2.3">
   <link rel="stylesheet" href="/code-copy.css?v=0.2.5">
   <link rel="stylesheet" href="/settings.css?v=0.2.6">
+  <link rel="stylesheet" href="/external-tools.css?v=0.2.2">
   <script defer src="/vendor/marked.min.js"></script>
   <script defer src="/vendor/katex.min.js"></script>
   <script defer src="/vendor/purify.min.js"></script>
-  <script defer src="/i18n.js?v=0.2.19"></script>
+  <script defer src="/i18n.js?v=0.2.22"></script>
   <script defer src="/files.js?v=0.2.3"></script>
   <script defer src="/markdown.js?v=0.2.3"></script>
   <script defer src="/code-copy.js?v=0.2.5"></script>
@@ -39,13 +40,14 @@
   <script defer src="/live.js?v=0.2.3"></script>
   <script defer src="/notifications.js?v=0.2.6"></script>
   <script defer src="/app.js?v=0.2.14"></script>
-  <script defer src="/app-layout.js?v=0.2.14"></script>
+  <script defer src="/app-layout.js?v=0.2.15"></script>
   <script defer src="/app-options.js?v=0.2.14"></script>
   <script defer src="/app-messages.js?v=0.2.14"></script>
   <script defer src="/app-send.js?v=0.2.14"></script>
   <script defer src="/app-folders.js?v=0.2.14"></script>
   <script defer src="/app-start.js?v=0.2.14"></script>
   <script defer src="/settings.js?v=0.2.10"></script>
+  <script defer src="/external-tools.js?v=0.2.3"></script>
   <script defer src="/subagents.js?v=0.2.3"></script>
   <script defer src="/composer.js?v=0.2.4"></script>
   <script defer src="/permissions.js?v=0.2.3"></script>
@@ -225,12 +227,18 @@
         <div class="composer-bottom">
           <div class="composer-context">
             <span id="composer-provider" class="provider-pill">Codex</span>
-            <button id="workspace-button" type="button" class="workspace-button" title="设置工作目录" data-i18n-title="设置工作目录">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>
-              </svg>
-              <span id="workspace-label"><b class="i18n-text" data-i18n="选择工作目录">选择工作目录</b></span>
-            </button>
+            <div class="workspace-controls">
+              <button id="workspace-button" type="button" class="workspace-button" title="设置工作目录" data-i18n-title="设置工作目录">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>
+                </svg>
+                <span id="workspace-label"><b class="i18n-text" data-i18n="选择工作目录">选择工作目录</b></span>
+              </button>
+              <button id="workspace-tools-button" type="button" class="workspace-tools-button" aria-haspopup="dialog" aria-controls="external-tools-dialog" aria-expanded="false" aria-label="外部开发工具" data-i18n-aria-label="外部开发工具" title="请先选择项目文件夹" data-i18n-title="请先选择项目文件夹" disabled>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4a5 5 0 0 0-6 6L3 15l6 6 5-5a5 5 0 0 0 6-6l-4 3-5-5z"/></svg>
+                <span data-i18n="外部工具">外部工具</span>
+              </button>
+            </div>
           </div>
           <button id="composer-snippets" type="button" class="composer-snippets" title="提示词：点一条插入输入框" aria-label="提示词" aria-haspopup="menu" aria-expanded="false">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -417,6 +425,16 @@
   </form>
 </dialog>
 
+<dialog id="external-tools-dialog" class="external-tools-dialog" aria-labelledby="external-tools-heading">
+  <div class="dialog-heading">
+    <h2 id="external-tools-heading" data-i18n="外部开发工具">外部开发工具</h2>
+    <button id="external-tools-close" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="关闭">×</button>
+  </div>
+  <section id="external-tools-panel" class="dialog-body"></section>
+  <div class="dialog-footer">
+    <button id="external-tools-done" type="button" class="primary-button" data-i18n="完成">完成</button>
+  </div>
+</dialog>
 <dialog id="folder-dialog" class="folder-dialog" aria-label="选择工作目录" data-i18n-aria-label="选择工作目录"></dialog>
 <dialog id="action-dialog" class="action-dialog"></dialog>
 <dialog id="sketch-dialog" class="sketch-dialog"></dialog>
