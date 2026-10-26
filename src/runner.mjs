@@ -49,7 +49,7 @@ export class Runner {
   context(chatId) {
     const chat=this.store.chat(chatId);if(!chat)return null;
     const options=validateOptions(chat.provider,chat.options[chat.provider]);
-    const binding=contextBinding(chat,options),runtime=this.registry.resolve(chat.provider);
+    const binding=contextBinding(chat,options),runtime=this.registry.resolve(chat.provider,chat.workspace);
     const fingerprint=runtime?sessionFingerprint(runtime,chat,options,this.store.memory.epoch,this.store.instructions.fingerprint(chat.project_id||null)):null;
     const promoted=runtime?this.promotedFingerprint(runtime,chat,options):null,current=value=>!!value&&(value===fingerprint||value===promoted);
     const active=this.active.get(chatId),session=this.store.session(chatId,chat.provider);
@@ -73,7 +73,7 @@ export class Runner {
     // A reply to a workflow run card carries that run's result into this turn only.
     const runRef=metadata.runRef!=null?(this.resolveRunRef?this.resolveRunRef(chatId,metadata.runRef):null):null;
     if(metadata.runRef!=null&&!runRef)throw new Error('引用的运行无效');
-    const runtime=this.registry.resolve(chat.provider);if(!runtime)throw new Error('未找到这个工具的程序，请在连接设置中配置');
+    const runtime=this.registry.resolve(chat.provider,chat.workspace);if(!runtime)throw new Error('未找到这个工具的程序，请在连接设置中配置');
     const options=validateOptions(chat.provider,chat.options[chat.provider]);
     if(!isAbsolute(chat.workspace)||!existsSync(chat.workspace)||!statSync(chat.workspace).isDirectory())throw new Error('工作目录不存在，请在对话设置中指定完整路径');
     // Reserve before any asynchronous provider work to reject concurrent sends.

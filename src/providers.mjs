@@ -7,6 +7,7 @@ import { CODEX_PERMISSIONS, codexPermissionSelection } from './codex-permissions
 import { UsageReader } from './usage.mjs';
 import { deepseekDesktopRuntime } from './deepseek-desktop.mjs';
 import { ContextLimits } from './context-limits.mjs';
+import { ExternalTools } from './external-tools.mjs';
 
 const magi = JSON.parse(readFileSync(new URL('./magi-hosts.json', import.meta.url), 'utf8'));
 const select = (key, label, values, value = '') => ({ key, label, type: 'select', default: value,
@@ -120,14 +121,19 @@ export function claudeCapabilities(version){
 }
 
 export class ProviderRegistry {
-  constructor(root, dataDir, store) { this.root=root; this.dataDir=dataDir; this.store=store; this.cache=new Map();this.modelCatalog=new ModelCatalog(root);this.usageReader=new UsageReader(root);this.contextLimitsReader=new ContextLimits(); }
+  constructor(root, dataDir, store) { this.root=root; this.dataDir=dataDir; this.store=store; this.cache=new Map();this.modelCatalog=new ModelCatalog(root);this.usageReader=new UsageReader(root);this.contextLimitsReader=new ContextLimits();this.externalTools=new ExternalTools({root,dataDir}); }
   contextLimits(id,cwd,model,refresh=false){return this.contextLimitsReader.get(id,this.resolve(id),cwd,model,refresh);}
   cachedContextLimits(id,cwd,model){return this.contextLimitsReader.peek(id,this.resolve(id),cwd,model);}
   usage(id,cwd,options={}){return this.usageReader.get(id,this.resolve(id),cwd,options);}
   models(id,cwd,refresh=false){return this.modelCatalog.get(id,this.resolve(id),cwd,refresh);}
-  resolve(id) {
+  resolve(id,cwd) {
     if (!PROVIDERS[id]) throw new Error('未知工具');
-    return discover(this.root,id,this.store.setting('providers',{})[id]);
+    const runtime=discover(this.root,id,this.store.setting('providers',{})[id]);
+    if(runtime&&id==='claude'&&cwd&&existsSync(this.externalTools.file)&&existsSync(cwd)){
+      const policy=this.externalTools.snapshot(cwd);
+      if(policy.tools.length)return {...runtime,externalTools:{...policy,dataDir:this.externalTools.dataDir,sandboxExecutable:this.resolve('codex')?.command}};
+    }
+    return runtime;
   }
   verification(id,runtime=this.resolve(id)) {
     const saved=this.store.setting('verification',{})[id];

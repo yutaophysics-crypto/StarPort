@@ -1,0 +1,51 @@
+.workspace-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.workspace-controls .workspace-button { flex: 0 1 auto; overflow: hidden; }
+.workspace-controls .workspace-button svg { flex: none; }
+.workspace-tools-button { display: inline-flex; align-items: center; gap: 5px; flex: none; min-height: 28px; padding: 4px 6px; border-radius: 5px; color: var(--muted); font-size: 11px; white-space: nowrap; transition: color .15s, background .15s; }
+.workspace-tools-button:hover:not(:disabled), .workspace-tools-button[aria-expanded=true] { color: var(--ink); background: var(--hover); }
+.workspace-tools-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.workspace-tools-button:disabled { opacity: .45; cursor: default; }
+
+.external-tools-dialog { width: min(640px, calc(100vw - 32px)); max-height: 88dvh; }
+.external-tools-dialog[open] { display: flex; flex-direction: column; }
+.external-tools-dialog > .dialog-heading, .external-tools-dialog > .dialog-footer { flex: none; }
+#external-tools-panel { min-height: 0; max-height: none; overflow-y: auto; }
+.external-tools-toolbar { display: flex; align-items: flex-start; gap: 16px; }
+.external-tools-scope { flex: 1; min-width: 0; }
+.external-tools-scope h3 { margin: 0 0 6px; font-size: 14px; }
+.external-tools-scope code { display: block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.external-tools-toolbar button { flex: none; }
+.external-tools-field { display: grid; gap: 6px; min-width: 0; margin: 16px 0; font-size: 12px; color: var(--muted); }
+.external-tools-field input { width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 7px; font: inherit; }
+.external-tools-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#external-tools-panel > .settings-note, .external-tools-form > .settings-note { padding: 0; border: 0; background: transparent; margin: 8px 0; }
+.external-tools-path { display: flex; gap: 8px; }
+.external-tools-path input { flex: 1; }
+.external-tools-path button { flex: none; }
+.external-tool { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.external-tool-heading, .external-tool-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.external-tool-heading small { margin-left: auto; color: var(--muted); }
+.external-tool code { display: block; font-size: 11px; overflow-wrap: anywhere; margin: 8px 0; color: var(--muted); }
+.external-tools-result { max-height: 180px; overflow: auto; white-space: pre-wrap; font-size: 11px; }
+.external-tool summary { color: var(--muted); cursor: pointer; font-size: 12px; }
+.external-tools-form { padding-top: 6px; }
+.external-tools-form h3 { margin: 18px 0 0; font-size: 13px; }
+.common-tools { margin-top: 16px; border-bottom: 1px solid var(--line); }
+.common-tools > summary { padding: 10px 0; color: var(--ink); font-size: 13px; cursor: pointer; }
+.common-tools > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.common-tools > summary small { margin-left: 8px; color: var(--muted); }
+.common-tools > .settings-note { border: 0; padding: 0 0 8px; background: transparent; }
+.common-tools-list { max-height: 240px; overflow-y: auto; }
+.common-tool { padding: 12px 0; border-top: 1px solid var(--line); }
+.common-tool-heading { display: flex; align-items: center; gap: 12px; }
+.common-tool-heading strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+.common-tool-heading button { flex: none; }
+.common-tool code { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.common-tools-error { font-size: 12px; color: var(--muted); margin-bottom: 0; }
+
+@media (max-width: 650px) {
+  .workspace-controls { gap: 5px; }
+  .workspace-tools-button { width: 28px; justify-content: center; }
+  .workspace-tools-button span { display: none; }
+  .composer-context > .provider-pill { max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

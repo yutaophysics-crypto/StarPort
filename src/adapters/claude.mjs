@@ -4,6 +4,7 @@ import {z} from 'zod';
 import { childEnvironment, startProcess, stopProcess, redact } from '../process.mjs';
 import { parseEvent } from './cli.mjs';
 import { isPreviousSessionTaskNotice } from './claude-events.mjs';
+import { prepareExternalClaude } from '../external-tools-claude.mjs';
 
 // Claude Code reports a background agent or workflow in a later native turn of
 // the same session; `claude -p` holds its result for exactly these task types.
@@ -11,7 +12,7 @@ import { isPreviousSessionTaskNotice } from './claude-events.mjs';
 const HOLDING_TASKS=new Set(['local_agent','local_workflow']);
 
 export async function runClaude({runtime,options,session,initialContext,prompt,contextTools,contextEnv={},images=[],cwd,signal,emit,setControl,makeQuery=query,sdkOptions={},backgroundSettleMs=30000}) {
-  let stream,child,finishInput,wakeInput,canceled=false,accepting=true,failure='';
+  let stream,child,finishInput,wakeInput,externalCleanup,canceled=false,accepting=true,failure='';
   const queued=[],inFlight=new Map();
   const abortController=new AbortController(),pending=new Map();
   const inputDone=new Promise(resolve=>finishInput=resolve);
@@ -138,6 +139,7 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
   signal?.addEventListener('abort',stop,{once:true});
   try{
     if(signal?.aborted){await stop();throw Object.assign(new Error('已停止'),{canceled:true});}
+    const external=await prepareExternalClaude(runtime,cwd);runtime=external.runtime;externalCleanup=external.cleanup;
     const contextMcp=contextTools?createSdkMcpServer({name:'starport_context',version:'1.0.0',tools:contextTools.definitions.map(def=>{
       const shape={};for(const [key,schema]of Object.entries(def.inputSchema.properties)){let value=schema.enum?z.enum(schema.enum):schema.type==='array'?z.array(z.string()).min(schema.minItems||0).max(schema.maxItems||100):schema.type==='integer'?z.number().int():z.string();if(!(def.inputSchema.required||[]).includes(key))value=value.optional();shape[key]=value;}
       return tool(def.name,def.description,shape,async args=>{try{return {content:[{type:'text',text:JSON.stringify(await contextTools.call(def.name,args))}]};}catch(error){return {isError:true,content:[{type:'text',text:error.message}]};}});
@@ -224,6 +226,6 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
     clearTimeout(settleTimer);
     accepting=false;signal?.removeEventListener('abort',stop);finishInput();
     for(const [id,request] of pending)resolveRequest(id,request.deny('本次执行已结束，权限请求失效。'));
-    stream?.close();if(child)await stopProcess(child);
+    try{stream?.close();if(child)await stopProcess(child);}finally{await externalCleanup?.();}
   }
 }
