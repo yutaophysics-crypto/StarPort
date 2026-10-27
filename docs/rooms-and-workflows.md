@@ -26,6 +26,8 @@ When one message mentions several companions, a planner model first writes the o
 
 The same settings decide how many times a mention is redone when a review fails (0–3) and whether each step has a time limit. Steps have no total time limit by default. After 5 minutes without new activity StarPort shows a reminder, and the task keeps running. When you enable the step time limit (3–240 minutes, 30 by default), StarPort warns as the limit approaches, then stops the step and keeps its progress and records. Changes affect only steps that start afterwards.
 
+*Testing.* While a companion works, you can mention other companions to work in parallel, or talk to the conversation's model without a mention. A second request to the same companion waits its turn: its card and the room panel show it as queued, and its clock starts when its turn comes. The room panel shows each working companion's elapsed time, updated every second, without opening its card.
+
 ## One-way mentions
 
 > **Testing:** not yet used much in real work, and how well the companion actually stays within this limit has not been checked.

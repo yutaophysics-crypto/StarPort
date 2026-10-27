@@ -4,9 +4,9 @@ import {mkdtemp,mkdir,writeFile,readFile,symlink,unlink} from 'node:fs/promises'
 import {existsSync,realpathSync} from 'node:fs';
 import {tmpdir,homedir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {ExternalTools,validateToolSnapshot} from '../src/external-tools.mjs';
-import {prepareExternalClaude} from '../src/external-tools-claude.mjs';
-import {workspaceFilesystem} from '../src/workspace-terminal.mjs';
+import {ExternalTools,validateToolSnapshot} from '../src/external-tools/grants.mjs';
+import {prepareExternalClaude} from '../src/external-tools/claude-launch.mjs';
+import {workspaceFilesystem} from '../src/external-tools/terminal.mjs';
 import {ProviderRegistry} from '../src/providers.mjs';
 import {Store} from '../src/storage.mjs';
 import {sessionFingerprint} from '../src/context.mjs';
@@ -31,6 +31,7 @@ test('machine-local grants persist, apply only to the exact project, and remain 
     store.setSetting('providers',{claude:{command:process.execPath,prefixArgs:[]}});
     const registry=new ProviderRegistry(join(f.root,'hub'),f.data,store),chat={workspace:f.workspace},options={};
     const before=sessionFingerprint(registry.resolve('claude',f.workspace),chat,options);
+    assert.deepEqual(Object.keys(registry.resolve('claude',f.workspace).externalTools),['workspace','tools','executionPolicy','dataDir','sandboxExecutable'],'existing sessions resume only while the policy shape is unchanged');
     await restored.remove(f.workspace,snapshot.tools[0].id);
     const after=sessionFingerprint(registry.resolve('claude',f.workspace),chat,options);
     assert.notEqual(after,before,'revocation must not resume a session that had the grant');
@@ -101,9 +102,9 @@ test('Claude launch preserves owner proxy/browser rules and adds a read-only SDK
     assert.ok(settings.permissions.deny.includes('Read(./private/**)'));assert.match(settings.permissions.deny.at(-1),/^Edit\(\/\/[a-z]\//);
     assert.ok(args.includes('--restricted'));assert.equal(args[args.indexOf('--add-dir')+1],f.sdk);
     assert.deepEqual(mcp.mcpServers.claude_browser,{command:process.execPath,args:['browser.mjs'],env:{OWNER_BROWSER:'preserve'}});
-    assert.match(mcp.mcpServers.starport_workspace.args[0],/scripts[\\/]claude-workspace-terminal\.mjs$/);
-    const manifest=JSON.parse(await readFile(mcp.mcpServers.starport_workspace.env.STARPORT_EXTERNAL_TOOLS_MANIFEST,'utf8'));
-    assert.equal(manifest.workspace,f.workspace);assert.equal(manifest.tools[0].canonical,f.sdk);
+    assert.equal(mcp.mcpServers.starport_workspace,undefined,'workspace terminal is hosted by SDK, without a stale per-turn stdio manifest');
+    assert.equal(prepared.runtime.workspaceTerminal.sandboxExecutable,process.execPath);
+    assert.equal(prepared.runtime.externalTools.workspace,f.workspace);assert.equal(prepared.runtime.externalTools.tools[0].canonical,f.sdk);
     assert.equal(await readFile(originalSettings,'utf8'),original);
   }finally{await prepared.cleanup();assert.equal(existsSync(prepared.directory),false);}
 });
@@ -119,14 +120,19 @@ test('project tools API requires owner authentication, rejects cross-site grants
   const headers={'X-Hub-Token':hub.token,'Content-Type':'application/json'};
   assert.equal((await fetch(base+path)).status,401);
   assert.equal((await fetch(base+path,{method:'POST',headers:{...headers,Origin:'https://evil.invalid'},body:JSON.stringify({name:'SDK',directory:f.sdk})})).status,403);
-  let response=await fetch(base+path,{method:'POST',headers,body:JSON.stringify({name:'SDK',directory:f.sdk})});assert.equal(response.status,201);const saved=await response.json();assert.equal(saved.tools.length,1);
+  let response=await fetch(base+path,{method:'POST',headers,body:JSON.stringify({name:'SDK',directory:f.sdk,executable:f.binary})});assert.equal(response.status,201);const saved=await response.json();assert.equal(saved.tools.length,1);
   assert.equal(saved.catalog.length,1);assert.equal(saved.catalog[0].name,'SDK');assert.equal(saved.catalog[0].canonical,f.sdk);
+  const toolPath=path+'/'+saved.tools[0].id;
+  assert.equal((await fetch(base+toolPath,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({hostApproval:'always'})})).status,401);
+  assert.equal((await fetch(base+toolPath,{method:'PATCH',headers:{...headers,Origin:'https://evil.invalid'},body:JSON.stringify({hostApproval:'always'})})).status,403);
+  response=await fetch(base+toolPath,{method:'PATCH',headers,body:JSON.stringify({hostApproval:'always'})});assert.equal(response.status,200);
+  const allowed=await response.json();assert.equal(allowed.tools[0].hostApproval,'always');assert.equal(allowed.catalog[0].hostApproval,undefined);
   const other=join(f.root,'Another project');await mkdir(other);const otherProject=hub.store.addProject('Another',other),otherPath='/api/projects/'+otherProject.id+'/external-tools';
   const available=await(await fetch(base+otherPath,{headers})).json();assert.equal(available.tools.length,0);assert.equal(available.catalog.length,1);
   response=await fetch(base+otherPath,{method:'POST',headers,body:JSON.stringify({catalogId:saved.catalog[0].id})});assert.equal(response.status,201);
-  assert.equal((await response.json()).tools[0].canonical,f.sdk);
+  const reused=await response.json();assert.equal(reused.tools[0].canonical,f.sdk);assert.equal(reused.tools[0].hostApproval,undefined);
   const chat=hub.store.newChat({provider:'claude',workspace:f.workspace});hub.runner.active.set(chat.id,{});
-  try{response=await fetch(base+path+'/'+saved.tools[0].id,{method:'DELETE',headers});assert.equal(response.status,409);assert.equal((await(await fetch(base+path,{headers})).json()).busy,true);assert.equal((await fetch(base+path,{method:'POST',headers,body:JSON.stringify({catalogId:saved.catalog[0].id})})).status,409);}
+  try{response=await fetch(base+path+'/'+saved.tools[0].id,{method:'DELETE',headers});assert.equal(response.status,409);assert.equal((await(await fetch(base+path,{headers})).json()).busy,true);assert.equal((await fetch(base+path,{method:'POST',headers,body:JSON.stringify({catalogId:saved.catalog[0].id})})).status,409);assert.equal((await fetch(base+toolPath,{method:'PATCH',headers,body:JSON.stringify({hostApproval:'ask'})})).status,409);}
   finally{hub.runner.active.delete(chat.id);}
   assert.equal((await fetch(base+path+'/'+saved.tools[0].id,{method:'DELETE',headers})).status,200);
   const removed=await(await fetch(base+path,{headers})).json();assert.equal(removed.tools.length,0);assert.equal(removed.catalog.length,1);

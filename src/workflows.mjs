@@ -35,7 +35,7 @@ export class Workflows {
   constructor({store,runner,broadcast=()=>{},dataDir,registry=null,defaultWorkspace='',examRoot=null,clockFactory=options=>new CompanionClock(options)}){
     this.store=store;this.db=store.db;this.runner=runner;this.broadcastRaw=broadcast;this.registry=registry;this.defaultWorkspace=defaultWorkspace;this.clockFactory=clockFactory;
     this.dataDir=dataDir;this.examRoot=examRoot;this.starting=new Set();
-    this.runs=new Map();
+    this.runs=new Map();this.deskQueues=new Map();
     this.ledger=new Ledger({db:this.db,store,root:join(dataDir,'ledgers'),mount:id=>this.mount(id),companionName:id=>this.companion(id)?.name});
     ensureSchema(this.db);
     this.recover();
@@ -59,7 +59,7 @@ export class Workflows {
     for(const row of rows){
       const message=this.store.messageById(row.chat_id,row.id),run=message.details.workflowRun;
       run.status='stopped';run.ended=now();run.notes=[...run.notes||[],'星港重启，这次运行被中断。'];
-      for(const step of run.steps||[])if(['waiting','running'].includes(step.status))step.status='stopped';
+      for(const step of run.steps||[]){if(['waiting','running'].includes(step.status))step.status='stopped';delete step.queued;}
       message.status='complete';message.content=cardText(run);this.store.saveMessage(message);
     }
   }
@@ -156,7 +156,9 @@ export class Workflows {
       settings:this.settings(),deskFields:DESK_FIELDS,scores:this.scores(),migrated:!!this.store.setting('workflows.migrated'),defaults:{planTemplate:DEFAULT_PLAN_TEMPLATE,planners:DEFAULT_PLANNERS},
       // The page offers the one-way switch only when this is present: a server not yet restarted would ignore it.
       oneWay:true,
-      running:[...this.runs.values()].map(run=>({id:run.id,chatId:run.chatId,mountId:run.mountId,messageId:run.card.id,companions:[...run.companions]}))};
+      // Steps at work now, so the room can show each companion's live clock or that it is queued.
+      running:[...this.runs.values()].map(run=>({id:run.id,chatId:run.chatId,mountId:run.mountId,messageId:run.card.id,started:run.card.details.workflowRun.started,companions:[...run.companions],
+        steps:(run.card.details.workflowRun.steps||[]).filter(step=>step.status==='running').map(step=>({companionId:step.companionId,started:step.started,queued:!!step.queued}))}))};
   }
 
   // --- companions and rosters ---
@@ -305,6 +307,8 @@ export class Workflows {
     this.broadcastRaw('message',{chatId:chat.id,message:card,chat:this.store.chat(chat.id)});this.broadcastRaw('refresh',{chatId:chat.id});this.broadcast('runs',chat.id);
     return run;
   }
+  // A step started, queued or ended: the card changes, and so does who is at work in the room.
+  stepChanged(run){this.saveCard(run);this.broadcast('runs',run.chatId);}
   saveCard(run){
     const card=run.card;card.details.workflowRun.updatedAt=now();card.details.liveRevision=(card.details.liveRevision||0)+1;card.content=cardText(card.details.workflowRun);
     this.store.saveMessage(card);
@@ -451,16 +455,32 @@ export class Workflows {
       desk=this.store.updateChat(desk.id,{provider:companion.provider,workspace:chat.workspace,options:{...desk.options,[companion.provider]:options}});
     return {desk,cursor:row.cursor??null};
   }
-  async waitIdle(run,deskId){
-    while(this.runner.active.has(deskId)&&!run.stopped&&!this.closing)await sleep(1000);
+  // Requests to one companion share its desk, so they take turns. A later one shows as queued
+  // and its clock starts when its turn comes. Returns the release for the caller's finally.
+  async takeDesk(run,deskId,step){
+    const queue=this.deskQueues.get(deskId)||[],turn={};queue.push(turn);this.deskQueues.set(deskId,queue);
+    const release=()=>{const index=queue.indexOf(turn);if(index>=0)queue.splice(index,1);if(!queue.length&&this.deskQueues.get(deskId)===queue)this.deskQueues.delete(deskId);};
+    const waiting=()=>queue[0]!==turn||this.runner.active.has(deskId);
+    if(waiting()){
+      step.queued=true;this.stepChanged(run);
+      while(waiting()&&!run.stopped&&!this.closing)await sleep(this.deskPollMs??1000);
+      delete step.queued;if(!run.stopped){step.started=now();this.stepChanged(run);}
+    }
+    return release;
   }
   async runStep(run,chat,step,context){
     const exam=context.mode==='exam',minutes=exam?context.minutes:this.stepMinutes();
-    step.timeLimitMinutes=minutes;step.status='running';step.started=now();this.saveCard(run);
+    step.timeLimitMinutes=minutes;step.status='running';step.started=now();this.stepChanged(run);
+    let releaseDesk=null;
     try{
       const companion=this.companion(step.companionId);if(!companion)throw new Error('这个位置的伙伴已不存在');
       let desk,cursor=null;
-      if(context.mode==='adhoc'){({desk,cursor}=this.companionDesk(companion,chat,{isolated:context.isolated}));await this.waitIdle(run,desk.id);if(run.stopped){step.status='stopped';return;}}
+      if(context.mode==='adhoc'){
+        releaseDesk=await this.takeDesk(run,this.companionDesk(companion,chat,{isolated:context.isolated}).desk.id,step);
+        if(run.stopped){step.status='stopped';return;}
+        // Read the desk again after waiting: the earlier request moved its cursor.
+        ({desk,cursor}=this.companionDesk(companion,chat,{isolated:context.isolated}));
+      }
       // A seat is a copy made for this exam, so an examinee may always write and run things in it.
       else if(exam)desk=this.newDesk(chat,{provider:companion.provider,options:deskOptions(companion.provider,companion.access==='readonly'?{...companion,options:null,access:'workspace'}:companion),
         title:`[考位] ${companion.name} · ${context.exam.name}`,workspace:step.seat.dir,meta:{companionId:companion.id,runId:run.id,exam:true}});
@@ -493,7 +513,7 @@ export class Workflows {
         context.ledgerLog.push({step,log:step.ledger.log||null});
       }
     }catch(error){step.status='failed';step.error=redact(error.message).slice(0,2000);}
-    finally{step.ended=now();this.saveCard(run);}
+    finally{releaseDesk?.();step.ended=now();this.stepChanged(run);}
   }
   execDesk(run,deskId,prompt,options){return runUnattended(this,run,deskId,prompt,options);}
   // After a seat hands in, or stops: compare it with the paper and look for calls outside it.

@@ -7,7 +7,7 @@ import { CODEX_PERMISSIONS, codexPermissionSelection } from './codex-permissions
 import { UsageReader } from './usage.mjs';
 import { deepseekDesktopRuntime } from './deepseek-desktop.mjs';
 import { ContextLimits } from './context-limits.mjs';
-import { ExternalTools } from './external-tools.mjs';
+import { ExternalTools } from './external-tools/grants.mjs';
 
 const magi = JSON.parse(readFileSync(new URL('./magi-hosts.json', import.meta.url), 'utf8'));
 const select = (key, label, values, value = '') => ({ key, label, type: 'select', default: value,
@@ -129,9 +129,9 @@ export class ProviderRegistry {
   resolve(id,cwd) {
     if (!PROVIDERS[id]) throw new Error('未知工具');
     const runtime=discover(this.root,id,this.store.setting('providers',{})[id]);
-    if(runtime&&id==='claude'&&cwd&&existsSync(this.externalTools.file)&&existsSync(cwd)){
-      const policy=this.externalTools.snapshot(cwd);
-      if(policy.tools.length)return {...runtime,externalTools:{...policy,dataDir:this.externalTools.dataDir,sandboxExecutable:this.resolve('codex')?.command}};
+    if(runtime&&id==='claude'&&cwd){
+      const externalTools=this.externalTools.runtimePolicy(cwd,()=>this.resolve('codex')?.command);
+      if(externalTools)return {...runtime,externalTools};
     }
     return runtime;
   }

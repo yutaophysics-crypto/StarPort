@@ -438,3 +438,50 @@ test('companions pick their tool\'s own 工作方式: every Claude mode, Codex �
   assert.throws(()=>workflows.updateCompanion('cl',{options:{mode:'goal'}}),/工作方式选项无效/);
   assert.throws(()=>workflows.updateCompanion('cl',{options:'auto'}),/工作方式格式无效/);
 });
+
+test('while a companion works: others take @-requests alongside it, the chat model still answers, and a second request to it waits its turn',{timeout:30000},async t=>{
+  const started=[];let finishLong;const long=new Promise(resolve=>finishLong=resolve);
+  const reply=(emit,text)=>{emit({type:'replace',text});emit({type:'final-answer',text});};
+  // Desk prompts carry the conversation, so look for the newest request first.
+  const implementations={
+    codex:async({prompt,emit})=>{const key=['第二件','并行任务','长任务'].find(word=>prompt.includes(word));started.push(key);if(key==='长任务')await long;reply(emit,'我负责：'+key+'\n完成 '+key);},
+    claude:async({emit})=>{started.push('主模型');reply(emit,'主模型的回答');}};
+  const dataDir=mkdtempSync(join(tmpdir(),'hub-parallel-')),workspace=mkdtempSync(join(tmpdir(),'hub-parallel-ws-'));
+  // Let the long task end before closing, so a failed check does not leave the hub waiting on it.
+  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>{finishLong();return hub.close();});
+  const {store,workflows,runner}=hub,room=store.group('并行室');workflows.deskPollMs=20;
+  workflows.createCompanion({name:'甲',avatar:'🦉',provider:'codex'},{id:'a'});workflows.addMember(room.id,'a');
+  workflows.createCompanion({name:'乙',avatar:'🐙',provider:'codex'},{id:'b'});workflows.addMember(room.id,'b');
+  const chat=store.newChat({group_id:room.id,provider:'claude',workspace});
+  const events=[],raw=workflows.broadcastRaw;workflows.broadcastRaw=(type,data)=>{events.push([type,data]);raw(type,data);};
+  const working=id=>workflows.state().running.flatMap(run=>run.steps).filter(step=>step.companionId===id);
+
+  const first=await workflows.dispatch(chat.id,{text:'@甲 长任务'});await until(()=>started.includes('长任务'),'甲 starts');
+  assert.equal(working('a').length,1);assert.equal(working('a')[0].queued,false);assert.ok(Date.parse(working('a')[0].started));
+  assert.ok(workflows.state().running[0].started,'the room can count from when the run began');
+
+  // Another companion starts at once, beside the busy one.
+  const beside=await workflows.dispatch(chat.id,{text:'@乙 并行任务'});
+  await until(()=>store.messageById(chat.id,beside.message.id).details.workflowRun.status==='done','乙 finishes while 甲 still works');
+  assert.equal(store.messageById(chat.id,first.message.id).details.workflowRun.status,'running');
+
+  // Without an @, the message goes to the conversation's own model, which answers now.
+  await runner.start(chat.id,'不点名，直接问对话模型');await runner.active.get(chat.id)?.done;
+  assert.ok(started.includes('主模型'));assert.equal(store.messages(chat.id).findLast(m=>m.role==='assistant'&&m.provider==='claude').content,'主模型的回答');
+
+  // A second request to 甲 waits for the first and says so; its clock starts when its turn comes.
+  const before=events.length;
+  const second=await workflows.dispatch(chat.id,{text:'@甲 第二件'});
+  const step=()=>store.messageById(chat.id,second.message.id).details.workflowRun.steps[0];
+  await until(()=>step()?.queued===true,'second request queued');
+  assert.equal(started.includes('第二件'),false);
+  assert.deepEqual(working('a').map(s=>s.queued).sort(),[false,true]);
+  assert.ok(events.slice(before).some(([type,data])=>type==='workflows'&&data.reason==='runs'),'the room hears about the queue at once');
+  finishLong();
+  await until(()=>!workflows.runs.size,'both finish');
+  assert.deepEqual(started.filter(key=>key!=='主模型'),['长任务','并行任务','第二件']);
+  const done=step(),firstStep=store.messageById(chat.id,first.message.id).details.workflowRun.steps[0];
+  assert.equal(done.status,'done');assert.equal(done.queued,undefined);
+  assert.ok(Date.parse(done.started)>=Date.parse(firstStep.ended),'its clock started after the first request ended');
+  assert.match(done.output,/完成 第二件/);
+});
