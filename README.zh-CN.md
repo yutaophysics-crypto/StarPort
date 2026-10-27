@@ -247,3 +247,5 @@ Fork 这个仓库，向 `main` 提交 Pull Request。仓库所有者负责审核
 ## 项目级外部开发工具
 
 输入框下方工作文件夹右侧的「外部工具」可为当前项目的 Claude Code 授权读取和运行 Windows 上已安装的引擎或 SDK，安装文件保持只读。详见 [项目工具权限](docs/zh-CN/external-tools.md)。
+
+**本机兼容运行和常驻程序***（功能测试中）*：已登记的程序在沙箱里无法启动时，Claude 可以在你批准后用当前 Windows 用户权限启动它，也可以让编辑器跨轮次保持打开。详见 [本机兼容运行](docs/zh-CN/external-tools.md#本机兼容运行)。

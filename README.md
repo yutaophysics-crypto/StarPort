@@ -247,3 +247,5 @@ StarPort's own source is licensed under [MIT](LICENSE). Bundled third-party code
 ## Project external development tools
 
 Click **External tools** beside the workspace folder below the message box to grant the current project's Claude Code session read/run access to an installed SDK or engine on Windows, while keeping installation files read-only. See [project tool access](docs/external-tools.md).
+
+**Host compatibility execution and persistent applications** *(testing)*: when a registered program cannot run in the sandbox, Claude can ask to launch it with your Windows user permissions after your approval, and can keep an editor open across turns. See [host compatibility execution](docs/external-tools.md#host-compatibility-execution).

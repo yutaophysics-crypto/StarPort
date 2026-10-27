@@ -10,6 +10,8 @@ The exact working folder is the scope; subfolders are separate projects. In the 
 
 ## Host compatibility execution
 
+> **Testing:** host compatibility execution and persistent applications have not been used in real work yet.
+
 When a registered `.exe` cannot run in the sandbox, Claude can request `mcp__starport_external_tools__run`. The tool's **Host execution permission** defaults to **Ask every time**: Starport shows the executable, literal arguments, physical project directory and lifetime before launch. Choose **Always allow for this project** in External tools to remember your consent for this project's registered executable. Claude then launches it without repeated approvals. This setting stays on this computer, affects subsequent turns and is never copied to other projects by Common tools. Switch back to Ask every time to revoke future automatic launches. Existing running applications remain open until explicitly closed. Native Claude auto/bypass modes do not override these project settings.
 
 This is an explicit exception: the application and its descendants run as the signed-in Windows user, with host filesystem, account/configuration and network access. Setting its working directory does **not** confine its file access. Approve only trusted programs and parameters; project scripts/plugins run by the program share these host rights. Ordinary Claude command execution remains in MXC. Adding a directory alone never authorizes unrestricted host execution.
