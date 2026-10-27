@@ -36,7 +36,7 @@ globalThis.StarportSubagents=(()=>{
     return section;
   }
   function tick(){
-    globalThis.StarportActivity?.tick();
+    globalThis.StarportActivity?.tick();globalThis.StarportWorkflows?.tick();
     for(const span of document.querySelectorAll('.subagent-duration'))span.textContent=duration({startedAt:Number(span.dataset.start),endedAt:Number(span.dataset.end),status:span.dataset.status});
     for(const span of document.querySelectorAll('.subagent-updated'))span.textContent=t('最后活动：{time}',{time:new Date(Number(span.dataset.updated)).toLocaleTimeString(i18n.locale)});
     if(state.run)$('#run-status').textContent=runStatusLine(state.run);

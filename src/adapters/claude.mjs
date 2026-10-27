@@ -4,7 +4,8 @@ import {z} from 'zod';
 import { childEnvironment, startProcess, stopProcess, redact } from '../process.mjs';
 import { parseEvent } from './cli.mjs';
 import { isPreviousSessionTaskNotice } from './claude-events.mjs';
-import { prepareExternalClaude } from '../external-tools-claude.mjs';
+import { prepareExternalClaude } from '../external-tools/claude-launch.mjs';
+import { externalToolServers } from '../external-tools/claude-tools.mjs';
 
 // Claude Code reports a background agent or workflow in a later native turn of
 // the same session; `claude -p` holds its result for exactly these task types.
@@ -12,7 +13,7 @@ import { prepareExternalClaude } from '../external-tools-claude.mjs';
 const HOLDING_TASKS=new Set(['local_agent','local_workflow']);
 
 export async function runClaude({runtime,options,session,initialContext,prompt,contextTools,contextEnv={},images=[],cwd,signal,emit,setControl,makeQuery=query,sdkOptions={},backgroundSettleMs=30000}) {
-  let stream,child,finishInput,wakeInput,externalCleanup,canceled=false,accepting=true,failure='';
+  let stream,child,finishInput,wakeInput,externalCleanup,externalTools,canceled=false,accepting=true,failure='';
   const queued=[],inFlight=new Map();
   const abortController=new AbortController(),pending=new Map();
   const inputDone=new Promise(resolve=>finishInput=resolve);
@@ -144,6 +145,9 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
       const shape={};for(const [key,schema]of Object.entries(def.inputSchema.properties)){let value=schema.enum?z.enum(schema.enum):schema.type==='array'?z.array(z.string()).min(schema.minItems||0).max(schema.maxItems||100):schema.type==='integer'?z.number().int():z.string();if(!(def.inputSchema.required||[]).includes(key))value=value.optional();shape[key]=value;}
       return tool(def.name,def.description,shape,async args=>{try{return {content:[{type:'text',text:JSON.stringify(await contextTools.call(def.name,args))}]};}catch(error){return {isError:true,content:[{type:'text',text:error.message}]};}});
     })}):null;
+    externalTools=externalToolServers({runtime,cwd,signal:abortController.signal,canUseTool,emit});
+    const hostServers={...sdkOptions.mcpServers,...contextMcp?{starport_context:contextMcp}:{},...externalTools.servers};
+    const hostAllowed=[...(sdkOptions.allowedTools||[]),...contextMcp?contextTools.definitions.map(def=>'mcp__starport_context__'+def.name):[],...externalTools.allowed];
     stream=makeQuery({prompt:input(),options:{pathToClaudeCodeExecutable:runtime.command,cwd,abortController,
       settingSources:['user','project','local'],systemPrompt:{type:'preset',preset:'claude_code'},env:childEnvironment(),
       includePartialMessages:true,forwardSubagentText:true,permissionMode:options.permissionMode,permissionPrompts:'host',canUseTool,
@@ -151,7 +155,7 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
       ...(options.model?{model:options.model}:{}),...(options.effort?{effort:options.effort}:{}),...(session?{resume:session}:{}),
       ...sdkOptions,env:childEnvironment({...sdkOptions.env,...contextEnv}),
       extraArgs:{...(!session&&options.worktree?{worktree:null}:{}),...sdkOptions.extraArgs,'replay-user-messages':null},
-      ...(contextMcp?{mcpServers:{...sdkOptions.mcpServers,starport_context:contextMcp},allowedTools:[...(sdkOptions.allowedTools||[]),...contextTools.definitions.map(def=>'mcp__starport_context__'+def.name)]}:{}),
+      ...(contextMcp||externalTools.allowed.length?{mcpServers:hostServers,allowedTools:hostAllowed}:{}),
       spawnClaudeCodeProcess:({args,cwd,env,signal})=>(child=sdkOptions.spawnClaudeCodeProcess?sdkOptions.spawnClaudeCodeProcess({args,cwd,env,signal}):startProcess(runtime.command,[...(runtime.prefixArgs||[]),...args],{cwd,env,signal}))}});
     try{for await(const message of stream){
       // Native echoes acknowledge delivery; a result identifies which inputs it
@@ -224,8 +228,9 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
   }catch(error){if(canceled)error.canceled=true;throw error;}
   finally{
     clearTimeout(settleTimer);
+    abortController.abort();
     accepting=false;signal?.removeEventListener('abort',stop);finishInput();
     for(const [id,request] of pending)resolveRequest(id,request.deny('本次执行已结束，权限请求失效。'));
-    try{stream?.close();if(child)await stopProcess(child);}finally{await externalCleanup?.();}
+    try{stream?.close();if(child)await stopProcess(child);await externalTools?.settled();}finally{await externalCleanup?.();}
   }
 }

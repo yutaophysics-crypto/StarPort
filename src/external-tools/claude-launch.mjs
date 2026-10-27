@@ -1,11 +1,15 @@
-import { readFile, mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+// Launch arguments for a Claude Code session that has external tools. The
+// owner's settings and MCP servers (proxies, browsers) are copied into private
+// per-run files with the extra restrictions added; the originals never change.
+import { readFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { restrictToCurrentUser } from './process.mjs';
-import { validateToolSnapshot, insideToolPath } from './external-tools.mjs';
+import { writePrivateFile } from '../process.mjs';
+import { validateToolSnapshot, insideToolPath } from './grants.mjs';
 
-const terminal=fileURLToPath(new URL('../scripts/claude-workspace-terminal.mjs',import.meta.url));
+// Native tools only; shell access goes through the sandboxed terminal instead.
+const NATIVE_TOOLS='Read,Glob,Grep,Edit,Write,AskUserQuestion';
+
 async function configuration(value,cwd){return JSON.parse(value.trim().startsWith('{')?value:await readFile(resolve(cwd,value),'utf8'));}
 function splitArgs(args,flag,multiple=false){
   const values=[],rest=[];
@@ -15,6 +19,11 @@ function splitArgs(args,flag,multiple=false){
   }
   return {values,rest};
 }
+// Claude permission rules write an absolute Windows path as //c/dir.
+const editDenyRule=path=>'Edit(/'+path.replaceAll('\\','/').replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase())+'/**)';
+
+// The sandbox comes from an owner-configured workspace terminal (legacy
+// --mcp-config entry) or else the registered native codex.exe.
 export async function externalToolCapability(runtime,cwd=process.cwd(),sandboxFallback){
   if(process.platform!=='win32')return {supported:false,reason:'外部工具隔离目前支持 Windows 上的 Claude Code'};
   const {values}=splitArgs(runtime?.prefixArgs||[],'--mcp-config',true);
@@ -38,17 +47,16 @@ export async function prepareExternalClaude(runtime,cwd){
   const launchRoot=resolve(policy.dataDir,'external-tools-runs');await mkdir(launchRoot,{recursive:true});
   const directory=await mkdtemp(join(launchRoot,'run-'));
   const cleanup=async()=>{if(!existsSync(directory))return;if(!insideToolPath(realpathSync.native(directory),realpathSync.native(launchRoot))||directory===launchRoot)throw Error('工具临时配置清理路径无效');await rm(directory,{recursive:true,force:true,maxRetries:3,retryDelay:100});};
-  const save=async(name,value)=>{const file=join(directory,name);await writeFile(file,'',{mode:0o600});await restrictToCurrentUser(file);await writeFile(file,JSON.stringify(value),{mode:0o600});return file;};
+  const save=async(name,value)=>{const file=join(directory,name);await writePrivateFile(file,JSON.stringify(value));return file;};
   try{
-    const manifest=await save('policy.json',{workspace:policy.workspace,tools:policy.tools});
-    config.mcpServers.starport_workspace={...config.mcpServers.starport_workspace,command:process.execPath,args:[terminal],
-      env:{...config.mcpServers.starport_workspace?.env,STARPORT_CODEX_SANDBOX:capability.sandboxExecutable,STARPORT_EXTERNAL_TOOLS_MANIFEST:manifest}};
-    const deny=policy.tools.map(tool=>'Edit(/'+tool.canonical.replaceAll('\\','/').replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase())+'/**)');
+    // Host the workspace terminal in the SDK too: a resumed native session must
+    // never reconnect a stdio server using a previous turn's deleted manifest.
+    delete config.mcpServers.starport_workspace;
     const preparedSettings={...settings,permissions:{...settings.permissions,
-      blockReadsOutsideWorkingDirectories:true,deny:[...new Set([...(settings.permissions?.deny||[]),...deny])]}};
+      blockReadsOutsideWorkingDirectories:true,deny:[...new Set([...(settings.permissions?.deny||[]),...policy.tools.map(tool=>editDenyRule(tool.canonical))])]}};
     const settingsFile=await save('settings.json',preparedSettings),mcpFile=await save('mcp.json',config);
     const safeArgs=splitArgs(mcpArgs.rest,'--tools',true).rest.filter(arg=>!['--restricted','--strict-mcp-config'].includes(arg));
-    return {runtime:{...runtime,prefixArgs:[...safeArgs,'--restricted','--strict-mcp-config','--tools','Read,Glob,Grep,Edit,Write,AskUserQuestion','--settings',settingsFile,'--mcp-config',mcpFile,
+    return {runtime:{...runtime,workspaceTerminal:{sandboxExecutable:capability.sandboxExecutable},prefixArgs:[...safeArgs,'--restricted','--strict-mcp-config','--tools',NATIVE_TOOLS,'--settings',settingsFile,'--mcp-config',mcpFile,
       ...policy.tools.flatMap(tool=>['--add-dir',tool.canonical])]},cleanup,directory};
   }catch(error){await cleanup();throw error;}
 }

@@ -81,6 +81,14 @@ globalThis.StarportWorkflows = (page => {
   const mountsFor = chatId => (chatId ? (data?.mounts || []).filter(m => m.chatId === chatId) : []);
   const mount = id => (data?.mounts || []).find(m => m.id === id) || null;
   const busyCompanions = () => new Set((data?.running || []).flatMap(run => run.companions));
+  // What a companion is doing now: its earliest step at work, or waiting its turn at its own desk.
+  function companionWork(id) {
+    const steps = (data?.running || []).flatMap(run => run.steps || []).filter(step => step.companionId === id);
+    const working = steps
+      .filter(step => !step.queued && step.started)
+      .sort((a, b) => Date.parse(a.started) - Date.parse(b.started))[0];
+    return working ? { started: working.started } : steps.length ? { queued: true } : null;
+  }
   const chatById = id => (state.chat?.id === id ? state.chat : (state.chats || []).find(c => c.id === id) || null);
   const positionsOf = wf => (wf?.stages || []).flatMap(stage => stage.positions.map(position => ({ stage, position })));
 
@@ -156,6 +164,15 @@ globalThis.StarportWorkflows = (page => {
 
   // --- shared building blocks: ui-kit.js -----------------------------------------------------
   const { el, icon, iconButton, PROVIDER_LABELS } = globalThis.StarportUI;
+
+  // Time spent so far, counting up while the work runs. subagents.js calls tick() each second
+  // along with the page's other clocks.
+  const liveSince = (from, prefix = '') =>
+    el('span', { class: 'live-elapsed', 'data-live-since': from, 'data-live-prefix': prefix, text: prefix + duration(from) });
+  function tick() {
+    for (const node of document.querySelectorAll('[data-live-since]'))
+      node.textContent = node.getAttribute('data-live-prefix') + duration(node.getAttribute('data-live-since'));
+  }
 
   // --- conversations: workflows need a saved chat ------------------------------------------
   async function ensureChat() {
@@ -333,6 +350,9 @@ globalThis.StarportWorkflows = (page => {
     mount,
     mountsFor,
     busyCompanions,
+    companionWork,
+    liveSince,
+    tick,
     positionsOf,
     parseMentions,
     mentioned,

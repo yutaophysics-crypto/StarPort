@@ -2,6 +2,7 @@ import { spawn, execFile } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { promisify } from 'node:util';
+import { writeFile } from 'node:fs/promises';
 export const exec = promisify(execFile);
 
 export function childEnvironment(extra = {}) {
@@ -85,6 +86,10 @@ function currentUserSid(){
 export async function restrictToCurrentUser(file){
   if(process.platform!=='win32')return;
   await exec('icacls.exe',[file,'/inheritance:r','/grant:r','*'+await currentUserSid()+':(F)','*S-1-5-18:(F)'],{windowsHide:true,timeout:10000});
+}
+// The file is created empty and locked down before any content is written.
+export async function writePrivateFile(file,content=''){
+  await writeFile(file,'',{mode:0o600});await restrictToCurrentUser(file);await writeFile(file,content,{mode:0o600});
 }
 export function redact(text) {
   return String(text).replace(/\b(sk-[\w-]{12,}|Bearer\s+[\w.\-]{12,})/gi, '[已隐藏凭据]')

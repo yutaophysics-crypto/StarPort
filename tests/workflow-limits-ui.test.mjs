@@ -145,3 +145,44 @@ test('a finished exam shows each seat folder and its checks, and one unfinished 
     assert.match(stray.attrs.title, /考位2-GPT/);
   }
 });
+
+test('companions at work show a clock that keeps counting, and a request waiting its turn shows 排队中', async () => {
+  const started = new Date(Date.now() - 192000).toISOString();
+  const f = ui(undefined, 'zh', { running: [
+    { id: 'r1', companions: ['a', 'b'], steps: [{ companionId: 'a', started, queued: false }, { companionId: 'b', started, queued: true }] },
+    { id: 'r2', companions: ['a'], steps: [{ companionId: 'a', started: new Date().toISOString(), queued: true }] }
+  ] });
+  const W = f.context.StarportWorkflows; await W.load();
+  assert.deepEqual({ ...W.companionWork('a') }, { started }, 'the step at work wins over one queued behind it');
+  assert.deepEqual({ ...W.companionWork('b') }, { queued: true });
+  assert.equal(W.companionWork('c'), null);
+
+  const run = { id: 'r', title: 'test', trigger: 'dispatch', started, status: 'running', steps: [
+    { key: 'a', companionId: 'a', companionName: '甲', status: 'running', started },
+    { key: 'b', companionId: 'b', companionName: '乙', status: 'running', started, queued: true }
+  ] };
+  const card = W.renderCard({ id: 'm', details: { workflowRun: run } });
+  const clocks = f.all(card).filter(n => n.attrs?.['data-live-since']);
+  assert.equal(clocks.length, 2, 'the card and the working step count; the queued step does not');
+  assert.match(f.text(card), /已 3 分 1\d 秒/);
+  assert.match(f.text(card), /排队中/);
+  assert.match(f.text(card), /甲 工作中…/);
+
+  // The page's one-second tick moves every clock without drawing the card again.
+  f.body.append(card);
+  f.document.querySelectorAll = () => f.all(f.body).filter(n => n.attrs?.['data-live-since']);
+  for (const clock of clocks) clock.setAttribute('data-live-since', new Date(Date.now() - 3725000).toISOString());
+  W.tick();
+  assert.deepEqual(clocks.map(clock => clock.textContent), ['已 1 小时 2 分', '已 1 小时 2 分']);
+
+  run.steps = [run.steps[1]];
+  const queued = W.renderCard({ id: 'm', details: { workflowRun: run } });
+  assert.match(f.text(queued), /乙 排队中，做完手上的事就开始/);
+  assert.match(f.text(queued), /已等 3 分/);
+  assert.equal(f.all(queued).find(n => n.className?.startsWith('wf-status')).className, 'wf-status queued');
+
+  // A step stopped while it waited is shown as stopped, whatever flag it kept.
+  run.status = 'stopped'; run.ended = new Date().toISOString(); run.steps[0].status = 'stopped';
+  const stopped = f.text(W.renderCard({ id: 'm', details: { workflowRun: run } }));
+  assert.equal(stopped.includes('排队中'), false); assert.match(stopped, /已停止/);
+});

@@ -229,6 +229,9 @@ html[data-theme=deep-space] {
 .room-member.running .room-member-status {
   color: var(--room-busy);
 }
+.room-member.queued .room-dot {
+  background: color-mix(in srgb, var(--room-busy) 40%, transparent);
+}
 .room-member.failed .room-dot {
   background: var(--room-danger);
 }

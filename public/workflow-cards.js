@@ -18,11 +18,17 @@
     oneLine,
     splitDuty,
     stopRun,
-    startReply
+    startReply,
+    liveSince
   } = Workflows;
   const STEP_LABEL = { waiting: '等待', running: '工作中', done: '完成', failed: '失败', stopped: '已停止' };
   const TRIGGER_LABEL = { schedule: '定时', catchup: '补跑', manual: '手动', dispatch: '点名' };
   const LIVE = ['planning', 'running'];
+  // A step waiting for its companion to finish an earlier request at the same desk.
+  const queued = step => step.status === 'running' && !!step.queued;
+  const stepLabel = step => (queued(step) ? '排队中' : STEP_LABEL[step.status] || step.status);
+  // Meta parts joined by dots; a part may be a live clock rather than text.
+  const metaParts = parts => parts.filter(Boolean).flatMap((part, i) => (i ? [' · ', part] : [part]));
 
   const expanded = new Map();
   const fullSteps = new Set();
@@ -59,7 +65,7 @@
   }
 
   function stepMark(step) {
-    if (step.status === 'running') return el('i', { class: 'wf-dot running' });
+    if (step.status === 'running') return el('i', { class: queued(step) ? 'wf-dot' : 'wf-dot running' });
     if (step.status === 'waiting') return el('i', { class: 'wf-dot' });
     if (step.status === 'failed' || step.verdict === 'fail') return icon('cross', 'wf-mark-icon bad');
     if (step.status === 'stopped') return el('i', { class: 'wf-dot stopped' });
@@ -85,7 +91,9 @@
     if (rejected)
       return `${rejected.companionName}：${oneLine(splitDuty(rejected.output).body.split('\n').filter(Boolean).at(-1), 140)}`;
     const running = steps.filter(s => s.status === 'running');
-    if (running.length) return `${running.map(s => s.companionName).join('、')} 工作中…`;
+    const working = running.filter(s => !queued(s));
+    if (working.length) return `${working.map(s => s.companionName).join('、')} 工作中…`;
+    if (running.length) return `${running.map(s => s.companionName).join('、')} 排队中，做完手上的事就开始`;
     if (run.status === 'stopped') return run.notes?.at(-1) || '已停止';
     const last = steps.findLast(s => s.output);
     return last ? `${last.companionName}：${oneLine(splitDuty(last.output).body, 140)}` : run.notes?.at(-1) || '';
@@ -157,11 +165,11 @@
     const meta = [
       step.label && step.label !== step.companionName ? step.label : '',
       step.attempt ? `第 ${step.attempt + 1} 次` : '',
-      step.status === 'running' && step.started ? `已 ${duration(step.started)}` : '',
+      step.status === 'running' && step.started && !queued(step) ? liveSince(step.started, '已 ') : '',
       typeof step.timeLimitMinutes === 'number' ? limitText(run, step.timeLimitMinutes) : '',
       step.checkpoint ? tr('进度已保留') : '',
       step.ended && step.started && step.status !== 'running' ? duration(step.started, step.ended) : ''
-    ].filter(Boolean);
+    ];
     const process = step.deskChatId
       ? el(
           'button',
@@ -182,19 +190,16 @@
         avatar(companion(step.companionId) || step, 'room-avatar wf-step-avatar'),
         el('span', { class: 'wf-step-who' }, [
           el('strong', { text: step.companionName }),
-          meta.length ? el('span', { class: 'wf-step-meta', text: meta.join(' · ') }) : null
+          meta.some(Boolean) ? el('span', { class: 'wf-step-meta' }, metaParts(meta)) : null
         ]),
         el('span', { class: 'wf-step-side' }, [
           verdictBadge(step),
           step.verify && step.verdict
             ? null
             : el('span', {
-                class: `wf-step-status ${step.status}`,
+                class: `wf-step-status ${queued(step) ? 'queued' : step.status}`,
                 'aria-live': 'polite',
-                text:
-                  step.status === 'running' && step.runtime?.stalled
-                    ? tr('未收到新活动')
-                    : STEP_LABEL[step.status] || step.status
+                text: step.status === 'running' && step.runtime?.stalled ? tr('未收到新活动') : stepLabel(step)
               }),
           process
         ])
@@ -230,6 +235,9 @@
     if (run.kind === 'exam' && run.status === 'proposed') return Workflows.renderExamProposal(msg);
     const exam = run.kind === 'exam';
     const live = LIVE.includes(run.status);
+    // Nothing at work yet: every live step is waiting for its companion's earlier request.
+    const waiting =
+      live && (run.steps || []).some(queued) && !(run.steps || []).some(s => s.status === 'running' && !queued(s));
     const failed = failedRun(run);
     const open = expanded.has(run.id) ? expanded.get(run.id) : live || failed;
     const card = el('div', {
@@ -242,16 +250,16 @@
       run.isolated ? tr('单向可见') : '',
       when(run.started),
       typeof run.timeLimitMinutes === 'number' ? limitText(run, run.timeLimitMinutes) : '',
-      run.ended ? `用时 ${duration(run.started, run.ended)}` : live ? `已 ${duration(run.started)}` : ''
-    ].filter(Boolean);
+      run.ended ? `用时 ${duration(run.started, run.ended)}` : live ? liveSince(run.started, waiting ? '已等 ' : '已 ') : ''
+    ];
     const head = el('button', { type: 'button', class: 'wf-card-head', 'aria-expanded': String(open) }, [
       el('span', { class: 'wf-card-title' }, [
         el('strong', { text: run.title }),
-        el('span', { class: 'wf-card-meta', text: meta.join(' · ') })
+        el('span', { class: 'wf-card-meta' }, metaParts(meta))
       ]),
-      el('span', { class: `wf-status ${run.status}` }, [
-        live ? el('i', { class: 'wf-dot running' }) : null,
-        RUN_LABEL[run.status] || run.status
+      el('span', { class: `wf-status ${waiting ? 'queued' : run.status}` }, [
+        live ? el('i', { class: waiting ? 'wf-dot' : 'wf-dot running' }) : null,
+        waiting ? '排队中' : RUN_LABEL[run.status] || run.status
       ]),
       icon('chevron', 'wf-chevron')
     ]);
@@ -264,8 +272,8 @@
           el(
             'span',
             {
-              class: `wf-chip ${step.status}`,
-              title: `${step.companionName}${step.label ? ' · ' + step.label : ''} · ${STEP_LABEL[step.status] || step.status}`
+              class: `wf-chip ${step.status}${queued(step) ? ' queued' : ''}`,
+              title: `${step.companionName}${step.label ? ' · ' + step.label : ''} · ${stepLabel(step)}`
             },
             [el('span', { class: 'wf-chip-avatar', text: step.avatar || '·' }), stepMark(step)]
           )

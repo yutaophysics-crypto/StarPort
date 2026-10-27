@@ -59,7 +59,12 @@ globalThis.StarportAgentsRoom = (() => {
     return null;
   }
 
+  // A companion at work shows a clock that keeps counting, so its progress is visible
+  // without opening the run card.
   function memberStatus(c) {
+    const work = W.companionWork(c.id);
+    if (work?.queued) return { kind: 'queued', text: '排队中' };
+    if (work) return { kind: 'running', text: '工作中', since: work.started };
     if (W.busyCompanions().has(c.id)) return { kind: 'running', text: '工作中' };
     const last = lastStep(c.id)?.step;
     if (last?.status === 'failed') return { kind: 'failed', text: '上次没完成' };
@@ -237,7 +242,8 @@ globalThis.StarportAgentsRoom = (() => {
       el('span', { class: 'room-member-side' }, [
         el('span', { class: 'room-member-status' }, [
           el('i', { class: 'room-dot' }),
-          el('span', { text: status.text })
+          el('span', { text: status.text }),
+          status.since ? W.liveSince(status.since, ' · ') : null
         ]),
         el('span', { class: 'room-member-tools' }, [
           el('button', {
