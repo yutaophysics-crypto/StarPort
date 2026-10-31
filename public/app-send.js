@@ -23,7 +23,7 @@ let sendingMessage = false;
 let stoppingRun = null;
 
 // The first message of a new chat creates it, with the tool options chosen beforehand.
-async function createDraftChat(text) {
+async function createDraftChat() {
   const sourceDraft = draftKey();
   const draftOptions = opts();
   const chat = await api('/chats', 'POST', {
@@ -33,7 +33,7 @@ async function createDraftChat(text) {
   });
   state.chat = chat;
   globalThis.StarportComposer?.moveDraft(sourceDraft, draftKey());
-  localStorage.setItem(draftKey(), text);
+  localStorage.setItem(draftKey(), $('#prompt').value);
   await queueSave({ options: draftOptions });
   localStorage.setItem('hub-chat', chat.id);
   localStorage.removeItem('hub-draft-new');
@@ -78,7 +78,7 @@ async function sendMessage(text, metadata = {}) {
     if (!metadata.replyTo) await globalThis.StarportComposer?.prepareVideos(text);
     if (!unchanged()) throw new Error(t('读取期间对话或输入已改变，请检查字幕附件后重新发送'));
     attachmentIds = metadata.replyTo ? [] : globalThis.StarportComposer?.ids() || [];
-    if (!state.chat) await createDraftChat(text);
+    if (!state.chat) await createDraftChat();
 
     // Replying to a run card sends that run's result along with the message.
     const chatId = state.chat.id;
@@ -95,11 +95,7 @@ async function sendMessage(text, metadata = {}) {
       if (globalThis.StarportComposer?.consume) StarportComposer.consume(attachmentIds, sentDraft);
       else globalThis.StarportComposer?.clear(sentDraft);
     }
-    if (!metadata.preserveDraft && state.chat?.id === chatId && $('#prompt').value === originalInput) {
-      localStorage.removeItem(sentDraft);
-      $('#prompt').value = '';
-      resizePrompt();
-    }
+    if (!metadata.preserveDraft) clearSentDraft(sentDraft, originalInput);
     acceptMessageResult(chatId, accepted);
     await liveSync?.reconcile();
     refresh().catch(error => toast(error.message));
@@ -145,17 +141,13 @@ async function sendGuidance(text, metadata = {}) {
       throw new Error(result.user?.details?.error || t('未送达原工具'));
     }
     if (attachmentIds.length) globalThis.StarportComposer?.consume(attachmentIds, key);
+    if (!metadata.preserveDraft) clearSentDraft(key, originalInput);
     if (state.chat?.id === chatId) {
       liveSync?.receive({
         chatId,
         ...(result.user ? { message: result.user } : {}),
         ...(result.queue ? { queue: result.queue, queueVersion: result.queueVersion } : {})
       });
-      if (!metadata.preserveDraft && $('#prompt').value === originalInput) {
-        localStorage.removeItem(key);
-        $('#prompt').value = '';
-        resizePrompt();
-      }
       renderMessages();
     }
     liveSync?.reconcile();
@@ -193,6 +185,23 @@ async function stopCurrentRun() {
     if (stoppingRun === runId) stoppingRun = null;
     renderComposerAction();
   }
+}
+
+// Once a send is accepted, the sent text leaves the draft it came from: the composer while that
+// conversation is still open, otherwise its saved draft, which would bring the sent message back
+// on return. Anything typed after it stays; a draft edited mid-send is left alone.
+// True when the open composer changed.
+function clearSentDraft(key, sent) {
+  const open = draftKey() === key;
+  const value = open ? $('#prompt').value : localStorage.getItem(key) ?? '';
+  if (!value.startsWith(sent)) return false;
+  const rest = sent ? value.slice(sent.length).replace(/^\s+/, '') : value;
+  if (rest) localStorage.setItem(key, rest);
+  else localStorage.removeItem(key);
+  if (!open || rest === value) return false;
+  $('#prompt').value = rest;
+  resizePrompt();
+  return true;
 }
 
 function resizePrompt() {

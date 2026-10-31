@@ -15,7 +15,10 @@
     const node=nodes.find(node=>node.dataset.activityFocus===focus.key&&node.getClientRects().length)||nodes.find(node=>node.dataset.activityFocus===focus.root);
     node?.focus({preventScroll:true});focus=null;
   }
-  function render(message,{el,t,markdown,chatId}){
+  // A companion's turn in a run card (workflow-process.js) uses the same view with a few options:
+  // answer:false leaves the answer to the card, autoOpen:false keeps it closed until opened, lead()
+  // adds rows above the steps, pending shows it before the turn has loaded, onOpen() loads it.
+  function render(message,{el,t,markdown,chatId,answer:showAnswer=true,autoOpen=true,lead=null,pending=false,onOpen=null}){
     const scope=chatId+':'+message.id,level=model.level,answer=model.answer(message),entries=model.entries(message);
     const root=el('div',{class:'native-activity native-'+message.provider,'data-provider':message.provider});
     const progress=message.details?.contextCompaction;
@@ -93,8 +96,8 @@
       },views.get(key,level==='full'));
     }
     // Track terminal transitions even while the workflow is hidden.
-    const workflowKey=scope+':workflow',open=views.root(workflowKey,message.status);
-    if(level!=='hidden'&&(entries.length||message.status==='running')&&(!compacting||entries.length)){
+    const workflowKey=scope+':workflow',open=autoOpen?views.root(workflowKey,message.status):views.get(workflowKey,false);
+    if(level!=='hidden'&&(entries.length||message.status==='running'||pending||lead)&&(!compacting||entries.length)){
       const agentCount=agent=>1+agent.children.reduce((total,child)=>total+agentCount(child),0);
       const running=message.status==='running',waiting=running&&model.rows(message).some(row=>model.status(row,message)==='pending'),count=entries.filter(entry=>entry.type==='record').length,agents=entries.filter(entry=>entry.type==='agent').reduce((total,entry)=>total+agentCount(entry.agent),0);
       const summary=el('summary',{class:'workflow-heading'},[
@@ -103,21 +106,24 @@
         el('span',{class:'workflow-count',text:[count?t('{count} 个步骤',{count}):'',agents?t('{count} 个子任务',{count:agents}):''].filter(Boolean).join(' · ')}),
         el('span',{class:'workflow-duration','data-start':Date.parse(message.created),'data-end':message.details?.endedAt,'data-status':message.status})]);
       root.append(disclosure(workflowKey,{class:'native-workflow','data-level':level,'data-status':message.status},summary,node=>{
+        onOpen?.();
         const body=el('div',{class:'workflow-body'});
         const modes=el('div',{class:'workflow-view-switch','aria-label':t('执行过程显示')});
         for(const [value,label]of [['overview','概览'],['full','完整']]){
           const button=el('button',{type:'button',text:t(label),'aria-pressed':String(level===value),'data-activity-focus':workflowKey+':'+value});
           button.onclick=()=>{setLevel(value);views.set(workflowKey,true);renderMessages();};modes.append(button);
         }
-        body.append(modes);
-        for(const entry of entries)body.append(entry.type==='agent'?agentView(entry.agent):record(entry.record));
-        if(running&&!entries.some(entry=>entry.type==='agent'?entry.agent.status==='running':['running','pending','paused'].includes(model.status(entry.record,message))))
+        body.append(modes,...lead?.()||[]);
+        if(pending)body.append(el('p',{class:'workflow-thinking',role:'status'},[el('span',{class:'native-glyph running',text:'◌','aria-hidden':'true'}),t('正在读取…')]));
+        else for(const entry of entries)body.append(entry.type==='agent'?agentView(entry.agent):record(entry.record));
+        if(lead&&!pending&&!running&&!entries.length)body.append(el('p',{class:'native-empty',text:t('这一轮没有工具调用或思考记录。')}));
+        if(running&&!pending&&!entries.some(entry=>entry.type==='agent'?entry.agent.status==='running':['running','pending','paused'].includes(model.status(entry.record,message))))
           body.append(el('p',{class:'workflow-thinking',role:'status'},[el('span',{class:'native-glyph running',text:'◌','aria-hidden':'true'}),t(compacting?'正在压缩上下文…':'正在思考')]));
         if(!message.details?.activity?.length&&message.details?.tools?.length)body.append(el('small',{class:'native-history-note',text:t('旧记录未保存完整过程，显示已有工具记录。')}));
         node.append(body);
       },open));
     }
-    if(answer.text)root.append(el('div',{class:'native-final-answer'},[markdown(answer.text)]));
+    if(showAnswer&&answer.text)root.append(el('div',{class:'native-final-answer'},[markdown(answer.text)]));
     return root;
   }
   function preference(){

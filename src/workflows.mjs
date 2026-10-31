@@ -14,7 +14,7 @@ import { CompanionClock, companionLimits, validateCompanionLimits } from './comp
 import { fail, now, newId, clip, tail, sleep, localTime, text, oneLine } from './workflows/common.mjs';
 import { KNOWLEDGE, EXAM_LIMITS, examMinutes, examSource, resolveSource, placements, prepareSeats, auditSeat, strayCalls, freshFolder, seatFolder, safeName, sizeText } from './workflows/exam.mjs';
 import { DESK_FIELDS, DEFAULT_PLANNERS, companionOptions, companionData, deskOptions, workflowData, triggerData, nextSlot, assignmentsFor } from './workflows/records.mjs';
-import { parseMentions, verdict, heuristicPlan, plannerPrompt, parsePlan } from './workflows/planning.mjs';
+import { MAIN, parseMentions, verdict, heuristicPlan, plannerPrompt, parsePlan } from './workflows/planning.mjs';
 import { cardText, runContext } from './workflows/cards.mjs';
 import * as prompts from './workflows/prompts.mjs';
 import { runUnattended } from './workflows/desk.mjs';
@@ -24,11 +24,13 @@ import { migrateBrowserData } from './workflows/migrate.mjs';
 import { handleWorkflowRoutes } from './workflows/routes.mjs';
 
 export { ACCESS, DESK_FIELDS, DEFAULT_PLANNERS, companionOptions, companionData, deskOptions, workflowData, triggerData, nextSlot } from './workflows/records.mjs';
-export { parseMentions, verdict, heuristicPlan } from './workflows/planning.mjs';
+export { MAIN, parseMentions, verdict, heuristicPlan } from './workflows/planning.mjs';
 export { planTable, cardText } from './workflows/cards.mjs';
 export { DEFAULT_PLAN_TEMPLATE, splitLedger } from './workflows/ledger.mjs';
 
 const TICK_MS=20000,GRACE_MS=2*60*1000;
+// Calls nest at most this deep; one caller's turn makes at most CALL_LIMIT calls, CALL_PARALLEL at once.
+const CALL_DEPTH=3,CALL_LIMIT=8,CALL_PARALLEL=4;
 
 export class Workflows {
   // examRoot is where exam folders go; by default StarPortExams on the user's desktop.
@@ -41,6 +43,7 @@ export class Workflows {
     this.recover();
     runner.resolveRunRef=(chatId,ref)=>this.runReference(chatId,ref);
     runner.proposeExam=(chatId,args)=>this.proposeExam(chatId,args);
+    runner.companionCalls={grant:(chat,options)=>this.callGrant(chat,options),session:grant=>this.callSession(grant)};
   }
   broadcast(reason,chatId=null){this.broadcastRaw('workflows',{reason,...chatId?{chatId}:{}});}
   start(){
@@ -68,6 +71,8 @@ export class Workflows {
   decode(row){return row?{id:row.id,...JSON.parse(row.data),created:row.created,updated:row.updated}:null;}
   companions(){return this.db.prepare('SELECT * FROM companions ORDER BY created,rowid').all().map(row=>this.companionView(row));}
   companion(id){return typeof id==='string'?this.companionView(this.db.prepare('SELECT * FROM companions WHERE id=?').get(id)):null;}
+  // Who an @-request step belongs to: a companion, or the conversation's own model.
+  participant(id){return id===MAIN.id?MAIN:this.companion(id);}
   // Older companions only have a preset; a choice the tool no longer offers falls back to it too.
   companionView(row){
     const companion=this.decode(row);if(!companion)return null;
@@ -108,6 +113,35 @@ export class Workflows {
       this.db.prepare(`UPDATE room_members SET ${column}=? WHERE group_id=? AND companion_id=?`).run(raw[key]?1:0,groupId,companionId);
     }
     this.broadcast('rooms');return this.memberMemory(groupId,companionId);
+  }
+  // Per room, whom each caller may call: { groupId: { callerId: [calleeId] } }. Only current members count.
+  roomCalls(){
+    const result={},rooms=this.rooms();
+    for(const row of this.db.prepare('SELECT group_id,caller_id,callee_id FROM room_calls ORDER BY rowid').all()){
+      const members=rooms[row.group_id]||[];
+      if((row.caller_id===MAIN.id||members.includes(row.caller_id))&&members.includes(row.callee_id))((result[row.group_id]||={})[row.caller_id]||=[]).push(row.callee_id);
+    }
+    return result;
+  }
+  callees(groupId,callerId){
+    const members=this.members(groupId);
+    if(callerId!==MAIN.id&&!members.includes(callerId))return [];
+    return this.db.prepare('SELECT callee_id FROM room_calls WHERE group_id=? AND caller_id=? ORDER BY rowid').all(groupId,callerId).map(row=>row.callee_id).filter(id=>members.includes(id));
+  }
+  setRoomCalls(groupId,callerId,raw={}){
+    if(!this.db.prepare('SELECT id FROM groups WHERE id=?').get(groupId))throw fail('房间不存在',404);
+    const members=this.members(groupId),ids=raw.callees;
+    if(callerId!==MAIN.id&&!members.includes(callerId))throw fail('这位伙伴不在这个房间里',404);
+    if(!Array.isArray(ids)||ids.length>members.length||ids.some(id=>typeof id!=='string'))throw fail('可调用的伙伴无效');
+    if(ids.some(id=>!members.includes(id)))throw fail('只能调用房间里的伙伴');
+    if(ids.includes(callerId))throw fail('伙伴不能调用自己');
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      this.db.prepare('DELETE FROM room_calls WHERE group_id=? AND caller_id=?').run(groupId,callerId);
+      for(const id of new Set(ids))this.db.prepare('INSERT INTO room_calls(group_id,caller_id,callee_id) VALUES(?,?,?)').run(groupId,callerId,id);
+      this.db.exec('COMMIT');
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+    this.broadcast('rooms');return {callees:this.callees(groupId,callerId)};
   }
   groupName(groupId){return groupId?this.db.prepare('SELECT name FROM groups WHERE id=?').get(groupId)?.name||'':'';}
   settings(){
@@ -152,7 +186,7 @@ export class Workflows {
     return {...mount,blockers:this.blockers(mount),runningId:run?.id||null,runningMessageId:run?.card.id||null,pendingProposals:pending,ledgerPath:target.dir,ledgerProject:target.project?.name||null};
   }
   state(){
-    return {companions:this.companions(),rooms:this.rooms(),roomMemory:this.roomMemory(),workflows:this.workflows(),mounts:this.mounts().map(mount=>this.mountView(mount)),
+    return {companions:this.companions(),rooms:this.rooms(),roomMemory:this.roomMemory(),roomCalls:this.roomCalls(),workflows:this.workflows(),mounts:this.mounts().map(mount=>this.mountView(mount)),
       settings:this.settings(),deskFields:DESK_FIELDS,scores:this.scores(),migrated:!!this.store.setting('workflows.migrated'),defaults:{planTemplate:DEFAULT_PLAN_TEMPLATE,planners:DEFAULT_PLANNERS},
       // The page offers the one-way switch only when this is present: a server not yet restarted would ignore it.
       oneWay:true,
@@ -185,6 +219,7 @@ export class Workflows {
         if(changed)this.saveMount(mount);
       }
       this.db.prepare('DELETE FROM companions WHERE id=?').run(id);
+      this.db.prepare('DELETE FROM room_calls WHERE caller_id=?').run(id);
       for(const desk of desks)this.db.prepare('DELETE FROM chats WHERE id=?').run(desk);
       this.db.exec('COMMIT');
     }catch(error){this.db.exec('ROLLBACK');throw error;}
@@ -211,6 +246,7 @@ export class Workflows {
       if(changed)this.saveMount(mount);
     }
     this.db.prepare('DELETE FROM room_members WHERE group_id=? AND companion_id=?').run(groupId,companionId);
+    this.db.prepare('DELETE FROM room_calls WHERE group_id=? AND (caller_id=? OR callee_id=?)').run(groupId,companionId,companionId);
     this.broadcast('rooms');return {ok:true,changes,members:this.members(groupId)};
   }
   roomMounts(groupId){return this.db.prepare('SELECT m.* FROM workflow_mounts m JOIN chats c ON c.id=m.chat_id WHERE c.group_id=? ORDER BY m.created').all(groupId).map(row=>this.mountRow(row));}
@@ -331,7 +367,8 @@ export class Workflows {
     result.ended=now();run.card.status='complete';this.saveCard(run);this.runs.delete(run.id);
     if(run.mountId){const mount=this.mount(run.mountId);if(mount){mount.lastStatus=result.status;mount.lastMessageId=run.card.id;this.saveMount(mount);}}
     this.broadcastRaw('refresh',{chatId:run.chatId});this.broadcast('runs',run.chatId);
-    if(!run.stopped&&!this.closing){
+    // A call is part of its caller's work: the caller's own end is the one worth a popup.
+    if(!run.stopped&&!this.closing&&result.kind!=='call'){
       const last=(result.steps||[]).filter(step=>step.output||step.error).at(-1);
       try{this.onFinished?.({chatId:run.chatId,kind:'workflow',status:result.status,label:result.title||'',text:last?.output||last?.error||result.notes.at(-1)||''});}catch{}
     }
@@ -345,10 +382,10 @@ export class Workflows {
     })();
   }
   addStep(run,row,attempt=0){
-    const companion=this.companion(row.companionId),step={key:row.key||row.companionId,order:row.order,positionId:row.positionId||null,label:row.label||'',stageName:row.stageName||'',
+    const companion=this.participant(row.companionId),step={key:row.key||row.companionId,order:row.order,positionId:row.positionId||null,label:row.label||'',stageName:row.stageName||'',
       task:row.task,verify:!!row.verify,companionId:row.companionId,companionName:companion?.name||'（已删除的伙伴）',avatar:companion?.avatar||'',
       status:'waiting',attempt,deskChatId:null,deskMessageId:null,output:'',error:'',verdict:null,notes:[],ledger:null,started:null,ended:null,...row.seat?{seat:{...row.seat}}:{}};
-    run.card.details.workflowRun.steps.push(step);if(companion)run.companions.add(companion.id);
+    run.card.details.workflowRun.steps.push(step);if(companion&&!companion.main)run.companions.add(companion.id);
     return step;
   }
   // A manual run may carry one instruction from the input box; it goes to every position of this run only.
@@ -383,25 +420,88 @@ export class Workflows {
     if(typeof value!=='string'||!value.trim()||value.length>100000)throw fail('请输入 1–100000 字符的消息');
     const chat=this.store.chat(chatId);if(!chat||chat.options?.desk)throw fail('对话不存在',404);
     if(!chat.group_id)throw fail('这个对话不在房间里，不能点名伙伴');
-    const mentions=parseMentions(value,this.roomCompanions(chat.group_id));
-    if(!mentions.length)throw fail('没有点名房间里的伙伴');
-    const unique=[...new Map(mentions.map(m=>[m.companion.id,m])).values()];
+    const mentions=parseMentions(value,this.roomCompanions(chat.group_id),{main:true});
+    const unique=[...new Map(mentions.map(m=>[m.companion.id,m])).values()],main=unique.some(m=>m.companion.main);
+    if(!unique.some(m=>!m.companion.main))throw fail(main?'只点名了主模型：直接发给对话就好':'没有点名房间里的伙伴');
     // One-way: the companions get only this message; their answers still come back to the conversation.
     const isolated=raw.isolated===true,flag=isolated?{isolated:true}:{};
-    const user=this.store.message(chatId,'user',null,value,'complete',{dispatch:{companions:unique.map(m=>m.companion.id),...flag}});
+    const user=this.store.message(chatId,'user',null,value,'complete',{dispatch:{companions:unique.filter(m=>!m.companion.main).map(m=>m.companion.id),...main?{main:true}:{},...flag}});
     if(chat.title==='新对话')this.store.updateChat(chatId,{title:value.replace(/\s+/g,' ').slice(0,36)});
     const run=this.createRun(chat,{kind:'adhoc',title:`点名 ${unique.map(m=>m.companion.name).join('、')}`,trigger:'dispatch',userMessageId:user.id,...flag,status:unique.length>1?'planning':'running',plan:null});
-    for(const mention of unique)run.companions.add(mention.companion.id);
+    for(const mention of unique)if(!mention.companion.main)run.companions.add(mention.companion.id);
     const context={mode:'adhoc',isolated,text:value,userMessageId:user.id,cardId:run.card.id,retries:this.settings().verifyRetries};
     this.launch(run,async()=>{
       const result=run.card.details.workflowRun;
       result.plan=unique.length===1?{source:'direct',rows:[{order:1,companionId:unique[0].companion.id,task:unique[0].segment||value,verify:false}]}:await this.plan(run,chat,value,unique);
-      for(const row of result.plan.rows){const companion=this.companion(row.companionId);row.companionName=companion?.name||row.companionId;row.key=row.companionId+':'+row.order;}
+      for(const row of result.plan.rows){const companion=this.participant(row.companionId);row.companionName=companion?.name||row.companionId;row.key=row.companionId+':'+row.order;}
       if(run.stopped)return;
       result.status='running';this.saveCard(run);
       await this.executeRows(run,chat,context);
     });
     return {user,message:run.card};
+  }
+  // --- calls: a model at work hands a task to a companion its room lets it call ---
+  // Who calls from this chat, and whom it may call. A desk calls as its companion, for the
+  // conversation it works for; exam seats and Starport's own desks (planners, summaries) never
+  // call. Nobody already up the chain is offered, so calls cannot loop back.
+  callGrant(chat,{chain=[]}={}){
+    const desk=chat?.options?.desk;
+    if(desk&&(!desk.companionId||desk.exam))return null;
+    const parent=desk?this.store.chat(desk.parentChatId):chat;
+    if(!parent?.group_id||chain.length>=CALL_DEPTH)return null;
+    const callerId=desk?desk.companionId:MAIN.id,caller=this.participant(callerId);
+    if(!caller||desk&&!this.members(parent.group_id).includes(callerId))return null;
+    const above=new Set([...chain,callerId]);
+    const callees=this.callees(parent.group_id,callerId).filter(id=>!above.has(id)).map(id=>this.companion(id)).filter(Boolean);
+    return callees.length?{chat:parent,callerId,callerName:caller.name,chain:[...above],callees:callees.map(({id,name,avatar,role})=>({id,name,avatar,role}))}:null;
+  }
+  // One caller's turn: the calls it hands out, which it collects with wait. When the turn ends,
+  // whatever it never collected is stopped.
+  callSession(grant){
+    const calls=new Map();let count=0;
+    return {callees:grant.callees,
+      start:async(args={})=>{
+        const name=String(args.companion||'').trim().replace(/^@/,''),task=typeof args.task==='string'?args.task.trim():'';
+        if(!task||task.length>20000)throw fail('任务说明应为 1–20000 字符');
+        const callee=grant.callees.find(c=>c.id===name||c.name===name);
+        if(!callee)throw fail(`不能调用「${name}」。可以调用：${grant.callees.map(c=>c.name).join('、')}`);
+        // The room may have changed since the turn began.
+        const chat=this.store.chat(grant.chat.id);
+        if(!chat||chat.group_id!==grant.chat.group_id||!this.callees(chat.group_id,grant.callerId).includes(callee.id))throw fail(`房间设置已改，现在不能调用「${callee.name}」`);
+        if(count>=CALL_LIMIT)throw fail(`这一轮最多调用 ${CALL_LIMIT} 次伙伴`);
+        if([...calls.values()].filter(call=>this.runs.has(call.run.id)).length>=CALL_PARALLEL)throw fail(`同时最多 ${CALL_PARALLEL} 个调用在进行，先取回已有的结果`);
+        count++;
+        const call=this.startCall(chat,grant,callee,task);calls.set(call.run.id,call);
+        return {callId:call.run.id,companion:callee.name,status:'running'};
+      },
+      wait:async(args={},signal)=>{
+        const call=calls.get(args.callId);if(!call)throw fail('没有这个调用；callId 来自 starport_companion_call 的返回');
+        const seconds=Number.isInteger(args.seconds)?Math.min(120,Math.max(1,args.seconds)):60;
+        let timer,abort;
+        await Promise.race([call.run.promise,new Promise(resolve=>{timer=setTimeout(resolve,seconds*1000);abort=resolve;signal?.addEventListener('abort',abort);})]);
+        clearTimeout(timer);signal?.removeEventListener('abort',abort);
+        return this.callResult(call);
+      },
+      close:()=>{for(const call of calls.values())if(this.runs.has(call.run.id))try{this.stopRun(call.run.id,`${grant.callerName} 这一轮已结束，没取回的调用已停止`);}catch{}}
+    };
+  }
+  // A call is a run card in the conversation with one step, worked at a fresh desk.
+  startCall(chat,grant,callee,task){
+    const row={order:1,companionId:callee.id,companionName:callee.name,task,verify:false,key:callee.id};
+    const run=this.createRun(chat,{kind:'call',title:`${grant.callerName} 调用 ${callee.name}`,trigger:'call',caller:{id:grant.callerId,name:grant.callerName},plan:{source:'direct',rows:[row]}});
+    const step=this.addStep(run,row);this.saveCard(run);
+    this.launch(run,async()=>{
+      await this.runStep(run,chat,step,{mode:'call',callerName:grant.callerName,chain:grant.chain});
+      if(step.status==='failed')run.card.details.workflowRun.status='failed';
+    });
+    return {run,step,callee};
+  }
+  callResult({run,step,callee}){
+    const status=this.runs.has(run.id)?'running':step.status==='done'?'done':step.status==='stopped'||run.stopped?'stopped':'failed';
+    return {callId:run.id,companion:callee.name,status,
+      ...status==='done'?{output:clip(step.output,20000)}:{},
+      ...['failed','stopped'].includes(status)?{error:step.error||run.card.details.workflowRun.notes.at(-1)||'没有完成'}:{},
+      ...status==='running'?{notice:'还在做；可以先做别的，再调用 starport_companion_wait 取结果'}:{}};
   }
   // Steps sharing an order run in parallel; later orders see earlier output.
   async executeRows(run,chat,context){
@@ -468,7 +568,40 @@ export class Workflows {
     }
     return release;
   }
+  // The conversation's own model takes its part as an ordinary turn of the conversation, after
+  // whatever is already running or queued there. It is attended: approvals reach the user as usual.
+  async runMainStep(run,chat,step,context){
+    step.status='running';step.started=now();this.stepChanged(run);
+    try{
+      let started=null;
+      while(!started){
+        if(run.stopped||this.closing){step.status='stopped';return;}
+        if(this.runner.active.has(chat.id)){
+          if(!step.queued){step.queued=true;this.stepChanged(run);}
+          await sleep(this.deskPollMs??1000);continue;
+        }
+        if(step.queued){delete step.queued;step.started=now();}
+        const current=this.store.chat(chat.id);if(!current)throw new Error('对话不存在');
+        step.provider=current.provider;step.model=current.options?.[current.provider]?.model||null;this.stepChanged(run);
+        try{started=await this.runner.start(chat.id,prompts.mainPrompt({step,context}),[],{dispatchStep:{runId:run.id,cardId:run.card.id,task:step.task}});}
+        // The user sent something in the moment between the check and the start: wait for it.
+        catch(error){if(error.status!==409||!this.runner.active.has(chat.id))throw error;}
+      }
+      step.mainMessageId=started.assistant.id;this.saveCard(run);
+      run.desks.add(chat.id);
+      if(run.stopped)this.runner.stop(chat.id).catch(()=>{});
+      try{await started.done?.catch(()=>{});}finally{run.desks.delete(chat.id);}
+      const message=this.store.messageById(chat.id,started.assistant.id);
+      step.output=clip(String(message?.details?.finalAnswer||message?.content||'').trim(),40000);
+      if(message?.status!=='complete'){step.status=run.stopped?'stopped':'failed';step.error=message?.details?.error||(message?.status==='interrupted'?'主模型这一轮被停止了':'没有完成');return;}
+      if(!step.output){step.status='failed';step.error='主模型没有返回内容';return;}
+      step.status='done';
+      if(step.verify)step.verdict=verdict(step.output)||'unclear';
+    }catch(error){step.status='failed';step.error=redact(error.message).slice(0,2000);}
+    finally{delete step.queued;step.ended=now();this.stepChanged(run);}
+  }
   async runStep(run,chat,step,context){
+    if(step.companionId===MAIN.id)return this.runMainStep(run,chat,step,context);
     const exam=context.mode==='exam',minutes=exam?context.minutes:this.stepMinutes();
     step.timeLimitMinutes=minutes;step.status='running';step.started=now();this.stepChanged(run);
     let releaseDesk=null;
@@ -484,15 +617,18 @@ export class Workflows {
       // A seat is a copy made for this exam, so an examinee may always write and run things in it.
       else if(exam)desk=this.newDesk(chat,{provider:companion.provider,options:deskOptions(companion.provider,companion.access==='readonly'?{...companion,options:null,access:'workspace'}:companion),
         title:`[考位] ${companion.name} · ${context.exam.name}`,workspace:step.seat.dir,meta:{companionId:companion.id,runId:run.id,exam:true}});
+      // A call gets a desk of its own, so it never waits behind (or for) the callee's other work.
+      else if(context.mode==='call')desk=this.newDesk(chat,{provider:companion.provider,options:deskOptions(companion.provider,companion),title:`[工位] ${companion.name} · ${context.callerName} 调用`,meta:{companionId:companion.id,runId:run.id,call:true}});
       else desk=this.newDesk(chat,{provider:companion.provider,options:deskOptions(companion.provider,companion),title:`[工位] ${companion.name} · ${context.workflow.name}`,meta:{companionId:companion.id,runId:run.id,mountId:context.mount.id}});
       step.deskChatId=desk.id;step.provider=companion.provider;step.model=companion.model;
       const prompt=context.mode==='adhoc'?this.adhocPrompt(chat,companion,step,context,cursor)
+        :context.mode==='call'?this.callPrompt(chat,companion,step,context,run)
         :exam?prompts.examPrompt({companion,instruction:context.exam.instruction,seat:step.seat.dir,knowledge:step.seat.knowledge})
         :this.workflowPrompt(chat,companion,step,context);
       if(context.mode==='adhoc'&&!context.isolated)this.db.prepare('UPDATE companion_desks SET cursor=? WHERE companion_id=? AND chat_id=?').run(context.userMessageId,companion.id,chat.id);
       this.saveCard(run);
       // An examinee gets no memory and none of the user's standing preferences: only the exam.
-      const result=await this.execDesk(run,desk.id,prompt,{minutes,memory:exam?null:this.memberMemory(chat.group_id,companion.id),bare:exam,
+      const result=await this.execDesk(run,desk.id,prompt,{minutes,memory:exam?null:this.memberMemory(chat.group_id,companion.id),bare:exam,callChain:context.chain||[],
         onRuntime:runtime=>{step.runtime=runtime;step.deskMessageId=runtime.messageId;this.saveCard(run);},
         onCheckpoint:checkpoint=>{step.checkpoint=checkpoint;this.saveCard(run);},
         onNote:note=>{step.notes.push(note);this.saveCard(run);}});
@@ -514,6 +650,13 @@ export class Workflows {
       }
     }catch(error){step.status='failed';step.error=redact(error.message).slice(0,2000);}
     finally{releaseDesk?.();step.ended=now();this.stepChanged(run);}
+  }
+  // One step's turn at a desk, for its run card: the prompt it was given and its answer so far.
+  deskTurn(deskId,messageId){
+    const live=this.runner.active.get(deskId)?.message;
+    const message=live?.id===messageId?live:this.store.messageById(deskId,messageId);
+    if(!message||message.role!=='assistant')throw Object.assign(new Error('没有这次工作记录'),{status:404});
+    return {prompt:this.store.promptBefore(deskId,messageId)?.content||'',message};
   }
   execDesk(run,deskId,prompt,options){return runUnattended(this,run,deskId,prompt,options);}
   // After a seat hands in, or stops: compare it with the paper and look for calls outside it.
@@ -653,6 +796,11 @@ export class Workflows {
     const history=context.isolated?'':prompts.progressSince(this.store.messages(chat.id),cursor,{exclude:new Set([context.userMessageId,context.cardId]),companionId:companion.id});
     return prompts.adhocPrompt({intro:this.identity(companion,chat,{isolated:context.isolated}),history,cursor,step,companion,context});
   }
+  // A fresh desk remembers nothing, so it gets the whole conversation so far (bounded), not a delta.
+  callPrompt(chat,companion,step,context,run){
+    const history=prompts.progressSince(this.store.messages(chat.id),null,{exclude:new Set([run.card.id])});
+    return prompts.callPrompt({intro:this.identity(companion,chat),history,caller:context.callerName,step,companion});
+  }
   workflowPrompt(chat,companion,step,context){
     const {workflow,mount}=context,intro=this.identity(companion,chat);
     const background=workflow.ledger?this.ledger.section(context.ledger||this.ledger.target(mount))
@@ -694,9 +842,11 @@ export class Workflows {
   }
   saveAsWorkflow(chatId,messageId,raw={}){
     const run=this.store.messageById(chatId,messageId)?.details?.workflowRun;
-    if(!run?.plan?.rows?.length)throw fail('这张卡片没有可保存的执行顺序');
-    const orders=[...new Set(run.plan.rows.map(r=>r.order))].sort((a,b)=>a-b),assignments={};
-    const stages=orders.map((order,index)=>({name:`第 ${index+1} 步`,positions:run.plan.rows.filter(r=>r.order===order).map(row=>{
+    // Workflows run only at companions' desks, so the conversation model's part is left out.
+    const rows=(run?.plan?.rows||[]).filter(r=>r.companionId!==MAIN.id);
+    if(!rows.length)throw fail('这张卡片没有可保存的执行顺序');
+    const orders=[...new Set(rows.map(r=>r.order))].sort((a,b)=>a-b),assignments={};
+    const stages=orders.map((order,index)=>({name:`第 ${index+1} 步`,positions:rows.filter(r=>r.order===order).map(row=>{
       const companion=this.companion(row.companionId),id=newId('p_');assignments[id]=companion?.id||null;
       return {id,name:row.label||companion?.role||companion?.name||'位置',task:row.task,verify:!!row.verify};
     })}));

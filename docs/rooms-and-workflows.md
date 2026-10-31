@@ -28,6 +28,10 @@ The same settings decide how many times a mention is redone when a review fails 
 
 *Testing.* While a companion works, you can mention other companions to work in parallel, or talk to the conversation's model without a mention. A second request to the same companion waits its turn: its card and the room panel show it as queued, and its clock starts when its turn comes. The room panel shows each working companion's elapsed time, updated every second, without opening its card.
 
+*Testing.* A message that mentions companions goes to them alone; the conversation's model does not act on it. To give the conversation's model part of the same message, write `@主模型` (or press **主模型** in the input) before its part. It joins the order of work with the companions: in "@A gather the data, @主模型 summarize once A is done", A works first, then the conversation's model answers in the conversation with A's output in hand, using its own session, tools and approvals. If it is busy with another message, its part waits. `@主模型` without any companion is an ordinary message.
+
+Companion cards update on their own when the work ends; you do not need to reload the page. While companions work for a conversation, the conversation shows a spinner in the sidebar. When everyone a message named has finished, including the conversation's model if you wrote `@主模型`, StarPort sends one notification.
+
 ## One-way mentions
 
 > **Testing:** not yet used much in real work, and how well the companion actually stays within this limit has not been checked.
@@ -35,6 +39,16 @@ The same settings decide how many times a mention is redone when a review fails 
 When a message mentions companions, a **One-way** switch appears in the input. StarPort remembers it per conversation. With it on, the companion receives only this message, plus the results of companions earlier in the same mention. It does not see the conversation title or earlier messages, and it works in a separate one-way desk that does not carry the memory of its normal desk.
 
 The reply still comes back as a card. The conversation model can see it and can read the one-way desk's full record with the history tools, and later normal mentions include these one-way replies. The companion shares the conversation's working folder, so "do not read conversation archives under `.starport/history`" is an instruction, not technical isolation. Long-term memory still follows the room's memory switches.
+
+## Companions calling companions
+
+> **Testing:** off by default, and not yet used in real work.
+
+In **Manage companions**, each room has a **主模型** row for the conversation's own model and a row for each companion. Under **可以调用** (may call), tick whom each one may call while it works: for example the conversation's model may call A and C but not B, and B may call C. The setting belongs to the room.
+
+An allowed caller decides during its task whether to hand part of the work over. It describes the task and waits for the result before going on; several calls can run at once. The called companion works at a fresh desk: it sees the conversation so far and the task it was given, but not the caller's reasoning, and it does not remember what it did when mentioned earlier in this conversation. It works unattended, with its own model and quota. A "X calls Y" card in the conversation shows its work.
+
+Calls nest at most three deep. A turn makes at most eight calls, four at a time. A companion that is already waiting further up the chain is never called back, so calls cannot loop. Calls still running when the caller's turn ends are stopped. Call cards do not send their own notification; the caller's turn does when it ends. After you change whom the conversation's model may call, the conversation's next turn starts a new native session from StarPort's saved history, because a Codex session keeps the tools it started with.
 
 ## Workflows
 

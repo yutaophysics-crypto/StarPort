@@ -6,6 +6,7 @@ import { parseEvent } from './cli.mjs';
 import { isPreviousSessionTaskNotice } from './claude-events.mjs';
 import { prepareExternalClaude } from '../external-tools/claude-launch.mjs';
 import { externalToolServers } from '../external-tools/claude-tools.mjs';
+import {requireClaudeNetworkProtection} from '../claude-network.mjs';
 
 // Claude Code reports a background agent or workflow in a later native turn of
 // the same session; `claude -p` holds its result for exactly these task types.
@@ -140,6 +141,7 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
   signal?.addEventListener('abort',stop,{once:true});
   try{
     if(signal?.aborted){await stop();throw Object.assign(new Error('已停止'),{canceled:true});}
+    await requireClaudeNetworkProtection(runtime);
     const external=await prepareExternalClaude(runtime,cwd);runtime=external.runtime;externalCleanup=external.cleanup;
     const contextMcp=contextTools?createSdkMcpServer({name:'starport_context',version:'1.0.0',tools:contextTools.definitions.map(def=>{
       const shape={};for(const [key,schema]of Object.entries(def.inputSchema.properties)){let value=schema.enum?z.enum(schema.enum):schema.type==='array'?z.array(z.string()).min(schema.minItems||0).max(schema.maxItems||100):schema.type==='integer'?z.number().int():z.string();if(!(def.inputSchema.required||[]).includes(key))value=value.optional();shape[key]=value;}
@@ -153,7 +155,7 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
       includePartialMessages:true,forwardSubagentText:true,permissionMode:options.permissionMode,permissionPrompts:'host',canUseTool,
       allowDangerouslySkipPermissions:options.permissionMode==='bypassPermissions',
       ...(options.model?{model:options.model}:{}),...(options.effort?{effort:options.effort}:{}),...(session?{resume:session}:{}),
-      ...sdkOptions,env:childEnvironment({...sdkOptions.env,...contextEnv}),
+      ...sdkOptions,env:childEnvironment({...runtime.env,...sdkOptions.env,...contextEnv}),
       extraArgs:{...(!session&&options.worktree?{worktree:null}:{}),...sdkOptions.extraArgs,'replay-user-messages':null},
       ...(contextMcp||externalTools.allowed.length?{mcpServers:hostServers,allowedTools:hostAllowed}:{}),
       spawnClaudeCodeProcess:({args,cwd,env,signal})=>(child=sdkOptions.spawnClaudeCodeProcess?sdkOptions.spawnClaudeCodeProcess({args,cwd,env,signal}):startProcess(runtime.command,[...(runtime.prefixArgs||[]),...args],{cwd,env,signal}))}});

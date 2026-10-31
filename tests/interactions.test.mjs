@@ -269,14 +269,15 @@ test('late guidance receipts cannot clear a live task or downgrade delivered mes
 test('guidance composer preserves drafts during editing, switching and question submissions',async()=>{
   const app=await readFile(new URL('../public/app-send.js',import.meta.url),'utf8'),code=app.slice(app.indexOf('async function sendGuidance('),app.indexOf('function resizePrompt()')),live=await loadPublic('live');
   for(const action of ['none','edit','switch','question','failure']){
-    const release=gate(),state={chat:{id:'chat'},run:{id:'task',inputReady:true,inputMode:'steer'},active:['chat'],messages:[]},nodes={'#prompt':{value:'draft'}},removed=[],posted=[];
-    const context=vm.createContext({state,coverOpen:false,sendingMessage:false,draftKey:()=>state.chat.id,$:selector=>nodes[selector],crypto:{randomUUID},t:text=>text,renderRun:()=>{},renderMessages:()=>{},resizePrompt:()=>{},localStorage:{removeItem:key=>removed.push(key)},StarportComposer:{ids:()=>[]},liveSync:{receive:data=>live.applyUpdate(state,data),reconcile:async()=>{}},api:async(path,method,data)=>{posted.push({path,data});await release.promise;if(action==='failure')throw Error('native failed');return {delivery:'accepted',user:{id:'user',role:'user',status:'complete',details:{}}};}});
+    const release=gate(),state={chat:{id:'chat'},run:{id:'task',inputReady:true,inputMode:'steer'},active:['chat'],messages:[]},nodes={'#prompt':{value:'draft'}},drafts=new Map([['chat','draft']]),posted=[];
+    const context=vm.createContext({state,coverOpen:false,sendingMessage:false,draftKey:()=>state.chat.id,$:selector=>nodes[selector],crypto:{randomUUID},t:text=>text,renderRun:()=>{},renderMessages:()=>{},resizePrompt:()=>{},localStorage:{getItem:key=>drafts.get(key)??null,setItem:(key,value)=>drafts.set(key,value),removeItem:key=>drafts.delete(key)},StarportComposer:{ids:()=>[]},liveSync:{receive:data=>live.applyUpdate(state,data),reconcile:async()=>{}},api:async(path,method,data)=>{posted.push({path,data});await release.promise;if(action==='failure')throw Error('native failed');return {delivery:'accepted',user:{id:'user',role:'user',status:'complete',details:{}}};}});
     vm.runInContext(code,context);const sending=context.sendGuidance('answer',action==='question'?{replyTo:{messageId:'assistant',questions:['q']},preserveDraft:true}:{});
     if(action==='edit')nodes['#prompt'].value='edited';if(action==='switch'){state.chat={id:'other'};state.run=null;nodes['#prompt'].value='other draft';}
     release.resolve();if(action==='failure')await assert.rejects(sending,/native failed/);else await sending;
     assert.equal(posted[0].path,action==='question'?'/chats/chat/guidance':'/chats/chat/queue');assert.equal(posted[0].data.runId,'task');
     assert.equal(nodes['#prompt'].value,action==='none'?'':action==='edit'?'edited':action==='switch'?'other draft':'draft');
     if(action==='question')assert.equal(posted[0].data.replyTo.messageId,'assistant');if(action==='switch')assert.equal(state.messages.length,0);else assert.equal(state.run.id,'task');
+    assert.equal(drafts.has('chat'),!['none','switch'].includes(action));
     assert.equal(context.sendingMessage,false);
   }
 });

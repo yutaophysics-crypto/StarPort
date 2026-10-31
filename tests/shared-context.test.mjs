@@ -8,7 +8,7 @@ import {runInNewContext} from 'node:vm';
 import {Store} from '../src/storage.mjs';
 import {Runner} from '../src/runner.mjs';
 import {createHub} from '../src/server.mjs';
-import {contextToolHost,contextCommandBridge,CONTEXT_TOOLS} from '../src/context-tools.mjs';
+import {contextToolHost,contextCommandBridge,contextToolInstructions,CONTEXT_TOOLS,CALL_TOOLS} from '../src/context-tools.mjs';
 import {runClaude} from '../src/adapters/claude.mjs';
 import {runCodex} from '../src/adapters/codex.mjs';
 import {runCli} from '../src/adapters/cli.mjs';
@@ -50,6 +50,25 @@ test('historical full-text retrieval handles Chinese, source citation, scope, up
   }finally{s.close();}
 });
 
+test('call tools come only with a call session, name whom it may call, and waiting is not capped by count',async()=>{
+  const s=new Store(':memory:'),chat=s.newChat({}),started=[],closed=[];
+  const calls={callees:[{id:'a',name:'甲',role:'数值'},{id:'c',name:'丙'}],start:async args=>{started.push(args);return {callId:'x',status:'running'};},wait:async()=>({callId:'x',status:'running'}),close:()=>closed.push(true)};
+  try{
+    assert.ok(!contextToolHost({store:s,chat,messages:()=>[]}).definitions.some(t=>CALL_TOOLS.includes(t.name)));
+    const host=contextToolHost({store:s,chat,messages:()=>[],calls}),call=host.definitions.find(t=>t.name==='starport_companion_call');
+    assert.match(call.description,/甲（数值）、丙/);assert.deepEqual(call.inputSchema.required,['companion','task']);
+    assert.deepEqual(await host.call('starport_companion_call',{companion:'甲',task:'算'}),{callId:'x',status:'running'});
+    for(let i=0;i<100;i++)await host.call('starport_companion_wait',{callId:'x'});
+    await host.call('starport_memory_search',{query:''});
+    host.close();assert.equal(closed.length,1);
+    const desk=contextToolHost({store:s,chat,messages:()=>[],tools:new Set(CALL_TOOLS),calls});
+    assert.deepEqual(desk.definitions.map(t=>t.name),CALL_TOOLS,'a desk granted only calls gets only calls');
+    const only=contextToolInstructions('codex',new Set(CALL_TOOLS),{callees:calls.callees});
+    assert.doesNotMatch(only,/长期记忆/);assert.match(only,/星港伙伴调用.*甲（数值）、丙/);
+    assert.match(contextToolInstructions('antigravity',null,{callees:calls.callees}),/starport_companion_wait --callId/);
+    assert.doesNotMatch(contextToolInstructions('codex'),/星港伙伴调用/);
+  }finally{s.close();}
+});
 test('memory tool requires current user quotes, rejects foreign evidence, and enforces project scope',async()=>{
   const s=new Store(':memory:');try{const p=s.addProject('A','C:/A'),chat=s.newChat({project_id:p.id}),user=s.message(chat.id,'user','claude','本项目以后要给出完整证明。');
     const host=contextToolHost({store:s,chat,messages:()=>[user]});const suggestion={kind:'knowledge',title:'项目要求',content:'本项目需要完整证明。',evidence:user.content};

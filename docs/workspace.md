@@ -12,6 +12,8 @@ Choose a tool, select the working folder below the input, then send a message. T
 
 Rooms only organize conversations. Each conversation keeps its own working folder, tool and model, so one room can contain conversations from several folders and tools. The **+** next to a room's title starts a new conversation in that room.
 
+Drag a room by its title, or a conversation within its room, to put the sidebar in your order. A line marks where it will land, and the list scrolls when you drag near its top or bottom; **Esc** cancels. With an item selected, **Alt+↑** and **Alt+↓** move it one place. A room whose conversations you have never dragged keeps the most recently active first. Once you drag one, that room keeps your order: new replies do not move conversations, and new or moved-in conversations appear at the top. **Ungrouped** always stays last. Dragging works with a mouse or pen; on a touch screen, swiping scrolls the list. To move a conversation to another room, use **Move to group…** in its menu.
+
 The working folder is the project; nothing needs to be marked. Conversations in the same folder share project instructions and project memory. Subfolders are separate projects. If a workflow has its [ledger](rooms-and-workflows.md#ledgers) turned on, the ledger is also stored in the working folder. Existing conversations belong to the project of their current folder.
 
 Select the working folder below the input to browse folders on the computer running the service: drives, the home folder, the parent folder, a name filter, or a pasted full path. **Conversation settings** has the same browser. Only folders are listed, and cancelling leaves the current folder unchanged. Browsing alone does not create a project.
@@ -94,7 +96,7 @@ On the other computer, choose **Import conversations → Starport conversation f
 
 When a task finishes or fails, a notification shows the room, the conversation title and one or two lines of the result. Clicking it opens the conversation. On Windows it is a native popup at the bottom right that closes after 10 seconds, with a short chime, and the taskbar button flashes while StarPort is in the background. Other systems use browser notifications.
 
-There is no notification for the conversation you are viewing, a task you stopped, or a task that still has queued messages to run. The bell in the top bar turns **Do not disturb** on or off. **Settings → Notifications** can turn off the sound or send a test notification.
+For a message that mentions companions, one notification comes when everyone it named has finished, including the conversation's model if you wrote `@主模型`. There is no notification for the conversation you are viewing, a task you stopped, or a task that still has queued messages to run. The bell in the top bar turns **Do not disturb** on or off. **Settings → Notifications** can turn off the sound or send a test notification.
 
 ## Layout and Home
 

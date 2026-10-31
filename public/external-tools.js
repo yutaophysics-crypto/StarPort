@@ -69,6 +69,30 @@ globalThis.StarportExternalTools = (() => {
     }
     return [section];
   }
+  function previewsSection(data,{project,status,current,refresh}){
+    if(!data.previewSupported&&!data.previews?.length)return [];
+    const path='/projects/'+project.id+'/previews';
+    const section=el('section',{class:'project-previews'},[text('h3','项目预览'),note('本机静态预览会跨命令和对话轮次保持运行，重启星港后也可继续使用。')]);
+    for(const item of data.previews||[]){
+      const live=LIVE.includes(item.state),close=text('button','停止预览',{type:'button',class:'secondary-button',disabled:!live});
+      close.onclick=async()=>{close.disabled=true;try{await api(path+'/'+item.id+'/stop','POST',{});refresh();}catch(error){status.textContent=error.message;close.disabled=!live;}};
+      const label=item.state==='running'?'正在运行':item.state==='starting'?'正在启动':live?'状态待确认':'已停止';
+      const card=el('article',{class:'external-tool'},[el('div',{class:'external-tool-heading'},[el('strong',{text:item.directory}),text('small',label)])]);
+      if(item.url)card.append(el('a',{href:item.url,target:'_blank',rel:'noopener noreferrer',text:item.url}));
+      if(item.error)card.append(el('p',{class:'settings-note',text:item.error}));
+      card.append(close);section.append(card);
+    }
+    if(data.previewSupported){
+      const directory=el('input',{value:'.',required:'',maxlength:'2000','aria-label':t('项目内文件夹')}),port=el('input',{type:'number',min:'1024',max:'65535',placeholder:t('自动选择端口'),'aria-label':t('预览端口')});
+      const start=text('button','启动预览',{type:'submit',class:'secondary-button'});
+      const form=el('form',{class:'preview-form'},[
+        el('label',{class:'external-tools-field'},[text('span','项目内文件夹'),directory]),
+        el('label',{class:'external-tools-field'},[text('span','预览端口'),port]),start]);
+      form.onsubmit=async event=>{event.preventDefault();start.disabled=true;status.textContent=t('正在启动预览…');try{await api(path,'POST',{directory:directory.value,port:port.value?Number(port.value):0});if(current())refresh();}catch(error){if(current()){status.textContent=error.message;start.disabled=false;}}};
+      section.append(note('填写已构建网页所在的项目内文件夹；留空端口会自动选择。'),form);
+    }
+    return [section];
+  }
   function commonTools(data,{path,disabled,status,current,refresh}){
     const rows=data.catalog,section=el('details',{class:'common-tools',id:'external-common-tools'},[
       el('summary',{},[text('span','常用工具'),' ',el('small',{text:Array.isArray(rows)?String(rows.length):'…'})])
@@ -121,7 +145,7 @@ globalThis.StarportExternalTools = (() => {
     const view={project,path,status,disabled:data.busy||!data.supported,current,refresh:()=>{if(current())render();}};
     list.append(...data.tools.map(tool=>toolCard(tool,view)));
     if(!data.tools.length)list.append(note('此项目尚未授权外部工具。'));
-    panel.append(...applicationsSection(data.applications||[],view),
+    panel.append(...previewsSection(data,view),...applicationsSection(data.applications||[],view),
       note('让 Claude 保持编辑器打开时，它会使用常驻运行；可在这里查看和关闭。'),commonTools(data,view),addForm(view),
       note('目前接入 Windows 上的 Claude Code 隔离终端；其他工具仍遵循各自的原生权限配置。'));
   }

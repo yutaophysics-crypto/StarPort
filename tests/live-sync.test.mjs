@@ -61,6 +61,9 @@ test('lightweight live status bypasses provider probes and history, remains auth
   const response=await fetch(base+'/api/live?chatId='+chat.id,{headers,signal:AbortSignal.timeout(2000)});assert.equal(response.status,200);const live=await response.json();
   assert.equal(live.run,null);assert.equal(live.message.status,'complete');assert.equal(live.message.content,'answer');assert.equal(live.message.details.tools[0].status,'unknown');assert.deepEqual(live.active,[]);assert.equal(probes,0);assert.equal(historyReads,0);
   assert.deepEqual(live.providerVerifications.antigravity,verification);
+  const card=hub.store.message(chat.id,'assistant',null,'card','complete',{liveRevision:2});hub.store.message(chat.id,'assistant','codex','later','complete',{});
+  const followed=await(await fetch(base+'/api/live?chatId='+chat.id+'&follow='+card.id+',bad%20id,'+chat.id,{headers})).json();
+  assert.equal(followed.message.content,'later');assert.deepEqual(followed.followed.map(row=>row.id),[card.id]);
 });
 test('full chat and app snapshots remain coherent when completion or chat creation happens during asynchronous reads',async t=>{
   const gate=deferred(),entered=deferred(),finish=deferred(),listGate=deferred(),listEntered=deferred(),reg=registry();
@@ -151,6 +154,45 @@ test('late live HTTP responses and full-page refreshes cannot overwrite newer ev
   vm.runInContext(code,context);const refreshing=context.refresh();await new Promise(resolve=>setImmediate(resolve));state.messages=[message('complete',2)];state.run=null;context.liveSync.revision++;
   slow.resolve({groups:[],chats:[{id:'chat'}],providers:[],active:['chat']});await refreshing;assert.equal(state.run,null);assert.equal(state.messages[0].status,'complete');f.sync.close();other.sync.close();
 });
+test('a run card above the latest reply keeps being read back until its missed end arrives',async()=>{
+  const card=(status,revision)=>({...message(status,revision,'card'),details:{liveRevision:revision,workflowRun:{status:status==='complete'?'done':'running',steps:[]}}});
+  const paths=[];let followed=card('running',3);
+  const f=await clientFixture(async path=>{paths.push(path);return {chatId:'chat',message:message('complete',2),run:null,active:[],followed:[followed]};});
+  try{
+    f.state.messages=[card('running',3),{...message('complete',2),created:'2026-10-06T00:00:01Z'}];f.state.run=null;f.state.active=[];
+    await f.sync.reconcile();
+    assert.match(paths.at(-1),/[?&]follow=card(&|$)/,'the card is not the latest reply, so it is named');
+    f.tick();await f.sync.reconcile();
+    assert.equal(paths.length,2,'polling goes on while a card is running, though the latest reply is done');
+    followed=card('complete',4);f.events.onerror();f.events.onopen();await f.sync.reconcile();
+    assert.equal(f.state.messages[0].status,'complete');assert.equal(f.state.messages[0].details.workflowRun.status,'done');
+    assert.equal(f.changes.at(-1).currentChanged,true);
+    f.tick();assert.equal(paths.length,3,'nothing is left running, so polling stops');
+  }finally{f.sync.close();}
+});
+test('a run card added below a running reply does not make that reply\'s own end look stale',async()=>{
+  const live=await loadLive(),state=clientState();
+  live.applyUpdate(state,{chatId:'chat',message:{...message('running',1,'card'),created:'2026-10-06T00:00:01Z',details:{liveRevision:1,workflowRun:{status:'running'}}}});
+  assert.deepEqual(Array.from(state.messages,m=>m.id),['assistant','card'],'a call made mid-turn shows below the reply');
+  const change=live.applyUpdate(state,finalPacket());
+  assert.equal(state.messages[0].status,'complete');assert.equal(state.run,null,'the stop button goes at once');assert.equal(change.runChanged,true);
+  live.applyUpdate(state,{chatId:'chat',message:message('running',1),run:{id:'run'},active:['chat']});
+  assert.equal(state.run,null,'a late packet still cannot restart the finished reply');
+});
+test('live status reads back followed messages of its own chat only',async()=>{
+  const store=new Store(':memory:'),runner=new Runner(store,registry(),()=>{},{});
+  try{
+    const chat=store.newChat({provider:'codex',workspace:process.cwd()}),other=store.newChat({provider:'codex',workspace:process.cwd()});
+    const card=store.message(chat.id,'assistant',null,'card','running',{liveRevision:1,workflowRun:{status:'running'}});
+    store.message(chat.id,'assistant','codex','answer','complete',{});
+    const foreign=store.message(other.id,'assistant',null,'elsewhere','running',{});
+    card.status='complete';card.details.liveRevision=2;store.saveMessage(card);
+    const live=runner.live(chat.id,[card.id,foreign.id,'missing']);
+    assert.equal(live.message.content,'answer');
+    assert.deepEqual(live.followed.map(row=>[row.id,row.status,row.details.liveRevision]),[[card.id,'complete',2]]);
+    assert.equal(Object.hasOwn(runner.live(chat.id),'followed'),false);
+  }finally{await runner.close();store.close();}
+});
 test('failed live reconciliation is retried and concurrent requests share one read',async()=>{
   let reads=0;const gate=deferred(),f=await clientFixture(async()=>{reads++;if(reads===1)throw Error('network');return gate.promise;});
   await f.sync.reconcile();assert.equal(f.state.run.id,'run');f.tick();const another=f.sync.reconcile();assert.equal(reads,2);gate.resolve(finalPacket());await another;assert.equal(f.state.run,null);f.sync.close();
@@ -164,18 +206,22 @@ test('a full refresh that returns late cannot overwrite a more recent full refre
 });
 test('send completion bypasses blocked metadata refresh and late acknowledgements preserve newer answers and drafts',async()=>{
   const live=await loadLive(),app=await readFile(new URL('../public/app-send.js',import.meta.url),'utf8'),code=app.slice(app.indexOf('function acceptMessageResult('),app.indexOf('function resizePrompt()'));
-  for(const action of ['none','edit','switch']){
+  for(const action of ['none','edit','append','switch']){
     const metadata=deferred(),accepted=deferred(),state=clientState();state.messages=[message('complete',2)];state.run=null;
-    const nodes={'#prompt':{value:'original'},'#send':{disabled:false},'#conversation':{scrollTop:0,scrollHeight:0}},consumed=[],removed=[];
-    const context=vm.createContext({state,StarportLive:live,liveSync:{reconcile:async()=>{}},coverOpen:false,viewRevision:0,saveChain:Promise.resolve(),draftKey:()=>state.chat?.id||'new',currentProvider:()=>({installed:true}),$:selector=>nodes[selector],document:{activeElement:null},Event,t:text=>text,toast:()=>{},resizePrompt:()=>{},renderRun:()=>{nodes['#send'].disabled=false;},renderMessages:()=>{},refresh:()=>metadata.promise,localStorage:{removeItem:key=>removed.push(key)},api:async()=>accepted.promise,StarportComposer:{ids:()=>['sent-attachment'],busy:false,prepareVideos:async()=>{},consume:(ids,key)=>consumed.push({ids,key})}});
+    const nodes={'#prompt':{value:'original'},'#send':{disabled:false},'#conversation':{scrollTop:0,scrollHeight:0}},consumed=[],drafts=new Map([['chat','original']]);
+    const context=vm.createContext({state,StarportLive:live,liveSync:{reconcile:async()=>{}},coverOpen:false,viewRevision:0,saveChain:Promise.resolve(),draftKey:()=>state.chat?.id||'new',currentProvider:()=>({installed:true}),$:selector=>nodes[selector],document:{activeElement:null},Event,t:text=>text,toast:()=>{},resizePrompt:()=>{},renderRun:()=>{nodes['#send'].disabled=false;},renderMessages:()=>{},refresh:()=>metadata.promise,localStorage:{getItem:key=>drafts.get(key)??null,setItem:(key,value)=>drafts.set(key,value),removeItem:key=>drafts.delete(key)},api:async()=>accepted.promise,StarportComposer:{ids:()=>['sent-attachment'],busy:false,prepareVideos:async()=>{},consume:(ids,key)=>consumed.push({ids,key})}});
     vm.runInContext(code,context);const sending=context.sendMessage('original');await new Promise(resolve=>setImmediate(resolve));
     if(action==='edit')nodes['#prompt'].value='new draft';
+    if(action==='append')nodes['#prompt'].value='original\n补一句';
     if(action==='switch'){state.chat={id:'other'};state.messages=[];nodes['#prompt'].value='other draft';context.viewRevision++;}
     accepted.resolve({user:{id:'user',role:'user',status:'complete',content:'original'},assistant:message('running',1)});
     await Promise.race([sending,new Promise((_,reject)=>setTimeout(()=>reject(Error('Send waited for metadata discovery')),300))]);
     assert.equal(nodes['#send'].disabled,false);assert.equal(consumed[0].key,'chat');assert.deepEqual(Array.from(consumed[0].ids),['sent-attachment']);
-    if(action==='switch'){assert.equal(state.messages.length,0);assert.equal(nodes['#prompt'].value,'other draft');assert.equal(removed.length,0);}
-    else{assert.equal(state.messages[0].role,'user');assert.equal(state.messages[1].status,'complete');assert.equal(nodes['#prompt'].value,action==='edit'?'new draft':'');}
+    // Switched away mid-send: the other composer is untouched, and the sent chat's saved draft no
+    // longer holds the sent message, so it does not come back on return.
+    if(action==='switch'){assert.equal(state.messages.length,0);assert.equal(nodes['#prompt'].value,'other draft');assert.equal(drafts.has('chat'),false);}
+    else{assert.equal(state.messages[0].role,'user');assert.equal(state.messages[1].status,'complete');assert.equal(nodes['#prompt'].value,{none:'',edit:'new draft',append:'补一句'}[action]);}
+    if(action==='none')assert.equal(drafts.has('chat'),false);if(action==='append')assert.equal(drafts.get('chat'),'补一句');
     metadata.resolve();
   }
 });

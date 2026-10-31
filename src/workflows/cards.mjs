@@ -2,7 +2,7 @@
 import { clip, oneLine, localTime } from './common.mjs';
 
 export const RUN_LABEL={proposed:'待开考',cancelled:'已取消',planning:'排顺序中',running:'运行中',done:'完成',passed:'验收通过',failed:'失败','verify-failed':'验收未通过',stopped:'已停止'};
-export const TRIGGER_LABEL={schedule:'定时',catchup:'补跑',manual:'手动',dispatch:'点名',exam:'考场'};
+export const TRIGGER_LABEL={schedule:'定时',catchup:'补跑',manual:'手动',dispatch:'点名',exam:'考场',call:'调用'};
 export const runLabel=status=>RUN_LABEL[status]||status;
 
 export function planTable(rows){

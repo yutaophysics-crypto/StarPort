@@ -3,6 +3,7 @@ import {childEnvironment,startProcess,stopProcess,restrictToCurrentUser} from '.
 import {mkdtemp,readFile,writeFile,unlink,rmdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {requireClaudeNetworkProtection} from './claude-network.mjs';
 
 async function controlSettings(runtime,cwd){
   // --settings is a single value: the SDK's later argument replaces the owner's
@@ -29,6 +30,7 @@ async function controlSettings(runtime,cwd){
 
 // Metadata-only SDK session: never yield a user message or resume a transcript.
 export async function claudeControl(runtime,cwd,read,makeQuery=query,timeoutMs=25000,{model}={}){
+  await requireClaudeNetworkProtection(runtime);
   let finish,session,child,timer,prepared;
   const idle=new Promise(resolve=>finish=resolve),abortController=new AbortController();
   async function* input(){await idle;}

@@ -33,6 +33,9 @@ export class Store {
     this.db.prepare("UPDATE messages SET status='interrupted' WHERE status='running'").run();
     if(!this.db.prepare('PRAGMA table_info(chats)').all().some(row=>row.name==='project_id'))this.db.exec('ALTER TABLE chats ADD COLUMN project_id TEXT REFERENCES projects(id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS chats_project ON chats(project_id)');
+    // The place a conversation was dragged to in its room; NULL until the room is first rearranged.
+    // Rooms keep their order in settings instead: older builds insert rooms without naming columns.
+    if(!this.db.prepare('PRAGMA table_info(chats)').all().some(row=>row.name==='sort_order'))this.db.exec('ALTER TABLE chats ADD COLUMN sort_order INTEGER');
     this.queue=new MessageQueue(this);
     this.memory=new SharedMemory(this);
     this.instructions=new ContextInstructions(this);
@@ -44,8 +47,47 @@ export class Store {
     this.db.close();
   }
   list() {
-    return { groups: this.db.prepare("SELECT * FROM groups WHERE name != '__DELETED_ROOM__' ORDER BY created").all(),
+    return { groups: this.rooms(),
       chats: this.chatStatus.rows().filter(chat=>!chat.options?.desk),projects:this.projects() };
+  }
+  // Rooms in the order they were dragged into; rooms never placed follow, oldest first.
+  rooms() {
+    const placed = new Map(this.setting('sidebar.roomOrder', []).map((id, index) => [id, index]));
+    const rank = row => placed.get(row.id) ?? Infinity;
+    return this.db.prepare("SELECT * FROM groups WHERE name != '__DELETED_ROOM__' ORDER BY created").all()
+      .sort((a, b) => (rank(a) === rank(b) ? 0 : rank(a) - rank(b)));
+  }
+  // A room's conversations as the sidebar lists them. Until they are first rearranged, the most
+  // recently active comes first; afterwards they keep their place and new ones join at the top.
+  roomChatIds(groupId) { return this.db.prepare('SELECT id FROM chats WHERE group_id IS ? ORDER BY sort_order IS NOT NULL, sort_order, updated DESC').all(groupId).map(row => row.id); }
+  roomTop(groupId) { const top = this.db.prepare('SELECT MIN(sort_order) AS top FROM chats WHERE group_id IS ?').get(groupId).top; return top == null ? null : top - 1; }
+  // Places one room or conversation just before another (null: at the end) and renumbers the list.
+  moveGroup(id, before = null) {
+    this.reorder(() => this.rooms().map(row => row.id), id, before, '房间/分组不存在', ids => this.setSetting('sidebar.roomOrder', ids));
+  }
+  moveChat(id, before = null) {
+    const row = this.db.prepare('SELECT group_id FROM chats WHERE id=?').get(id);
+    this.reorder(() => (row ? this.roomChatIds(row.group_id) : []), id, before, '对话不存在', ids => {
+      const place = this.db.prepare('UPDATE chats SET sort_order=? WHERE id=?');
+      ids.forEach((chatId, index) => place.run(index, chatId));
+    });
+  }
+  reorder(current, id, before, missing, save) {
+    if (before !== null && typeof before !== 'string') throw new Error('目标位置无效');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const ids = current();
+      if (!ids.includes(id)) throw Object.assign(new Error(missing), { status: 404 });
+      const rest = ids.filter(other => other !== id);
+      const at = before === null ? rest.length : rest.indexOf(before);
+      if (at < 0) throw Object.assign(new Error('列表刚刚有变化，请再拖一次'), { status: 409 });
+      rest.splice(at, 0, id);
+      save(rest);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
   projects(){return this.db.prepare('SELECT * FROM projects ORDER BY created DESC').all();}
   project(id){return this.db.prepare('SELECT * FROM projects WHERE id=?').get(id);}
@@ -60,7 +102,7 @@ export class Store {
   chat(id) { return typeof id==='string'&&id?this.chatStatus.rows(id)[0]||null:null; }
   group(name) {
     const row = { id: randomUUID(), name, created: new Date().toISOString() };
-    this.db.prepare('INSERT INTO groups VALUES(?,?,?)').run(row.id, row.name, row.created);
+    this.db.prepare('INSERT INTO groups(id,name,created) VALUES(?,?,?)').run(row.id, row.name, row.created);
     return row;
   }
   renameGroup(id, name) { this.db.prepare('UPDATE groups SET name=? WHERE id=?').run(name, id); }
@@ -95,7 +137,7 @@ export class Store {
   newChat({ group_id = null, title = '新对话', provider = 'codex', workspace = '', options = {},project_id=null }) {
     if(project_id&&!this.project(project_id))throw new Error('项目不存在');
     const now = new Date().toISOString(), id = randomUUID();
-    this.db.prepare('INSERT INTO chats(id,group_id,title,provider,workspace,options,created,updated,project_id) VALUES(?,?,?,?,?,?,?,?,?)').run(id, group_id, title, provider, workspace, JSON.stringify(options), now, now,project_id);
+    this.db.prepare('INSERT INTO chats(id,group_id,title,provider,workspace,options,created,updated,project_id,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id, group_id, title, provider, workspace, JSON.stringify(options), now, now,project_id,this.roomTop(group_id));
     this.projectFolders?.sync([id]);
     return this.chat(id);
   }
@@ -105,11 +147,13 @@ export class Store {
     const next = { ...old, ...patch };
     if('project_id' in patch&&patch.project_id!==null&&!this.project(patch.project_id))throw new Error('项目不存在');
     if('group_id' in patch&&(patch.group_id!==null&&(typeof patch.group_id!=='string'||!this.db.prepare('SELECT id FROM groups WHERE id=?').get(patch.group_id))))throw new Error('目标分组不存在，请重新选择');
+    // A conversation moved to another room starts at the top there.
+    if ('group_id' in patch && patch.group_id !== old.group_id) next.sort_order = this.roomTop(patch.group_id);
     const save=()=>{
       this.db.exec('SAVEPOINT update_chat_folder');
       try {
-        this.db.prepare('UPDATE chats SET group_id=?,title=?,provider=?,workspace=?,options=?,updated=?,project_id=? WHERE id=?')
-          .run(next.group_id, next.title, next.provider, next.workspace, JSON.stringify(next.options), new Date().toISOString(),next.project_id||null, id);
+        this.db.prepare('UPDATE chats SET group_id=?,title=?,provider=?,workspace=?,options=?,updated=?,project_id=?,sort_order=? WHERE id=?')
+          .run(next.group_id, next.title, next.provider, next.workspace, JSON.stringify(next.options), new Date().toISOString(),next.project_id||null,next.sort_order??null, id);
         if ('workspace' in patch) this.projectFolders?.sync([id]);
         this.db.exec('RELEASE update_chat_folder');
       } catch(error) { this.db.exec('ROLLBACK TO update_chat_folder; RELEASE update_chat_folder'); throw error; }
@@ -160,6 +204,8 @@ export class Store {
     return this.db.prepare('SELECT * FROM messages WHERE chat_id=? ORDER BY rowid').all(id).map(m => ({ ...m, details: JSON.parse(m.details) }));
   }
   messageById(chatId,id){const row=this.db.prepare('SELECT * FROM messages WHERE chat_id=? AND id=?').get(chatId,id);return row?{...row,details:JSON.parse(row.details)}:null;}
+  // The user message that opened an assistant turn: the last one written before it.
+  promptBefore(chatId,messageId){const row=this.db.prepare("SELECT * FROM messages WHERE chat_id=? AND role='user' AND rowid<(SELECT rowid FROM messages WHERE chat_id=? AND id=?) ORDER BY rowid DESC LIMIT 1").get(chatId,chatId,messageId);return row?{...row,details:JSON.parse(row.details)}:null;}
   lastAssistant(chatId){const row=this.db.prepare("SELECT * FROM messages WHERE chat_id=? AND role='assistant' ORDER BY rowid DESC LIMIT 1").get(chatId);return row?{...row,details:JSON.parse(row.details)}:null;}
   message(chatId, role, provider, content, status = 'complete', details = {}) {
     const row = { id: randomUUID(), chat_id: chatId, role, provider, content, status, details, created: new Date().toISOString() };
