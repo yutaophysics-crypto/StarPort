@@ -60,108 +60,96 @@ function formatDuration(seconds) {
   return m > 0 ? t('{m} 分 {s} 秒', { m, s }) : t('{s} 秒', { s });
 }
 
+// A row is rebuilt only when its message, or what is drawn around it, has changed: a long
+// conversation then redraws in milliseconds while a run streams, and the page's clocks keep ticking.
+// Messages are never edited in place (live.js replaces them), so a signature per object is enough.
+const messageRows = new Map();
+const messageSignatures = new WeakMap();
+let messageRowsChat = null;
+
+// cyrb53: a fast 53-bit string hash.
+function hashText(text) {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+function messageSignature(msg) {
+  let signature = messageSignatures.get(msg);
+  if (signature === undefined) {
+    signature = hashText(JSON.stringify(msg));
+    messageSignatures.set(msg, signature);
+  }
+  return signature;
+}
+
+// What a row shows besides its message: language, trace level, tool name, chat title for memory
+// receipts, and for run cards their companions and toggles (StarportWorkflows.cardContext).
+function rowContext(msg) {
+  return [
+    i18n.language,
+    globalThis.StarportActivityModel?.level,
+    provider(msg.provider)?.name,
+    state.chat?.title,
+    msg.details?.workflowRun ? globalThis.StarportWorkflows?.cardContext?.(msg) : ''
+  ].join('|');
+}
+
+// The branch line is kept too while its source chat's title stays the same.
+let branchRow = null;
+function branchLine(branch) {
+  const key = [JSON.stringify(branch), state.chats.find(row => row.id === branch.chatId)?.title, i18n.language].join('|');
+  if (branchRow?.key !== key) branchRow = { key, node: branchOrigin(branch) };
+  return branchRow.node;
+}
+
 function renderMessages() {
   const container = $('#conversation');
   const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 110;
   const root = $('#messages');
   globalThis.StarportActivity?.remember(root);
-  root.replaceChildren();
+  if (messageRowsChat !== (state.chat?.id || null)) {
+    messageRows.clear();
+    messageRowsChat = state.chat?.id || null;
+  }
+  const wanted = [];
+  const seen = new Set();
   for (const msg of StarportLive.orderedMessages(state.messages)) {
-    const p = provider(msg.provider);
-    // A workflow or @companion run is a card the server keeps current, not a model reply.
-    const workflows = msg.details?.workflowRun ? globalThis.StarportWorkflows : null;
-    const header = workflows
-      ? workflows.cardHeader(msg)
-      : el('div', { class: 'message-header' }, [
-          msg.role === 'user' ? el('span', { class: 'provider-mark', text: t('你') }) : mark(p),
-          el('strong', { text: msg.role === 'user' ? t('你') : p?.name || t('助手') }),
-          el('time', {
-            text: new Date(msg.created).toLocaleTimeString(i18n.locale, { hour: '2-digit', minute: '2-digit' })
-          })
-        ]);
-    const row = el(
-      'article',
-      { class: 'message ' + msg.role + (workflows ? ' workflow-run' : ''), 'data-message-id': msg.id },
-      [
-        header,
-        msg.role === 'user' && msg.details?.runRef && globalThis.StarportWorkflows
-          ? StarportWorkflows.refChip(msg.details.runRef)
-          : null,
-        msg.role === 'user'
-          ? el('div', { class: 'message-body', text: msg.content })
-          : workflows
-            ? workflows.renderCard(msg)
-            : StarportActivity.render(msg, { el, t, markdown, chatId: state.chat?.id || '' })
-      ]
-    );
-    if (msg.details?.attachments?.length) {
-      row.append(globalThis.StarportComposer?.attachmentList(msg.details.attachments) || '');
+    const signature = messageSignature(msg);
+    const context = rowContext(msg);
+    const cached = messageRows.get(msg.id);
+    const reuse = cached && cached.signature === signature && cached.context === context;
+    const row = reuse ? cached.node : messageRow(msg);
+    if (!reuse) messageRows.set(msg.id, { signature, context, node: row });
+    seen.add(msg.id);
+    wanted.push(row);
+    if (state.chat?.options?.branch?.at === msg.id) wanted.push(branchLine(state.chat.options.branch));
+  }
+  for (const id of messageRows.keys()) if (!seen.has(id)) messageRows.delete(id);
+  // Put rows in order. Rows that stay are never moved: moving one makes the browser restyle and
+  // lay out everything after it again, which takes most of a second in a long conversation.
+  const keep = new Set(wanted);
+  let cursor = root.firstChild;
+  for (const node of wanted) {
+    while (cursor && !keep.has(cursor)) {
+      const next = cursor.nextSibling;
+      cursor.remove();
+      cursor = next;
     }
-    if (msg.role === 'assistant' && msg.details?.memory) {
-      const memory = msg.details.memory;
-      const used = memory.ids?.length || 0;
-      const candidates = memory.candidates?.length || 0;
-      if (used || candidates || memory.browsed?.length) {
-        const context = {
-          chatId: state.chat?.id,
-          messageId: msg.id,
-          chatTitle: state.chat?.title,
-          created: msg.created,
-          providerName: provider(msg.provider)?.name || msg.provider
-        };
-        const button = el('button', {
-          type: 'button',
-          class: 'memory-receipt',
-          title: t('查看本轮记忆详情'),
-          text: t('共同记忆 {used} 条 · 新候选 {candidates} 条', { used, candidates })
-        });
-        button.onclick = () =>
-          globalThis.StarportMemory?.showReceipt(memory, context).catch(error => toast(error.message));
-        row.append(button);
-      }
-    }
-    if (msg.role === 'assistant' && msg.details?.memory?.sources?.length) {
-      const sources = el('div', { class: 'history-sources' }, [el('span', { text: t('历史来源') })]);
-      for (const source of msg.details.memory.sources.slice(0, 12)) {
-        const button = el('button', { type: 'button', text: source.title });
-        button.onclick = () => globalThis.StarportSharedContext?.openCitation(source.citation);
-        sources.append(button);
-      }
-      row.append(sources);
-    }
-    if (msg.details?.guidance) {
-      const labels = {
-        sending: '正在提交…',
-        queued: '已排队，当前任务完成后继续',
-        accepted: '已交给当前任务',
-        delivered: '已发送至原工具',
-        'not-delivered': '未送达原工具'
-      };
-      if (msg.provider === 'claude') labels.queued = '等待 Claude 在执行间隙接收';
-      row.append(
-        el('small', { class: 'guidance-receipt', text: t(labels[msg.details.guidance.state] || '未确认送达') })
-      );
-    }
-    for (const text of msg.details?.notices || []) {
-      row.append(el('div', { class: 'notice', text: notice(text) }));
-    }
-    if (msg.details?.error) {
-      row.append(el('div', { class: 'error-note', text: notice(msg.details.error) }));
-    } else if (msg.status === 'interrupted') {
-      row.append(el('div', { class: 'notice', text: t('本次执行已停止，已有内容已保存。') }));
-    }
-    if (msg.role === 'assistant' && !workflows && !['running', 'pending'].includes(msg.status)) {
-      const branch = el('button', {
-        type: 'button',
-        class: 'message-branch',
-        title: t('把到这条回复为止的对话复制成一个新对话，从这里继续'),
-        text: t('从这里分支')
-      });
-      branch.onclick = () => branchFrom(msg.id);
-      row.append(branch);
-    }
-    root.append(row);
-    if (state.chat?.options?.branch?.at === msg.id) root.append(branchOrigin(state.chat.options.branch));
+    if (node === cursor) cursor = cursor.nextSibling;
+    else root.insertBefore(node, cursor);
+  }
+  while (cursor) {
+    const next = cursor.nextSibling;
+    cursor.remove();
+    cursor = next;
   }
   renderRun();
   globalThis.StarportSubagents?.tick();
@@ -169,6 +157,107 @@ function renderMessages() {
   if (atBottom) container.scrollTo({ top: container.scrollHeight, behavior: 'instant' });
   markViewed();
   globalThis.StarportAgentsRoom?.scheduleRender();
+}
+
+// One message as a conversation row.
+function messageRow(msg) {
+  const p = provider(msg.provider);
+  // A workflow or @companion run is a card the server keeps current, not a model reply.
+  const workflows = msg.details?.workflowRun ? globalThis.StarportWorkflows : null;
+  // Starport wrote this turn's prompt for an @主模型 part; show the part, not the prompt.
+  const dispatchStep = msg.role === 'user' ? msg.details?.dispatchStep : null;
+  const header = workflows
+    ? workflows.cardHeader(msg)
+    : el('div', { class: 'message-header' }, [
+        msg.role === 'user' ? el('span', { class: 'provider-mark', text: dispatchStep ? '@' : t('你') }) : mark(p),
+        el('strong', { text: dispatchStep ? t('点名里交给主模型的部分') : msg.role === 'user' ? t('你') : p?.name || t('助手') }),
+        el('time', {
+          text: new Date(msg.created).toLocaleTimeString(i18n.locale, { hour: '2-digit', minute: '2-digit' })
+        })
+      ]);
+  const row = el(
+    'article',
+    { class: 'message ' + msg.role + (workflows ? ' workflow-run' : '') + (dispatchStep ? ' dispatch-step' : ''), 'data-message-id': msg.id },
+    [
+      header,
+      msg.role === 'user' && msg.details?.runRef && globalThis.StarportWorkflows
+        ? StarportWorkflows.refChip(msg.details.runRef)
+        : null,
+      dispatchStep && globalThis.StarportWorkflows ? StarportWorkflows.cardRef(dispatchStep.cardId) : null,
+      msg.role === 'user'
+        ? el('div', { class: 'message-body', text: dispatchStep ? dispatchStep.task : msg.content })
+        : workflows
+          ? workflows.renderCard(msg)
+          : StarportActivity.render(msg, { el, t, markdown, chatId: state.chat?.id || '' })
+    ]
+  );
+  if (msg.details?.attachments?.length) {
+    row.append(globalThis.StarportComposer?.attachmentList(msg.details.attachments) || '');
+  }
+  if (msg.role === 'assistant' && msg.details?.memory) {
+    const memory = msg.details.memory;
+    const used = memory.ids?.length || 0;
+    const candidates = memory.candidates?.length || 0;
+    if (used || candidates || memory.browsed?.length) {
+      const context = {
+        chatId: state.chat?.id,
+        messageId: msg.id,
+        chatTitle: state.chat?.title,
+        created: msg.created,
+        providerName: provider(msg.provider)?.name || msg.provider
+      };
+      const button = el('button', {
+        type: 'button',
+        class: 'memory-receipt',
+        title: t('查看本轮记忆详情'),
+        text: t('共同记忆 {used} 条 · 新候选 {candidates} 条', { used, candidates })
+      });
+      button.onclick = () =>
+        globalThis.StarportMemory?.showReceipt(memory, context).catch(error => toast(error.message));
+      row.append(button);
+    }
+  }
+  if (msg.role === 'assistant' && msg.details?.memory?.sources?.length) {
+    const sources = el('div', { class: 'history-sources' }, [el('span', { text: t('历史来源') })]);
+    for (const source of msg.details.memory.sources.slice(0, 12)) {
+      const button = el('button', { type: 'button', text: source.title });
+      button.onclick = () => globalThis.StarportSharedContext?.openCitation(source.citation);
+      sources.append(button);
+    }
+    row.append(sources);
+  }
+  if (msg.details?.guidance) {
+    const labels = {
+      sending: '正在提交…',
+      queued: '已排队，当前任务完成后继续',
+      accepted: '已交给当前任务',
+      delivered: '已发送至原工具',
+      'not-delivered': '未送达原工具'
+    };
+    if (msg.provider === 'claude') labels.queued = '等待 Claude 在执行间隙接收';
+    row.append(
+      el('small', { class: 'guidance-receipt', text: t(labels[msg.details.guidance.state] || '未确认送达') })
+    );
+  }
+  for (const text of msg.details?.notices || []) {
+    row.append(el('div', { class: 'notice', text: notice(text) }));
+  }
+  if (msg.details?.error) {
+    row.append(el('div', { class: 'error-note', text: notice(msg.details.error) }));
+  } else if (msg.status === 'interrupted') {
+    row.append(el('div', { class: 'notice', text: t('本次执行已停止，已有内容已保存。') }));
+  }
+  if (msg.role === 'assistant' && !workflows && !['running', 'pending'].includes(msg.status)) {
+    const branch = el('button', {
+      type: 'button',
+      class: 'message-branch',
+      title: t('把到这条回复为止的对话复制成一个新对话，从这里继续'),
+      text: t('从这里分支')
+    });
+    branch.onclick = () => branchFrom(msg.id);
+    row.append(branch);
+  }
+  return row;
 }
 
 // A branch copies the history up to one reply into a new chat and continues there.
@@ -429,7 +518,7 @@ function renderRun() {
         const options = { ...opts(), mode: 'goal', objective: goal.objective, tokenBudget: goal.tokenBudget || '' };
         state.chat.options.codex = options;
         queueSave({ options })
-          .then(() => sendMessage(t('继续完成当前目标。')))
+          .then(() => sendMessage(t('继续完成当前目标。'), { preserveDraft: true }))
           .catch(e => toast(e.message));
       };
       box.append(resume);

@@ -22,8 +22,6 @@ public static class StarportFileShell {
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     static extern IntPtr ILCreateFromPathW(string path);
     [DllImport("shell32.dll", ExactSpelling = true)]
-    static extern int SHOpenFolderAndSelectItems(IntPtr item, uint count, IntPtr children, uint flags);
-    [DllImport("shell32.dll", ExactSpelling = true)]
     static extern int SHOpenWithDialog(IntPtr parent, ref OPENASINFO info);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     static extern IntPtr ShellExecuteW(IntPtr parent, string verb, string file, string args, string directory, int show);
@@ -40,13 +38,23 @@ public static class StarportFileShell {
         int init = CoInitialize(IntPtr.Zero);
         Marshal.ThrowExceptionForHR(init);
         try {
-            if (action == "reveal" || action == "probe") {
+            if (action == "probe") {
                 IntPtr item = ILCreateFromPathW(path);
                 if (item == IntPtr.Zero) throw new IOException("Windows could not locate the file");
-                try {
-                    // count=0 selects this item in its parent folder; flags=0 avoids rename mode.
-                    return action == "probe" || Check(SHOpenFolderAndSelectItems(item, 0, IntPtr.Zero, 0));
-                } finally { Marshal.FreeCoTaskMem(item); }
+                Marshal.FreeCoTaskMem(item);
+                return true;
+            }
+            if (action == "reveal") {
+                // Explorer reads the path itself. An item list built here and handed over by
+                // SHOpenFolderAndSelectItems from this short-lived process could open the wrong
+                // folder or none. A path cannot contain quotes, so quoting it is safe.
+                string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+                long shown = ShellExecuteW(IntPtr.Zero, "open", explorer, "/select,\"" + path + "\"", null, 1).ToInt64();
+                if (shown > 32) return true;
+                // Without the selection, the containing folder is still the useful place to land.
+                long opened = ShellExecuteW(IntPtr.Zero, "open", Path.GetDirectoryName(path), null, null, 1).ToInt64();
+                if (opened <= 32) throw new IOException("Windows could not show the file (" + shown + ")");
+                return true;
             }
             if (action == "open-with") return OpenWith(path);
             if (action == "open-folder") {

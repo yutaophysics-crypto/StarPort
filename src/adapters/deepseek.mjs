@@ -7,6 +7,7 @@ import { JsonRpc } from '../process.mjs';
 import { nativeSubagentStatus } from '../subagents.mjs';
 import { DeepseekLifecycle } from './deepseek-lifecycle.mjs';
 import { isDeepseekDesktop, deepseekDesktopMetadata } from '../deepseek-desktop.mjs';
+import {requireClaudeNetworkProtection} from '../claude-network.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 export async function deepseekSelection(options,runtime,cwd) {
@@ -65,6 +66,7 @@ export function parseDeepseekEvent(event,state={}) {
 const promptBlocks=(text,images=[])=>[{type:'text',text},...images.map(image=>({type:'image',data:image.data,mimeType:image.mime}))];
 
 export async function runDeepseek({runtime,options,prompt,contextEnv={},images=[],cwd,signal,emit,setControl}) {
+  await requireClaudeNetworkProtection(runtime);
   const sessionId='hub-'+randomUUID(),lifecycle=new DeepseekLifecycle(sessionId);
   let rpc,canceled=false,accepting=false,finished=false,dispatching=false,resolveEnd,completionCheck,closing;const eventState={},children=lifecycle.children,queued=[];
   const complete=new Promise(resolve=>{resolveEnd=resolve;});

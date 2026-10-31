@@ -78,6 +78,8 @@ globalThis.StarportWorkflows = (page => {
   const members = groupId => ((groupId && data?.rooms?.[groupId]) || []).map(companion).filter(Boolean);
   const memoryOf = (groupId, companionId) =>
     data?.roomMemory?.[groupId]?.[companionId] || { read: false, propose: false };
+  // Whom a caller (主模型 or a companion) may hand work to mid-task, in this room.
+  const callsOf = (groupId, callerId) => data?.roomCalls?.[groupId]?.[callerId] || [];
   const mountsFor = chatId => (chatId ? (data?.mounts || []).filter(m => m.chatId === chatId) : []);
   const mount = id => (data?.mounts || []).find(m => m.id === id) || null;
   const busyCompanions = () => new Set((data?.running || []).flatMap(run => run.companions));
@@ -92,11 +94,16 @@ globalThis.StarportWorkflows = (page => {
   const chatById = id => (state.chat?.id === id ? state.chat : (state.chats || []).find(c => c.id === id) || null);
   const positionsOf = wf => (wf?.stages || []).flatMap(stage => stage.positions.map(position => ({ stage, position })));
 
+  // A message that names companions goes to them alone; @主模型 gives the conversation's own
+  // model a part of it too. A companion that is itself named 主模型 keeps the name.
+  const MAIN = Object.freeze({ id: 'main', name: '主模型', avatar: '主', main: true });
+  const withMain = list => (list.some(c => c?.name === MAIN.name) ? list : [...list, MAIN]);
+
   // Names are matched exactly and longest first, the same way the server reads them,
   // so Chinese text right after a name is never taken as part of it.
-  function parseMentions(text, list) {
+  function parseMentions(text, list, { main = false } = {}) {
     const source = String(text || '');
-    const names = list.filter(c => c?.name).sort((a, b) => b.name.length - a.name.length);
+    const names = (main ? withMain(list) : list).filter(c => c?.name).sort((a, b) => b.name.length - a.name.length);
     const hits = [];
     for (let i = 0; i < source.length; i++) {
       if (source[i] !== '@' && source[i] !== '＠') continue;
@@ -112,6 +119,7 @@ globalThis.StarportWorkflows = (page => {
   function mentioned(text, list) {
     return [...new Map(parseMentions(text, list).map(hit => [hit.companion.id, hit.companion])).values()];
   }
+  const mentionsMain = (text, list) => parseMentions(text, list, { main: true }).some(hit => hit.companion.main);
 
   // --- formatting ---------------------------------------------------------------------------
   function when(value) {
@@ -212,11 +220,10 @@ globalThis.StarportWorkflows = (page => {
     conversation.scrollTop = conversation.scrollHeight;
   }
 
+  // The sent text leaves the composer or the conversation's saved draft (app-send.js); the
+  // room's @ tools follow the composer's input event.
   function clearPrompt(chatId, original) {
-    if (state.chat?.id !== chatId || $('#prompt').value !== original) return;
-    localStorage.removeItem(draftKey());
-    $('#prompt').value = '';
-    $('#prompt').dispatchEvent(new Event('input', { bubbles: true }));
+    if (clearSentDraft(draftKey(chatId), original)) $('#prompt').dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   async function dispatch(text, { isolated = false } = {}) {
@@ -315,6 +322,14 @@ globalThis.StarportWorkflows = (page => {
     row.classList.add('wf-flash');
   }
 
+  // The @主模型 part of a run, shown in the conversation, links back to its run card.
+  function cardRef(messageId) {
+    return el(
+      'button',
+      { type: 'button', class: 'wf-ref', title: '回到这次点名的卡片', onclick: () => scrollToMessage(messageId) },
+      [icon('reply'), el('span', { text: '来自点名' })]
+    );
+  }
   function refChip(ref) {
     return el(
       'button',
@@ -345,6 +360,7 @@ globalThis.StarportWorkflows = (page => {
     companions,
     members,
     memoryOf,
+    callsOf,
     workflow,
     workflows,
     mount,
@@ -354,7 +370,9 @@ globalThis.StarportWorkflows = (page => {
     liveSince,
     tick,
     positionsOf,
+    MAIN,
     parseMentions,
+    mentionsMain,
     mentioned,
     triggerText,
     scheduled,
@@ -364,6 +382,7 @@ globalThis.StarportWorkflows = (page => {
     RUN_LABEL,
     PROVIDER_LABELS,
     refChip,
+    cardRef,
     replyRef,
     clearReply,
     renderReplyChip,

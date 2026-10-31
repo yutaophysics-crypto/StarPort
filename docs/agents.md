@@ -13,6 +13,8 @@ StarPort drives each agent tool through its own native interface and existing lo
 | Antigravity | Local AGY CLI with streaming JSON | Resumable session |
 | DeepSeek Harness | Published official SDK over JSON-RPC | New SDK session each turn |
 
+Desks that StarPort uses only once (compaction, planning, calls between companions, workflow steps and exam seats) ask Codex for ephemeral threads. Codex does not save these, so they stay out of the Codex app's list. Conversations and @companion desks keep resumable threads and stay listed. A Codex version without ephemeral threads saves them as before.
+
 **Settings → Connections & data** shows installation and a real connection check separately: a tool can be installed without its account being usable. After you sign in with the tool's own login method, choose **Check tools again**. StarPort does not store API keys, login tokens or account passwords.
 
 StarPort looks for tools in this order: a path you set in **Connections & data**, the current `PATH`, then each tool's standard per-user installation folder. For Antigravity the last fallback is a copy in StarPort's own `.runtime/antigravity` folder. Antigravity's chat and usage queries run in its normal local login environment; StarPort does not add an SSH marker, which could make the tool use a different credential store.

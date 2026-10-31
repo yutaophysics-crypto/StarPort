@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { scheduleIdleRestart } from '../scripts/restart-when-idle.mjs';
 import { readFile, stat } from 'node:fs/promises';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, extname, sep } from 'node:path';
@@ -32,6 +33,7 @@ import { WindowsNotifier } from './notifier-windows.mjs';
 import { ExternalTools } from './external-tools/grants.mjs';
 import { externalApplicationManager } from './external-tools/applications.mjs';
 import { handleExternalToolRoutes } from './external-tools/routes.mjs';
+import {previewManager} from './previews/manager.mjs';
 
 export const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 function equal(a,b){const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);}
@@ -58,6 +60,7 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
   const broadcast=(event,data)=>{
     const payload=`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for(const client of clients){if(client.writableLength>2*1024*1024){client.destroy();clients.delete(client);}else client.write(payload);}
+    return payload.length;
   };
   const runner=new Runner(store,registry,broadcast,implementations,attachments,history);
   const workflows=new Workflows({store,runner,broadcast,dataDir,registry,defaultWorkspace:dirname(root),examRoot});
@@ -82,7 +85,13 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
   const archiveRepair=store.archives.reconcile();
   if(archiveRepair.errors.length)console.warn('部分历史存档等待迁移：',archiveRepair.errors);
   const isBusy=id=>runner.active.has(id)||workflows.busy(id);
-  const externalRoutes={store,registry,isBusy,tools:registry.externalTools||new ExternalTools({root,dataDir}),applications:externalApplicationManager(dataDir)};
+  const externalRoutes={store,registry,isBusy,tools:registry.externalTools||new ExternalTools({root,dataDir}),applications:externalApplicationManager(dataDir),previews:previewManager(dataDir)};
+  runner.localControl={
+    status:chatId=>({app:'Starport',startedAt,activeTasks:runner.active.size,otherActiveTasks:[...runner.active.keys()].filter(id=>id!==chatId).length,
+      runningWorkflows:workflows.runs.size,startingWorkflows:workflows.starting.size,
+      companionSteps:[...workflows.runs.values()].filter(run=>run.chatId===chatId).flatMap(run=>(run.card?.details?.workflowRun?.steps||[]).map(step=>({companionId:step.companionId,status:step.status,queued:!!step.queued}))).slice(0,32)}),
+    reload:()=>{const address=server.address();if(!address||typeof address!=='object')throw Error('星港尚未启动');const watcherPid=scheduleIdleRestart(root,dataDir,address.port);return {scheduled:!!watcherPid,policy:'wait-for-all-tasks-and-workers-idle',notice:'本次及其他任务结束后才会加载更新，不会中断任务。'};}
+  };
   const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
   const server=createServer(async(req,res)=>{
     const address=server.address(), currentPort=typeof address==='object'?address?.port:port;
@@ -157,7 +166,8 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           const id=url.searchParams.get('chatId');
           if(id&&(!/^[\w-]{1,100}$/.test(id)||!store.chat(id)))throw Object.assign(new Error('对话不存在'),{status:404});
           if(id)runner.refreshContext(id).catch(()=>{});
-          json(res,{...runner.live(id),chatStatuses:store.chatStatus.summaries()});return;
+          const follow=id?(url.searchParams.get('follow')||'').split(',').filter(x=>/^[\w-]{1,100}$/.test(x)).slice(0,20):[];
+          json(res,{...runner.live(id,follow),chatStatuses:store.chatStatus.summaries()});return;
         }
         if(path==='/api/memory-sync'&&req.method==='GET'){json(res,memorySync.status());return;}
         if(path==='/api/memory-sync'&&req.method==='PATCH'){json(res,await memorySync.configure(await body(req,4096)));return;}
@@ -243,6 +253,8 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
         }
         if(providerRoute&&req.method==='PUT'){registry.configure(providerRoute[1],await body(req));json(res,await registry.probe(providerRoute[1],true));return;}
         if(path==='/api/groups'&&req.method==='POST'){const data=await body(req);if(typeof data.name!=='string'||!data.name.trim()||data.name.length>120)throw new Error('分组名称应为 1–120 字符');json(res,store.group(data.name.trim()),201);broadcast('refresh',{});return;}
+        const groupMove=path.match(/^\/api\/groups\/([\w-]+)\/move$/);
+        if(groupMove&&req.method==='POST'){const data=await body(req,4096);store.moveGroup(groupMove[1],data.before??null);json(res,{ok:true});broadcast('refresh',{order:true});return;}
         const groupRoute=path.match(/^\/api\/groups\/([\w-]+)(?:\/(delete))?$/);
         if(groupRoute&&!groupRoute[2]&&req.method==='PATCH'){const data=await body(req);if(typeof data.name!=='string'||!data.name.trim()||data.name.length>120)throw new Error('分组名称无效');store.renameGroup(groupRoute[1],data.name.trim());json(res,{ok:true});broadcast('refresh',{});return;}
         if(groupRoute&&(req.method==='DELETE'||(groupRoute[2]==='delete'&&req.method==='POST'))){
@@ -290,9 +302,10 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           if(item&&action==='steer'&&req.method==='POST'){json(res,await runner.steerQueued(id,item,await body(req)));return;}
           if(item&&action==='send'&&req.method==='POST'){const data=await body(req);await runner.dispatchQueue(id,item,data.revision);json(res,store.queue.snapshot(id));return;}
         }
-        const route=path.match(/^\/api\/chats\/([\w-]+)(?:\/(messages|guidance|stop|approval|goal|export|reset-session|read|question-skip|branch|context))?$/);
+        const route=path.match(/^\/api\/chats\/([\w-]+)(?:\/(messages|guidance|stop|approval|goal|export|reset-session|read|question-skip|branch|context|move))?$/);
         if(route){
           const[,id,action]=route,chat=store.chat(id);if(!chat)throw Object.assign(new Error('对话不存在'),{status:404});
+          if(action==='move'&&req.method==='POST'){const data=await body(req,4096);store.moveChat(id,data.before??null);json(res,{ok:true});broadcast('refresh',{order:true});return;}
           if(action==='context'&&req.method==='GET'){json(res,await runner.refreshContext(id,url.searchParams.get('refresh')==='1'));return;}
           if(!action&&req.method==='GET'){await runner.messages(id);json(res,runner.snapshot(id));return;}
           if(!action&&req.method==='DELETE'){

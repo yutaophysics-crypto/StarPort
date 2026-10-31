@@ -46,7 +46,7 @@ test('every marked static label has a translation',()=>{
 });
 test('exam cards have English labels',()=>{
   const i18n=load();
-  for(const file of ['workflow-exam.js','workflow-cards.js']){
+  for(const file of ['workflow-exam.js','workflow-cards.js','workflow-process.js']){
     const labels=[...readFileSync(new URL('../public/'+file,import.meta.url),'utf8').matchAll(/tr\('([^']+)'/g)].map(match=>match[1]);
     for(const label of labels)assert.ok(Object.hasOwn(i18n.english,label),`Missing translation in ${file}: ${label}`);
   }

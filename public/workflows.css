@@ -325,11 +325,13 @@
 .wf-step-status.done {
   color: var(--wf-good);
 }
-.wf-step-process {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
+/* A step's process: the main model's activity view (activity.css), a little more compact. */
+.wf-step-process .workflow-heading {
+  padding: 8px 12px;
+  min-height: 36px;
+}
+.wf-step-process .workflow-body {
+  padding: 8px 12px 12px;
 }
 .wf-step-duty {
   margin: 0;
@@ -638,11 +640,12 @@
   height: 22px;
 }
 
-/* A step's desk */
-.wf-desk {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+/* Above a step's process: how it ran, and the full prompt it was given */
+.wf-desk-note {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--muted);
 }
 .wf-desk-prompt summary {
   cursor: pointer;
@@ -659,10 +662,6 @@
   white-space: pre-wrap;
   font: 11.5px/1.6 var(--mono);
   color: var(--muted);
-}
-.message.wf-desk-answer {
-  max-width: none;
-  margin: 0;
 }
 
 /* Right panel: this conversation's workflows ----------------------------------------------- */
@@ -826,7 +825,8 @@
 .room-mode-switch button[aria-pressed='true'] {
   color: var(--accent);
 }
-.room-one-way {
+.room-one-way,
+.room-main-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -838,10 +838,12 @@
   color: var(--muted);
   font-size: 11px;
 }
-.room-one-way:hover {
+.room-one-way:hover,
+.room-main-toggle:hover {
   color: var(--ink);
 }
-.room-one-way[aria-pressed='true'] {
+.room-one-way[aria-pressed='true'],
+.room-main-toggle[aria-pressed='true'] {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
   color: var(--accent);
 }

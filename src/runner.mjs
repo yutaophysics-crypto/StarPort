@@ -14,13 +14,15 @@ import { redact } from './process.mjs';
 import { validateEffort } from './effort.mjs';
 import { contextBinding, emptyContext, sessionFingerprint, effectiveContext } from './context.mjs';
 import { validateInput, validateReply } from './interactions.mjs';
-import { contextToolHost,contextCommandBridge,contextToolInstructions,MEMORY_READ_TOOLS,MEMORY_PROPOSE_TOOLS } from './context-tools.mjs';
+import { contextToolHost,contextCommandBridge,contextToolInstructions,MEMORY_READ_TOOLS,MEMORY_PROPOSE_TOOLS,CALL_TOOLS } from './context-tools.mjs';
 
 // Starport transport guard after an observed truncation near 192,000 UTF-8 bytes.
 // This is a conservative compatibility limit, not the model context window or a verified
 // universal agy limit. Keep it until the installed transport is verified with larger inputs.
 export const INPUT_BYTE_LIMITS={antigravity:184000};
 const attachmentIds=row=>(row.details.attachments||[]).map(item=>item.id);
+// Native sessions keep the tools they started with, so whom a model may call is part of its session.
+const callSuffix=grant=>grant?':calls='+grant.callees.map(c=>c.id).sort().join(','):'';
 
 export class Runner {
   constructor(store,registry,broadcast,implementations={},attachments=null,history=null) {this.store=store;this.registry=registry;this.broadcast=broadcast;this.active=new Map();this.implementations=implementations;this.attachments=attachments;this.subagentReader=new AntigravitySubagents();this.activityHistory=history?new ActivityHistory(history):null;}
@@ -33,11 +35,14 @@ export class Runner {
   state(chatId) {
     const run=this.active.get(chatId);return run?{id:run.id,provider:run.provider,started:run.started,lastEventAt:run.lastEventAt||run.started,stalled:!!run.stalled,phase:run.phase||'answering',approvals:[...run.approvals.values()],goal:run.goal,inputMode:run.control?.inputMode||null,takesAttachments:true,inputReady:!run.finalizing&&!run.controller.signal.aborted&&typeof run.control?.steer==='function'&&run.control.canSend?.()!==false}:null;
   }
-  live(chatId){
+  // follow: messages the page still shows as running. A run card above the latest reply is not
+  // the last assistant message, so a page that missed its end would otherwise never learn of it.
+  live(chatId,follow=[]){
     const chat=chatId?this.store.chat(chatId):null;
     const run=chatId?this.active.get(chatId):null,message=run?.message||(chat?this.store.lastAssistant(chatId):null);
     const runId=run?.id||message?.details?.runId||null;
-    return {chatId:chat?.id||null,chat,active:[...this.active.keys()],providerVerifications:this.registry.verifications?.()||{},message,inputs:chat?this.store.interactionMessages(chatId,runId):[],...chat?this.store.queue.snapshot(chatId):{},runId,run:chat?this.state(chatId):null,context:chat?this.context(chatId):null};
+    const followed=chat?follow.filter(id=>id!==message?.id).map(id=>this.store.messageById(chatId,id)).filter(Boolean):[];
+    return {chatId:chat?.id||null,chat,active:[...this.active.keys()],providerVerifications:this.registry.verifications?.()||{},message,...followed.length?{followed}:{},inputs:chat?this.store.interactionMessages(chatId,runId):[],...chat?this.store.queue.snapshot(chatId):{},runId,run:chat?this.state(chatId):null,context:chat?this.context(chatId):null};
   }
   snapshot(chatId){return {chat:this.store.chat(chatId),messages:this.store.messages(chatId),...this.store.queue.snapshot(chatId),run:this.state(chatId),context:this.context(chatId)};}
   async refreshContext(chatId,refresh=false){
@@ -50,8 +55,9 @@ export class Runner {
     const chat=this.store.chat(chatId);if(!chat)return null;
     const options=validateOptions(chat.provider,chat.options[chat.provider]);
     const binding=contextBinding(chat,options),runtime=this.registry.resolve(chat.provider,chat.workspace);
-    const fingerprint=runtime?sessionFingerprint(runtime,chat,options,this.store.memory.epoch,this.store.instructions.fingerprint(chat.project_id||null)):null;
-    const promoted=runtime?this.promotedFingerprint(runtime,chat,options):null,current=value=>!!value&&(value===fingerprint||value===promoted);
+    const suffix=chat.options?.desk?'':callSuffix(this.companionCalls?.grant(chat)||null);
+    const fingerprint=runtime?sessionFingerprint(runtime,chat,options,this.store.memory.epoch,this.store.instructions.fingerprint(chat.project_id||null))+suffix:null;
+    const promoted=runtime?this.promotedFingerprint(runtime,chat,options,suffix):null,current=value=>!!value&&(value===fingerprint||value===promoted);
     const active=this.active.get(chatId),session=this.store.session(chatId,chat.provider);
     const message=active?.message||(current(session?.fingerprint)?this.store.messageById(chatId,session.cursor):null);
     const saved=message?.details?.context,activeFingerprint=active?.message?.details?.context?.fingerprint;
@@ -95,11 +101,15 @@ export class Runner {
       // Desk turns are Starport's own machinery. The room grants each companion memory reading
       // and/or proposals; history tools stay off. Memory is scoped to, and evidence comes from,
       // the conversation the desk works for, never the assembled desk prompt.
-      const deskTools=metadata.desk?new Set([...metadata.memory?.read?MEMORY_READ_TOOLS:[],...metadata.memory?.propose?MEMORY_PROPOSE_TOOLS:[]]):null;
+      // A model at work may hand tasks to the companions its room lets it call; callChain is who
+      // called whom to get here, so nobody up the chain is called again.
+      const grant=metadata.bare||metadata.disableContextTools?null:this.companionCalls?.grant(chat,{chain:metadata.callChain||[]})||null;
+      const deskTools=metadata.desk?new Set([...metadata.memory?.read?MEMORY_READ_TOOLS:[],...metadata.memory?.propose?MEMORY_PROPOSE_TOOLS:[],...grant?CALL_TOOLS:[]]):null;
       const noContextTools=metadata.disableContextTools||deskTools?.size===0;
       const memoryChat=metadata.desk?this.store.chat(chat.options?.desk?.parentChatId)||chat:chat;
-      const memoryUsers=()=>this.store.messages(memoryChat.id).filter(row=>row.role==='user'&&row.status==='complete');
-      const deskSuffix=deskTools?':'+[...deskTools].sort().join(','):'',binding=contextBinding(chat,options);
+      // Starport writes the text of an @主模型 turn, so it never counts as the user's own words.
+      const memoryUsers=()=>this.store.messages(memoryChat.id).filter(row=>row.role==='user'&&row.status==='complete'&&!row.details?.dispatchStep);
+      const deskSuffix=(deskTools?':'+[...deskTools].sort().join(','):'')+callSuffix(grant),binding=contextBinding(chat,options);
       const fingerprint=sessionFingerprint(runtime,chat,options,this.store.memory.epoch,this.store.instructions.fingerprint(chat.project_id||null))+deskSuffix;
       const promoted=this.promotedFingerprint(runtime,chat,options,deskSuffix);
       let session=this.store.session(chatId,chat.provider);
@@ -109,11 +119,11 @@ export class Runner {
       if(session&&!metadata.desk&&this.store.messages(chatId).some(row=>row.details?.sessionId===session.native_id&&row.details?.contextCompaction?.status==='error'))session=null;
       if(chat.provider==='deepseek')session=null;
       const attachmentDetails=attached.length?{attachments:attached.map(row=>this.attachments.metadata(row)),attachmentContext}:{};
-      const user=metadata.queued?this.store.queue.consume(metadata.queued,attachmentDetails):this.store.message(chatId,'user',chat.provider,text,'complete',{...attachmentDetails,...(replyTo?{replyTo}:{}),...(runRef?{runRef:runRef.ref,runContext:runRef.context}:{})});
+      const user=metadata.queued?this.store.queue.consume(metadata.queued,attachmentDetails):this.store.message(chatId,'user',chat.provider,text,'complete',{...attachmentDetails,...(replyTo?{replyTo}:{}),...(runRef?{runRef:runRef.ref,runContext:runRef.context}:{}),...(metadata.dispatchStep?{dispatchStep:metadata.dispatchStep}:{})});
       const recall=metadata.desk&&!metadata.memory?.read?{items:[],index:[],epoch:this.store.memory.epoch,text:'',omitted:0}:this.store.memory.recall(text,{projectId:memoryChat.project_id||null,recentMessages:this.store.messages(chatId)});
       // A conversation's own model may propose an exam; only the user can start it.
       const proposeExam=!metadata.desk&&this.proposeExam?args=>this.proposeExam(chatId,args):null;
-      const preamble=(metadata.desk&&!metadata.memory?.propose?'':this.store.memory.instructions())+(metadata.bare?'':this.store.instructions.prompt(chat.project_id||null))+recall.text+(noContextTools?'':contextToolInstructions(chat.provider,deskTools,{exam:!!proposeExam}));
+      const preamble=(metadata.desk&&!metadata.memory?.propose?'':this.store.memory.instructions())+(metadata.bare?'':this.store.instructions.prompt(chat.project_id||null))+recall.text+(noContextTools?'':contextToolInstructions(chat.provider,deskTools,{exam:!!proposeExam,callees:grant?.callees}));
       const inputCap=INPUT_BYTE_LIMITS[chat.provider];
       const toolChatId=noContextTools||deskTools&&!deskTools.has('starport_history_read')?null:chatId;
       // A fresh session (another model, a branch, changed settings, or DeepSeek on every turn) is
@@ -148,7 +158,20 @@ export class Runner {
       if(chat.title==='新对话')this.store.updateChat(chatId,{title:text.replace(/\s+/g,' ').slice(0,36)});
       this.broadcast('message',this.live(chatId));
       this.broadcast('refresh',{chatId});
-      let nativeId=session?.native_id;
+      let nativeId=session?.native_id,unsavedSession=false;
+      // A desk used once (compaction, planning, a call, a workflow step, an exam seat) never
+      // resumes, so its native session need not land in the tool's own history list.
+      const oneOffDesk=!!chat.options?.desk&&!chat.options.desk.persistent;
+      // Each push carries the whole message, so a long turn streamed event by event would send
+      // megabytes per token and keep the page too busy to tick its clocks. Pushes are coalesced
+      // to about 2 MB/s, at most a second apart; approvals and phase changes go out at once.
+      let pushTimer=null,pushSize=0;
+      const pushNow=()=>{clearTimeout(pushTimer);pushTimer=null;pushSize=this.broadcast('message',{chatId,runId:run.id,message:assistant,run:this.state(chatId),context:this.context(chatId)})||0;};
+      const push=urgent=>{
+        if(urgent)return pushNow();
+        if(pushTimer)return;
+        pushTimer=setTimeout(pushNow,Math.min(1000,Math.max(40,pushSize/2048)));pushTimer.unref?.();
+      };
       const emit=e=>{
         if(run.ended||this.active.get(chatId)!==run)return;
         if(e.type==='input-consumed'){
@@ -164,7 +187,7 @@ export class Runner {
         if(e.type==='final-answer')assistant.details.finalAnswer=e.text||'';
         if(e.type==='session'){
           if(nativeId!==e.id)assistant.details.context={...emptyContext(chat.provider),provider:chat.provider,binding,fingerprint};
-          nativeId=e.id;assistant.details.sessionId=e.id;if(e.model)assistant.details.model=e.model;
+          nativeId=e.id;unsavedSession=!!e.ephemeral;assistant.details.sessionId=e.id;if(e.model)assistant.details.model=e.model;
         }
         if(e.type==='usage')assistant.details.usage=e.usage;
         if(e.type==='context')assistant.details.context={...e.context,sessionId:nativeId,provider:chat.provider,binding,fingerprint};
@@ -187,7 +210,7 @@ export class Runner {
         if(e.type==='approval')run.approvals.set(e.request.id,e.request);
         if(e.type==='approval-resolved')run.approvals.delete(e.id);
         this.store.saveMessage(assistant);
-        this.broadcast('message',{chatId,runId:run.id,message:assistant,run:this.state(chatId),context:this.context(chatId)});
+        push(['approval','approval-resolved','phase','goal'].includes(e.type));
       };
       let polling=null,watching=true;
       const pollSubagents=()=>{
@@ -203,8 +226,9 @@ export class Runner {
       const subagentTimer=chat.provider==='antigravity'?setInterval(pollSubagents,2000):null;
       subagentTimer?.unref?.();
       const implementation=this.implementations[chat.provider] || (chat.provider==='codex'?runCodex:chat.provider==='claude'?runClaude:chat.provider==='deepseek'?runDeepseek:runCli);
-      const receivedUsers=()=>this.store.messages(chatId).filter(row=>row.role==='user'&&(prompt.includes(row.content)||row.details?.nativeQuestionReply?.runId===run.id||row.details?.guidance?.runId===run.id&&['accepted','delivered'].includes(row.details.guidance.state)));
-      const contextTools=noContextTools?null:contextToolHost({store:this.store,chat:memoryChat,messages:metadata.desk?memoryUsers:receivedUsers,tools:deskTools,exam:proposeExam,signal:run.controller.signal,isActive:()=>!run.finalizing&&!run.ended,onEvent:emit,
+      const receivedUsers=()=>this.store.messages(chatId).filter(row=>row.role==='user'&&!row.details?.dispatchStep&&(prompt.includes(row.content)||row.details?.nativeQuestionReply?.runId===run.id||row.details?.guidance?.runId===run.id&&['accepted','delivered'].includes(row.details.guidance.state)));
+      const contextTools=noContextTools?null:contextToolHost({store:this.store,chat:memoryChat,messages:metadata.desk?memoryUsers:receivedUsers,tools:deskTools,exam:proposeExam,
+        calls:grant?this.companionCalls.session(grant):null,localControl:metadata.desk?null:this.localControl,signal:run.controller.signal,isActive:()=>!run.finalizing&&!run.ended,onEvent:emit,
         onBrowse:items=>{for(const item of items)if(!assistant.details.memory.browsed.some(old=>old.id===item.id))assistant.details.memory.browsed.push({id:item.id,title:item.title,kind:item.kind});},
         onMemories:(items,reason)=>{for(const item of items){if(!assistant.details.memory.ids.includes(item.id))assistant.details.memory.ids.push(item.id);assistant.details.memory.reads.push({id:item.id,revision:item.revision,reason});}},
         onCandidate:id=>{if(!assistant.details.memory.candidates.includes(id))assistant.details.memory.candidates.push(id);},
@@ -242,7 +266,7 @@ export class Runner {
         assistant.details.liveRevision++;this.store.saveMessage(assistant);
         this.broadcast('message',{chatId,runId:run.id,message:assistant,run:this.state(chatId),context:this.context(chatId)});
       };
-      run.done=(compaction?Promise.resolve().then(compact):Promise.resolve()).then(()=>implementation({provider:chat.provider,runtime,options,session:session?.native_id,initialContext:assistant.details.context,prompt,contextTools,contextEnv:noContextTools?{STARPORT_CONTEXT_URL:'',STARPORT_CONTEXT_TOKEN:''}:run.contextBridge?.env||{},images:this.attachments?.images(attached)||[],goalObjective:text.trim(),cwd:chat.workspace,unattended:!!metadata.desk,
+      run.done=(compaction?Promise.resolve().then(compact):Promise.resolve()).then(()=>implementation({provider:chat.provider,runtime,options,session:session?.native_id,ephemeral:oneOffDesk,initialContext:assistant.details.context,prompt,contextTools,contextEnv:noContextTools?{STARPORT_CONTEXT_URL:'',STARPORT_CONTEXT_TOKEN:''}:run.contextBridge?.env||{},images:this.attachments?.images(attached)||[],goalObjective:text.trim(),cwd:chat.workspace,unattended:!!metadata.desk,
         signal:run.controller.signal,emit,setControl:control=>{run.control=control;if(run.controller.signal.aborted)Promise.resolve(control.stop?.()).catch(()=>{});this.broadcast('message',this.live(chatId));}}))
         .then(()=>{
           run.finalizing=true;
@@ -267,7 +291,9 @@ export class Runner {
           clearInterval(watchdog);clearInterval(subagentTimer);
           if(polling)await polling;
           await pollSubagents();watching=false;
-          run.ended=true;assistant.details.liveRevision++;
+          run.ended=true;clearTimeout(pushTimer);assistant.details.liveRevision++;
+          // Calls this turn handed out and never collected would keep working for nobody.
+          try{contextTools?.close();}catch{}
           assistant.details.endedAt=Date.now();
           if(assistant.details.contextCompaction?.status==='running')Object.assign(assistant.details.contextCompaction,{status:assistant.status==='interrupted'?'interrupted':'error',endedAt:assistant.details.endedAt});
           settleActivity(assistant.details,assistant.status);run.approvals.clear();
@@ -281,7 +307,8 @@ export class Runner {
             input.details.error='任务已结束，这条追加消息尚未交给原工具；请确认后重新发送。';this.store.saveMessage(input);
             this.broadcast('message',{...this.live(chatId),message:input});
           }
-          if(assistant.status==='complete'&&nativeId){
+          // An ephemeral session is gone once its process ends; a later turn starts afresh.
+          if(assistant.status==='complete'&&nativeId&&!unsavedSession){
             if(run.cursor){const input=this.store.messageById(chatId,run.cursor);if(input){input.details.context=assistant.details.context;input.details.sessionId=nativeId;this.store.saveMessage(input);}}
             this.store.saveSession(chatId,chat.provider,nativeId,run.cursor||assistant.id,fingerprint);
           }
@@ -291,10 +318,11 @@ export class Runner {
           // Send the saved, settled state directly. Completion must not wait for
           // provider discovery, full history recovery or an optional refresh hint.
           this.broadcast('message',this.live(chatId));this.broadcast('refresh',{chatId});
-          // Tell the user once the chat is done: not for workflow desks, a stop
+          // Tell the user once the chat is done: not for workflow desks, the conversation
+          // model's part of an @-message (its run card tells once everyone is done), a stop
           // they pressed themselves, or a reply the queue is about to continue.
           const continues=assistant.status==='complete'&&this.store.queue.list(chatId)[0]?.state==='queued';
-          if(!metadata.desk&&!this.closing&&!continues&&['complete','error'].includes(assistant.status))
+          if(!metadata.desk&&!metadata.dispatchStep&&!this.closing&&!continues&&['complete','error'].includes(assistant.status))
             try{this.onFinished?.({chatId,status:assistant.status,text:assistant.status==='error'?assistant.details.error:assistant.content});}catch{}
           if(assistant.status==='complete'&&!this.closing)this.dispatchQueue(chatId).catch(()=>{});
         });

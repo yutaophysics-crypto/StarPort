@@ -3,7 +3,7 @@
 // per-run files with the extra restrictions added; the originals never change.
 import { readFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, isAbsolute } from 'node:path';
 import { writePrivateFile } from '../process.mjs';
 import { validateToolSnapshot, insideToolPath } from './grants.mjs';
 
@@ -26,9 +26,19 @@ const editDenyRule=path=>'Edit(/'+path.replaceAll('\\','/').replace(/^([A-Za-z])
 // --mcp-config entry) or else the registered native codex.exe.
 export async function externalToolCapability(runtime,cwd=process.cwd(),sandboxFallback){
   if(process.platform!=='win32')return {supported:false,reason:'外部工具隔离目前支持 Windows 上的 Claude Code'};
+  if(runtime?.normalPolicy){
+    if(!sandboxFallback||!existsSync(sandboxFallback))return {supported:false,reason:'普通开发终端需要已注册的 Windows 文件沙箱运行时'};
+    return {supported:true,sandboxExecutable:sandboxFallback,normalPolicy:runtime.normalPolicy,hostExecution:true};
+  }
   const {values}=splitArgs(runtime?.prefixArgs||[],'--mcp-config',true);
   for(const value of values){
-    const config=await configuration(value,cwd),sandbox=config.mcpServers?.starport_workspace?.env?.STARPORT_CODEX_SANDBOX;
+    const config=await configuration(value,cwd),terminal=config.mcpServers?.starport_workspace;
+    const runner=terminal?.env?.STARPORT_ISOLATED_RUNNER;
+    if(runner!==undefined){
+      if(typeof runner!=='string'||!isAbsolute(runner)||!existsSync(runner)||typeof terminal.command!=='string'||!isAbsolute(terminal.command)||!existsSync(terminal.command))throw Error('本机隔离运行器配置无效；不会改用其他终端');
+      return {supported:true,runner:{command:terminal.command,args:[runner],env:{NODE_OPTIONS:''}},hostExecution:terminal.env?.STARPORT_ALLOW_HOST_TOOLS!=='0'};
+    }
+    const sandbox=terminal?.env?.STARPORT_CODEX_SANDBOX;
     if(sandbox&&existsSync(sandbox))return {supported:true,sandboxExecutable:sandbox};
   }
   if(sandboxFallback&&/[\\/]codex\.exe$/i.test(sandboxFallback)&&existsSync(sandboxFallback))return {supported:true,sandboxExecutable:sandboxFallback};
@@ -38,7 +48,7 @@ export async function externalToolCapability(runtime,cwd=process.cwd(),sandboxFa
 // never enter the session fingerprint. Owner proxies/browser MCPs are preserved.
 export async function prepareExternalClaude(runtime,cwd){
   const policy=runtime.externalTools;
-  if(!policy?.tools?.length)return {runtime,cleanup:async()=>{}};
+  if(!policy||!policy.tools.length&&!policy.normalPolicy)return {runtime,cleanup:async()=>{}};
   validateToolSnapshot(policy,cwd);
   const capability=await externalToolCapability(runtime,cwd,policy.sandboxExecutable);if(!capability.supported)throw Error(capability.reason);
   const settingsArgs=splitArgs(runtime.prefixArgs||[],'--settings'),mcpArgs=splitArgs(settingsArgs.rest,'--mcp-config',true);
@@ -56,7 +66,7 @@ export async function prepareExternalClaude(runtime,cwd){
       blockReadsOutsideWorkingDirectories:true,deny:[...new Set([...(settings.permissions?.deny||[]),...policy.tools.map(tool=>editDenyRule(tool.canonical))])]}};
     const settingsFile=await save('settings.json',preparedSettings),mcpFile=await save('mcp.json',config);
     const safeArgs=splitArgs(mcpArgs.rest,'--tools',true).rest.filter(arg=>!['--restricted','--strict-mcp-config'].includes(arg));
-    return {runtime:{...runtime,workspaceTerminal:{sandboxExecutable:capability.sandboxExecutable},prefixArgs:[...safeArgs,'--restricted','--strict-mcp-config','--tools',NATIVE_TOOLS,'--settings',settingsFile,'--mcp-config',mcpFile,
+    return {runtime:{...runtime,workspaceTerminal:{sandboxExecutable:capability.sandboxExecutable,runner:capability.runner,normalPolicy:capability.normalPolicy,hostExecution:capability.hostExecution},prefixArgs:[...safeArgs,'--restricted','--strict-mcp-config','--tools',NATIVE_TOOLS,'--settings',settingsFile,'--mcp-config',mcpFile,
       ...policy.tools.flatMap(tool=>['--add-dir',tool.canonical])]},cleanup,directory};
   }catch(error){await cleanup();throw error;}
 }

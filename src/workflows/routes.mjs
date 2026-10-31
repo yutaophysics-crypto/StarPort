@@ -13,6 +13,7 @@ export async function handleWorkflowRoutes(workflows,method,path,read){
   if((match=path.match(/^\/api\/rooms\/([\w-]+)\/members$/))&&method==='POST')return ok(workflows.addMember(match[1],(await read()).companionId));
   if((match=path.match(/^\/api\/rooms\/([\w-]+)\/members\/([\w-]+)\/remove$/))&&method==='POST')return ok(workflows.removeMember(match[1],match[2],await read()));
   if((match=path.match(/^\/api\/rooms\/([\w-]+)\/members\/([\w-]+)\/memory$/))&&method==='PATCH')return ok(workflows.setMemberMemory(match[1],match[2],await read()));
+  if((match=path.match(/^\/api\/rooms\/([\w-]+)\/calls\/([\w-]+)$/))&&method==='PUT')return ok(workflows.setRoomCalls(match[1],match[2],await read()));
   if(path==='/api/workflows'&&method==='POST')return ok(workflows.createWorkflow(await read()),201);
   if((match=path.match(/^\/api\/workflows\/([\w-]+)$/))){
     if(method==='PATCH')return ok(workflows.updateWorkflow(match[1],await read()));
@@ -35,6 +36,7 @@ export async function handleWorkflowRoutes(workflows,method,path,read){
     if(method==='GET')return ok(workflows.ledgerView(match[1]));
     if(method==='PATCH')return ok(await workflows.editLedger(match[1],await read()));
   }
+  if((match=path.match(/^\/api\/desks\/([\w-]+)\/turns\/([\w-]+)$/))&&method==='GET')return ok(workflows.deskTurn(match[1],match[2]));
   if((match=path.match(/^\/api\/workflow-runs\/([\w-]+)\/stop$/))&&method==='POST')return ok(workflows.stopRun(match[1]));
   return null;
 }

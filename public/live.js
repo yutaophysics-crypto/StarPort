@@ -38,13 +38,15 @@ globalThis.StarportLive=(()=>{
     if(data.chatId===state.chat?.id&&Array.isArray(data.queue)&&Number.isSafeInteger(data.queueVersion)&&data.queueVersion>=(state.queueVersion??-1)){
       currentChanged=JSON.stringify(state.queue)!==JSON.stringify(data.queue);state.queue=data.queue;state.queueVersion=data.queueVersion;
     }
-    for(const message of data.inputs||[])currentChanged=applyUpdate(state,{chatId:data.chatId,message}).currentChanged||currentChanged;
+    for(const message of [...data.inputs||[],...data.followed||[]])currentChanged=applyUpdate(state,{chatId:data.chatId,message}).currentChanged||currentChanged;
     const current=data.chatId===state.chat?.id;
     const index=current&&data.message?state.messages.findIndex(row=>row.id===data.message.id):-1;
     const selected=index<0?data.message:preferMessage(state.messages[index],data.message);
     // A late packet from a finished run cannot restore its old running state.
     if(current&&data.message&&selected!==data.message)return {currentChanged,chatChanged:false,activeChanged:false,providersChanged};
-    const latestIndex=current?state.messages.findLastIndex(row=>row.role==='assistant'):-1;
+    // Run cards are not the runner's replies: one added below a running reply (a companion called
+    // mid-turn) must not make that reply's own packets look stale.
+    const latestIndex=current?state.messages.findLastIndex(row=>row.role==='assistant'&&!row.details?.workflowRun):-1;
     const older=current&&(data.runId&&state.run&&data.runId!==state.run.id&&!data.run||data.message&&(index>=0&&index<latestIndex||index<0&&latestIndex>=0&&Date.parse(data.message.created)<Date.parse(state.messages[latestIndex].created)));
     if(current&&data.message){
       if(index>=0){currentChanged=JSON.stringify(state.messages[index])!==JSON.stringify(selected)||currentChanged;state.messages[index]=selected;}
@@ -68,13 +70,17 @@ globalThis.StarportLive=(()=>{
   }
   function create({state,api,viewRevision,onChange,onConnection,onRefresh,onError=()=>{},events=new EventSource('/api/events'),document:doc=globalThis.document,window:win=globalThis.window,interval=5000,setInterval:setTimer=globalThis.setInterval,clearInterval:clearTimer=globalThis.clearInterval}){
     let revision=0,pending=null,needsSync=true,closed=false;
+    const running=()=>(state.messages||[]).filter(message=>message.role==='assistant'&&message.status==='running');
     const receive=data=>{if(closed)return;const change=applyUpdate(state,data);if(change.currentChanged||change.chatChanged||change.sidebarChanged||change.activeChanged||change.providersChanged)revision++;onChange?.({...change,terminal:change.currentChanged&&!state.run});};
     async function reconcile(){
       if(closed)return;if(pending)return pending;
       const chatId=state.chat?.id||null,view=viewRevision(),version=revision;
+      // Every reply still shown as running is read back, not only the latest: a run card above the
+      // main model's answer would otherwise stay "working" after a dropped stream until F5.
+      const follow=chatId?running().map(message=>message.id).slice(-20):[];
       pending=(async()=>{
         try{
-          const data=await api('/live'+(chatId?'?chatId='+encodeURIComponent(chatId):''));
+          const data=await api('/live'+(chatId?'?chatId='+encodeURIComponent(chatId)+(follow.length?'&follow='+follow.map(encodeURIComponent).join(','):''):''));
           if(closed)return;
           if(view!==viewRevision()||chatId!==(state.chat?.id||null)||version!==revision){needsSync=true;return;}
           receive(data);needsSync=false;
@@ -84,13 +90,17 @@ globalThis.StarportLive=(()=>{
     }
     events.onopen=()=>{onConnection?.(true);needsSync=true;reconcile();globalThis.StarportWorkflows?.receive({reason:'reconnect'});};
     events.onerror=()=>{onConnection?.(false);needsSync=true;};
-    events.addEventListener('message',event=>{try{receive(JSON.parse(event.data));}catch(error){needsSync=true;onError(error);}});
-    events.addEventListener('refresh',()=>onRefresh?.());
+    // Packets about other chats include companions' desks, whose turns show in run cards.
+    events.addEventListener('message',event=>{
+      let data;try{data=JSON.parse(event.data);receive(data);}catch(error){needsSync=true;onError(error);return;}
+      if(data?.message&&data.chatId&&data.chatId!==state.chat?.id)try{globalThis.StarportWorkflows?.deskMessage?.(data.chatId,data.message);}catch{}
+    });
+    events.addEventListener('refresh',event=>{let data={};try{data=JSON.parse(event.data||'{}')||{};}catch{}onRefresh?.(data);});
     events.addEventListener('workflows',event=>{try{globalThis.StarportWorkflows?.receive(JSON.parse(event.data));}catch(error){onError(error);}});
     events.addEventListener('memory-sync',event=>{try{globalThis.StarportMemorySync?.receive(JSON.parse(event.data));}catch(error){onError(error);}});
     const resume=()=>{if(!doc?.hidden)reconcile();};
     doc?.addEventListener('visibilitychange',resume);win?.addEventListener('pageshow',resume);win?.addEventListener('focus',resume);
-    const timer=setTimer(()=>{if(!doc?.hidden&&(needsSync||state.run||state.queue?.length||state.active?.length||state.messages?.at(-1)?.status==='running'))reconcile();},interval);
+    const timer=setTimer(()=>{if(!doc?.hidden&&(needsSync||state.run||state.queue?.length||state.active?.length||state.messages?.at(-1)?.status==='running'||running().length))reconcile();},interval);
     return {receive,reconcile,get revision(){return revision;},close(){closed=true;clearTimer(timer);events.close();doc?.removeEventListener('visibilitychange',resume);win?.removeEventListener('pageshow',resume);win?.removeEventListener('focus',resume);}};
   }
   return {create,applyUpdate,preferMessage,orderedMessages,mergeChatStatus};

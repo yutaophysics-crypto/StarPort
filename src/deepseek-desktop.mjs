@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec, childEnvironment } from './process.mjs';
 import { effortChoices } from './effort.mjs';
+import {requireClaudeNetworkProtection} from './claude-network.mjs';
 
 const metadataScript=fileURLToPath(new URL('../scripts/deepseek-desktop-metadata.cjs',import.meta.url));
 
@@ -24,6 +25,7 @@ export function isDeepseekDesktop(runtime) {
 }
 
 export async function deepseekDesktopMetadata(runtime,cwd,run=exec) {
+  await requireClaudeNetworkProtection(runtime);
   const result=await run(runtime.command,['--expose-internals',metadataScript,runtime.prefixArgs[1]],
     {cwd,env:childEnvironment(runtime.env),timeout:15000,maxBuffer:2*1024*1024,windowsHide:true});
   const metadata=JSON.parse(result.stdout);

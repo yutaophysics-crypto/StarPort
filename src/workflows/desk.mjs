@@ -11,10 +11,11 @@ function describe(request){
 }
 
 // `bare` leaves out the user's standing preferences and project instructions (exam seats).
-export async function runUnattended({runner,store,clockFactory},run,deskId,prompt,{minutes=0,memory=null,bare=false,onNote=()=>{},onRuntime=()=>{},onCheckpoint=()=>{}}={}){
+// `callChain` is who called whom to reach this desk, when a companion was called mid-task.
+export async function runUnattended({runner,store,clockFactory},run,deskId,prompt,{minutes=0,memory=null,bare=false,callChain=[],onNote=()=>{},onRuntime=()=>{},onCheckpoint=()=>{}}={}){
   run.desks.add(deskId);
   try{
-    const started=await runner.start(deskId,prompt,[],{desk:true,...bare?{bare:true}:{},memory:{read:!!memory?.read,propose:!!memory?.propose}});
+    const started=await runner.start(deskId,prompt,[],{desk:true,...bare?{bare:true}:{},memory:{read:!!memory?.read,propose:!!memory?.propose},callChain});
     // Notices already present are Starport's own (context trimming); the tool's arrive later.
     const handled=new Set(),preset=started.assistant.details?.notices?.length||0;
     const clock=clockFactory({minutes}),runtime=()=>({...clock.snapshot(),messageId:started.assistant.id});

@@ -3,8 +3,10 @@
 // Wires the page up and opens the first view. Loaded last of the app-*.js files.
 
 // Live changes arrive in bursts: a full refresh waits for a quiet moment, and streamed text is
-// drawn at most every 80 ms until the run ends.
+// drawn at most every 80 ms until the run ends. A refresh about other chats only (a companion's
+// desk starting, a chat changed elsewhere) rereads the chat list, not the open conversation.
 let refreshTimer;
+let refreshChat = false;
 let renderTimer;
 
 function connectEvents() {
@@ -23,9 +25,17 @@ function connectEvents() {
     api,
     viewRevision: () => viewRevision,
     onConnection: connection,
-    onRefresh: () => {
+    onRefresh: (data = {}) => {
+      const id = state.chat?.id;
+      // A room or conversation dragged to a new place changes only the list.
+      if (!data.order && (!id || (!data.chatId && !data.deletedChatId) || data.chatId === id || data.deletedChatId === id))
+        refreshChat = true;
       clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => refresh().catch(e => toast(e.message)), 120);
+      refreshTimer = setTimeout(() => {
+        const whole = refreshChat;
+        refreshChat = false;
+        (whole ? refresh() : refreshList()).catch(e => toast(e.message));
+      }, 120);
     },
     onError: () => connection(false),
     onChange: change => {

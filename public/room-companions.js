@@ -150,6 +150,17 @@
     }
     const present = new Set(room.members.map(c => c.id));
     const list = el('ul', { class: 'room-roster-manage' });
+    if (room.members.length)
+      list.append(
+        el('li', { class: 'in-room' }, [
+          avatar(W.MAIN),
+          el('span', { class: 'room-member-text' }, [
+            el('span', { class: 'room-member-name', text: W.MAIN.name }),
+            el('span', { class: 'room-member-role', text: '这个房间里各个对话自己的模型' }),
+            callToggles(room, W.MAIN.id, W.MAIN.name)
+          ])
+        ])
+      );
     for (const c of W.companions()) {
       const inRoom = present.has(c.id);
       const toggle = el('button', {
@@ -179,7 +190,8 @@
           el('span', { class: 'room-member-text' }, [
             el('span', { class: 'room-member-name', text: c.name }),
             el('span', { class: 'room-member-role', text: [c.role, modelLine(c)].filter(Boolean).join(' · ') }),
-            inRoom ? memoryToggles(room, c) : null
+            inRoom ? memoryToggles(room, c) : null,
+            inRoom ? callToggles(room, c.id, c.name) : null
           ]),
           textAction('设置', () => openCompanionConfig(c, { back: () => openRosterManager(room.groupId) })),
           toggle
@@ -193,7 +205,7 @@
       body: [
         el('p', {
           class: 'room-dialog-note',
-          text: '伙伴可以自由进出任何房间，性格和模型跟着伙伴走；它在工作流里做什么，由工作流的位置决定。能不能读长期记忆、提记忆候选，每个房间分别设置。'
+          text: '伙伴可以自由进出任何房间，性格和模型跟着伙伴走；它在工作流里做什么，由工作流的位置决定。能不能读长期记忆、提记忆候选，干活时能调用哪些伙伴，每个房间分别设置。'
         }),
         W.companions().length ? list : el('p', { class: 'room-desk-empty', text: '还没有伙伴。' })
       ],
@@ -231,6 +243,45 @@
         }
       };
       box.append(el('label', { class: 'room-check room-memory-check', title }, [input, el('span', { text: label })]));
+    }
+    return box;
+  }
+
+  // Per room: whom this caller may hand part of its task to while it works. Nobody unless ticked.
+  function callToggles(room, callerId, callerName) {
+    const others = room.members.filter(m => m.id !== callerId);
+    if (!others.length) return null;
+    const current = new Set(W.callsOf(room.groupId, callerId));
+    const box = el('span', { class: 'room-member-memory room-member-calls' }, [
+      el('span', { class: 'room-calls-label', text: '可以调用' })
+    ]);
+    const rows = others.map(m => {
+      const input = el('input', { type: 'checkbox', checked: current.has(m.id) });
+      box.append(
+        el(
+          'label',
+          {
+            class: 'room-check room-memory-check',
+            title: `${callerName} 在「${room.title}」里干活时，可以把一部分任务交给 ${m.name}`
+          },
+          [input, el('span', { text: `${m.avatar} ${m.name}` })]
+        )
+      );
+      return { id: m.id, input };
+    });
+    for (const { input } of rows) {
+      input.onchange = async () => {
+        for (const row of rows) row.input.disabled = true;
+        try {
+          const callees = rows.filter(row => row.input.checked).map(row => row.id);
+          await W.call('/rooms/' + room.groupId + '/calls/' + callerId, 'PUT', { callees });
+        } catch (error) {
+          input.checked = !input.checked;
+          toast(error.message);
+        } finally {
+          for (const row of rows) row.input.disabled = false;
+        }
+      };
     }
     return box;
   }

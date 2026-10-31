@@ -485,3 +485,134 @@ test('while a companion works: others take @-requests alongside it, the chat mod
   assert.ok(Date.parse(done.started)>=Date.parse(firstStep.ended),'its clock started after the first request ended');
   assert.match(done.output,/完成 第二件/);
 });
+test('companion calls: the room decides who may call whom; calls run at fresh desks, cannot loop, and stop with their caller',{timeout:30000},async t=>{
+  const reply=(emit,text)=>{emit({type:'replace',text});emit({type:'final-answer',text});};
+  const tools={},prompts={};
+  const collect=async(contextTools,callId)=>{let result;do result=await contextTools.call('starport_companion_wait',{callId,seconds:1});while(result.status==='running');return result;};
+  const implementations={
+    // Earlier turns come before the new message as context, so only the end of the prompt is matched.
+    claude:async({prompt:full,emit,contextTools})=>{
+      const prompt=full.slice(-20);tools.main=contextTools.definitions.map(d=>d.name);
+      if(prompt.includes('请甲算')){const {callId}=await contextTools.call('starport_companion_call',{companion:'@甲',task:'算一下 6×7'});reply(emit,'甲说：'+(await collect(contextTools,callId)).output);}
+      else if(prompt.includes('试试乙')){try{await contextTools.call('starport_companion_call',{companion:'乙',task:'随便'});reply(emit,'居然可以');}catch(error){reply(emit,'不行：'+error.message);}}
+      else if(prompt.includes('交出去就走')){await contextTools.call('starport_companion_call',{companion:'甲',task:'慢任务'});reply(emit,'先走了');}
+      else reply(emit,'普通回答');
+    },
+    // A desk's own task is what it acts on; the conversation above it mentions earlier ones.
+    codex:async({prompt:full,emit,contextTools,signal})=>{
+      const who=full.match(/你是「(.+?)」/)?.[1],prompt=full.match(/## (?:你的分工|\S+ 交给你的任务)\n(.*)/)?.[1]||'';
+      (prompts[who]||=[]).push(full);tools[who]=contextTools?.definitions.map(d=>d.name)||[];
+      if(prompt.includes('慢任务')){await new Promise(resolve=>signal.aborted?resolve():signal.addEventListener('abort',resolve));throw Object.assign(Error('已停止'),{canceled:true});}
+      if(prompt.includes('让乙找丙')){const {callId}=await contextTools.call('starport_companion_call',{companion:'丙',task:'丙来复核'});return reply(emit,'我负责：转交\n丙的结论：'+(await collect(contextTools,callId)).output);}
+      reply(emit,who==='甲'?'我负责：算数\n42':'我负责：复核\n没问题');
+    }};
+  const dataDir=mkdtempSync(join(tmpdir(),'hub-calls-')),workspace=mkdtempSync(join(tmpdir(),'hub-calls-ws-'));
+  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
+  const {store,workflows,runner}=hub,room=store.group('调用室'),popups=[];workflows.deskPollMs=20;
+  workflows.onFinished=info=>popups.push(info);
+  for(const [id,name] of [['a','甲'],['b','乙'],['c','丙']]){workflows.createCompanion({name,avatar:'🦉',provider:'codex'},{id});workflows.addMember(room.id,id);}
+  const chat=store.newChat({group_id:room.id,provider:'claude',workspace});
+  const cards=()=>store.messages(chat.id).filter(m=>m.details?.workflowRun?.kind==='call').map(m=>m.details.workflowRun);
+  const ask=async text=>{const started=await runner.start(chat.id,text);await started.done;await until(()=>!runner.active.has(chat.id)&&!workflows.runs.size,'turn and calls settle');return store.messageById(chat.id,started.assistant.id);};
+
+  // Nothing granted: no call tools anywhere.
+  await ask('你好');assert.ok(!tools.main.includes('starport_companion_call'));
+  assert.throws(()=>workflows.setRoomCalls(room.id,'b',{callees:['b']}),/不能调用自己/);
+  assert.throws(()=>workflows.setRoomCalls(room.id,'main',{callees:['outsider']}),/房间里的伙伴/);
+  workflows.setRoomCalls(room.id,'main',{callees:['a','c']});workflows.setRoomCalls(room.id,'b',{callees:['c']});workflows.setRoomCalls(room.id,'c',{callees:['b']});
+  assert.deepEqual(workflows.state().roomCalls[room.id],{main:['a','c'],b:['c'],c:['b']});
+
+  // 主模型 calls 甲 and gets the answer back; the call is a card, without a popup of its own.
+  const answer=await ask('请甲算一下');
+  assert.ok(tools.main.includes('starport_companion_call')&&tools.main.includes('starport_companion_wait'));
+  assert.equal(answer.content,'甲说：我负责：算数\n42');
+  assert.deepEqual(cards().map(c=>[c.title,c.status,c.steps[0].status]),[['主模型 调用 甲','done','done']]);
+  assert.match(prompts['甲'][0],/## 主模型 交给你的任务\n算一下 6×7/);assert.match(prompts['甲'][0],/用户：请甲算一下/,'the callee sees the conversation so far');
+  const deskOf=card=>store.chat(card.steps[0].deskChatId);
+  assert.equal(deskOf(cards()[0]).options.desk.call,true,'a fresh desk, not 甲\'s persistent one');
+  assert.equal(popups.length,0,'the call card does not notify; the caller\'s own end does');
+
+  // Not granted: 乙 is refused by name, with whom it may call instead.
+  assert.match((await ask('试试乙')).content,/不行：不能调用「乙」。可以调用：甲、丙/);
+
+  // 乙 (called by @) may call 丙; 丙 may call 乙 in general, but not back up its own chain.
+  const sent=await workflows.dispatch(chat.id,{text:'@乙 让乙找丙复核'});
+  await until(()=>!workflows.runs.size,'dispatch and its call finish');
+  assert.match(store.messageById(chat.id,sent.message.id).details.workflowRun.steps[0].output,/丙的结论：我负责：复核/);
+  assert.deepEqual(cards().at(-1).title,'乙 调用 丙');
+  assert.ok(tools['乙'].includes('starport_companion_call'));
+  assert.ok(!tools['丙'].includes('starport_companion_call'),'乙 is up 丙\'s chain, so 丙 has nobody to call');
+
+  // A caller that hands work out and leaves stops it.
+  assert.equal((await ask('交出去就走')).content,'先走了');
+  const left=cards().at(-1);
+  assert.equal(left.status,'stopped');assert.match(left.notes.at(-1),/主模型 这一轮已结束/);
+
+  // Leaving the room takes a companion's call rights, both ways, with it.
+  workflows.removeMember(room.id,'c');
+  assert.deepEqual(workflows.state().roomCalls[room.id],{main:['a']});
+  // The route, through HTTP.
+  const base='http://127.0.0.1:'+hub.server.address().port,headers={'X-Hub-Token':hub.token,'Content-Type':'application/json'};
+  const put=await fetch(base+'/api/rooms/'+room.id+'/calls/main',{method:'PUT',headers,body:JSON.stringify({callees:['a','b']})});
+  assert.equal(put.status,200);assert.deepEqual((await put.json()).callees,['a','b']);
+});
+
+test('@主模型: only an explicit mention gives the conversation model a part; it answers in the conversation, in plan order',{timeout:30000},async t=>{
+  const people=[{id:'a',name:'甲'}];
+  assert.deepEqual(parseMentions('@甲 查资料，@主模型 汇总',people,{main:true}).map(h=>[h.companion.id,h.segment]),[['a','查资料，'],['main','汇总']]);
+  assert.deepEqual(parseMentions('@甲 查资料，@主模型 汇总',people).map(h=>h.companion.id),['a'],'without the option 主模型 is plain text');
+  assert.deepEqual(parseMentions('@主模型 你看',[{id:'z',name:'主模型'}],{main:true}).map(h=>h.companion.id),['z'],'a companion named 主模型 keeps the name');
+
+  const prompts=[];let finishLong;const long=new Promise(resolve=>finishLong=resolve);
+  const reply=(emit,text)=>{emit({type:'replace',text});emit({type:'final-answer',text});};
+  let plan='{"steps":[{"order":1,"companion":"a","task":"查资料"},{"order":2,"companion":"main","task":"汇总甲的资料"}]}';
+  const implementations={
+    codex:async({prompt,emit})=>{prompts.push({who:'codex',prompt});if(prompt.includes('你是星港的排程员'))return reply(emit,plan);reply(emit,'我负责：查资料\n资料：42');},
+    claude:async({prompt,emit})=>{prompts.push({who:'main',prompt});if(prompt.includes('先回答一个长问题'))await long;reply(emit,prompt.includes('[星港点名]')?'主模型汇总完成':'主模型的普通回答');}};
+  const dataDir=mkdtempSync(join(tmpdir(),'hub-main-')),workspace=mkdtempSync(join(tmpdir(),'hub-main-ws-'));
+  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>{finishLong();return hub.close();});
+  const {store,workflows,runner}=hub,room=store.group('主模型室');workflows.deskPollMs=20;
+  workflows.createCompanion({name:'甲',avatar:'🦉',provider:'codex'},{id:'a'});workflows.addMember(room.id,'a');
+  const chat=store.newChat({group_id:room.id,provider:'claude',workspace});
+  const run=id=>store.messageById(chat.id,id).details.workflowRun;
+
+  await assert.rejects(workflows.dispatch(chat.id,{text:'@主模型 你好'}),/只点名了主模型/);
+
+  // 甲 first, then the conversation model sums up with 甲's output in front of it.
+  const first=await workflows.dispatch(chat.id,{text:'@甲 查资料，@主模型 等甲做完后汇总'});
+  await until(()=>!workflows.runs.size,'run finishes');
+  const done=run(first.message.id);
+  assert.equal(done.status,'done');assert.equal(done.plan.source,'planner');
+  assert.deepEqual(done.steps.map(s=>[s.companionId,s.order,s.status]),[['a',1,'done'],['main',2,'done']]);
+  assert.deepEqual(first.user.details.dispatch,{companions:['a'],main:true});
+  const desk=prompts.find(p=>p.who==='codex'&&p.prompt.includes('## 你的分工'));
+  assert.match(desk.prompt,/表里的「主模型」是这个对话自己的模型/);
+  const mainPrompt=prompts.find(p=>p.who==='main').prompt;
+  assert.match(mainPrompt,/\[星港点名\]/);assert.match(mainPrompt,/## 你的分工\n汇总甲的资料/);assert.match(mainPrompt,/资料：42/,'it sees 甲\'s output');
+  const messages=store.messages(chat.id),step=done.steps[1];
+  const asked=messages.find(m=>m.details?.dispatchStep);
+  assert.deepEqual(asked.details.dispatchStep,{runId:done.id,cardId:first.message.id,task:'汇总甲的资料'});
+  const answer=store.messageById(chat.id,step.mainMessageId);
+  assert.equal(answer.role,'assistant');assert.equal(answer.provider,'claude');assert.equal(answer.content,'主模型汇总完成');
+  assert.equal(step.output,'主模型汇总完成');
+  // The conversation's history names the split and does not repeat the model's answer in the card.
+  const history=buildContext(messages,null).text;
+  assert.match(history,/伙伴的部分见运行卡片，排给主模型的部分由星港另行交给对话模型/);
+  assert.equal(history.split('主模型汇总完成').length-1,1,'the answer appears once, as the model\'s own reply');
+  // Saved as a workflow, only the companions' rows become positions.
+  const saved=workflows.saveAsWorkflow(chat.id,first.message.id,{name:'查资料'});
+  assert.deepEqual(saved.workflow.stages.map(stage=>stage.positions.length),[1]);assert.deepEqual(Object.values(saved.assignments),['a']);
+
+  // When the conversation model is busy, its part waits for the turn already running.
+  plan='{"steps":[{"order":1,"companion":"a","task":"查资料"},{"order":1,"companion":"main","task":"同时汇总"}]}';
+  const busy=await runner.start(chat.id,'先回答一个长问题');
+  const second=await workflows.dispatch(chat.id,{text:'@甲 查资料 @主模型 同时汇总'});
+  const mainStep=()=>run(second.message.id).steps.find(s=>s.companionId==='main');
+  await until(()=>mainStep()?.queued===true,'main part waits');
+  await until(()=>run(second.message.id).steps.find(s=>s.companionId==='a')?.status==='done','甲 works meanwhile');
+  assert.equal(mainStep().status,'running');assert.equal(mainStep().mainMessageId,undefined);
+  finishLong();await busy.done;
+  await until(()=>!workflows.runs.size,'second run finishes');
+  assert.equal(mainStep().status,'done');assert.equal(mainStep().queued,undefined);
+  assert.ok(Date.parse(store.messageById(chat.id,mainStep().mainMessageId).created)>=Date.parse(store.messageById(chat.id,busy.assistant.id).created));
+});

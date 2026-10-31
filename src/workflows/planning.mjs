@@ -1,8 +1,13 @@
 // Turning an @-mention message into an execution order, and reading a verifier's verdict.
 
+// A message that @-mentions companions goes to them alone. Writing @主模型 as well gives the
+// conversation's own model a part of it. A companion that is itself named 主模型 keeps the name.
+export const MAIN=Object.freeze({id:'main',name:'主模型',avatar:'主',role:'本对话自己的模型',main:true});
+const withMain=companions=>companions.some(c=>c?.name===MAIN.name)?[...companions]:[...companions,MAIN];
+
 // Names are matched exactly and longest first, so Chinese text after a name is never swallowed.
-export function parseMentions(value,companions){
-  const source=String(value||''),names=[...companions].filter(c=>c?.name).sort((a,b)=>b.name.length-a.name.length),hits=[];
+export function parseMentions(value,companions,{main=false}={}){
+  const source=String(value||''),names=(main?withMain(companions):[...companions]).filter(c=>c?.name).sort((a,b)=>b.name.length-a.name.length),hits=[];
   for(let i=0;i<source.length;i++){
     if(source[i]!=='@'&&source[i]!=='＠')continue;
     const match=names.find(c=>source.startsWith(c.name,i+1));
@@ -32,6 +37,7 @@ export function heuristicPlan(value,mentions){
 
 export function plannerPrompt(value,mentions){
   const roster=mentions.map(m=>`- id=${m.companion.id} 名字=${m.companion.name}${m.companion.role?' 角色='+m.companion.role:''}`).join('\n');
+  const main=mentions.some(m=>m.companion.main)?'\n- id=main 不是伙伴，是这个对话自己的模型（用户写了 @主模型）。只把用户交给 @主模型 的那部分排给它。':'';
   return `你是星港的排程员。用户在房间里点名了几位伙伴，请根据用户原话排出执行顺序表。只输出一个 JSON 对象，不要输出任何别的文字。
 
 被点名的伙伴：
@@ -47,7 +53,7 @@ ${value}
 - order 从 1 开始。同一个 order 的步骤并行；order 大的步骤在之前的步骤全部完成后才开始，并能看到之前的产出。
 - 用户说“某人做完后另一人验收/检查/审核”时，后者的 order 更大，并标 verify=true。
 - 用户没有说先后关系的，放在同一个 order 并行。
-- task 按用户原意概括这一步要做的事，不要添加用户没要求的工作。
+- task 按用户原意概括这一步要做的事，不要添加用户没要求的工作。${main}
 
 输出格式：{"steps":[{"order":1,"companion":"<id>","task":"…","verify":false}]}`;
 }

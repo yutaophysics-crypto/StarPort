@@ -11,7 +11,7 @@ import { writePrivateFile } from '../process.mjs';
 const MAX_PROJECT_TOOLS=12;
 // Part of the Claude session fingerprint. Change it when what a grant allows
 // changes, so a session started under older rules is not resumed.
-const EXECUTION_POLICY='managed-applications-v2';
+const EXECUTION_POLICY='managed-applications-v3';
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 const missingTool=()=>fail('工具不存在',404);
 
