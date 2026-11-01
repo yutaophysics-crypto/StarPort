@@ -1140,6 +1140,9 @@ const english = {
   "即将达到你设置的 {minutes} 分钟时限，剩余约 {remaining} 分钟；到时将停止，已有进度和执行记录会保留。": "The {minutes}-minute limit you set is approaching, with about {remaining} minutes left. The task will stop at the deadline; existing progress and activity will be kept.",
   "达到你设置的 {minutes} 分钟时限，正在停止；已有进度和执行记录已保存。": "The {minutes}-minute limit you set has been reached. Stopping; existing progress and activity have been saved.",
   "达到你设置的 {minutes} 分钟时限，已停止；进度和执行记录已保留。": "Stopped at the {minutes}-minute limit you set. Progress and activity have been kept.",
+  "连续 {minutes} 分钟未收到新活动，任务仍在运行；满 {stop} 分钟仍无活动将停止，并以失败交回。": "No new activity for {minutes} minutes. The task is still running; after {stop} minutes without activity it will be stopped and handed back as failed.",
+  "连续 {minutes} 分钟没有任何活动，正在停止并以失败交回；已有进度和执行记录已保存。": "No activity at all for {minutes} minutes. Stopping and handing back as failed; existing progress and activity have been saved.",
+  "连续 {minutes} 分钟没有任何活动，已停止；进度和执行记录已保留。": "Stopped after {minutes} minutes without any activity. Progress and activity have been kept.",
   "不限时更新尚未加载。当前任务结束后会自动更新；更新前仍沿用旧规则，不会为了更新中断任务。": "The unlimited-runtime update is pending. It will load after current tasks finish. Existing rules apply until then; tasks will not be interrupted for the update.",
   "上下文": "Context",
   "上下文与压缩": "Context and compaction",
@@ -1217,6 +1220,9 @@ const english = {
     if((m=/^即将达到你设置的 (\d+) 分钟时限，剩余约 (\d+) 分钟；到时将停止，已有进度和执行记录会保留。$/.exec(source)))return t('即将达到你设置的 {minutes} 分钟时限，剩余约 {remaining} 分钟；到时将停止，已有进度和执行记录会保留。',{minutes:m[1],remaining:m[2]});
     if((m=/^达到你设置的 (\d+) 分钟时限，正在停止；已有进度和执行记录已保存。$/.exec(source)))return t('达到你设置的 {minutes} 分钟时限，正在停止；已有进度和执行记录已保存。',{minutes:m[1]});
     if((m=/^达到你设置的 (\d+) 分钟时限，已停止；进度和执行记录已保留。$/.exec(source)))return t('达到你设置的 {minutes} 分钟时限，已停止；进度和执行记录已保留。',{minutes:m[1]});
+    if((m=/^连续 (\d+) 分钟未收到新活动，任务仍在运行；满 (\d+) 分钟仍无活动将停止，并以失败交回。$/.exec(source)))return t('连续 {minutes} 分钟未收到新活动，任务仍在运行；满 {stop} 分钟仍无活动将停止，并以失败交回。',{minutes:m[1],stop:m[2]});
+    if((m=/^连续 (\d+) 分钟没有任何活动，正在停止并以失败交回；已有进度和执行记录已保存。$/.exec(source)))return t('连续 {minutes} 分钟没有任何活动，正在停止并以失败交回；已有进度和执行记录已保存。',{minutes:m[1]});
+    if((m=/^连续 (\d+) 分钟没有任何活动，已停止；进度和执行记录已保留。$/.exec(source)))return t('连续 {minutes} 分钟没有任何活动，已停止；进度和执行记录已保留。',{minutes:m[1]});
     if((m=/^(Antigravity 账号信息服务暂时不可用；启动阶段已自动重试 2 次，仍未恢复，请稍后重发。)\n([\s\S]*)$/.exec(source)))return t(m[1])+'\n'+m[2];
     if((m=/^原电脑文件夹未复制，请在本机重新添加：(.+)$/.exec(source)))return t('原电脑文件夹未复制，请在本机重新添加：{path}',{path:m[1]});
     if((m=/^请求失败 \((.+)\)$/.exec(source)))return t('请求失败 ({status})',{status:m[1]});

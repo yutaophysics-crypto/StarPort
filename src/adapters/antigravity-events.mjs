@@ -1,16 +1,16 @@
 import { nativeStatus } from '../activity.mjs';
 
 function recoveredConnectionError(result,turn) {
-  const last=turn?.lastStep;
+  const last=turn?.lastStep,answer=last?.text?.trim();
   // agy can retain an earlier API error in its result even after recovering.
   // Text alone is insufficient: require a completed final native response
-  // after an error step, with no later tool/error, matching the result text.
+  // after an error step, with no later tool/error, ending the result text.
+  // agy 1.4 joins every response of the turn into the result, so the final one is its end.
   return /^API error\b[\s\S]*\brequest failed:/i.test(result.error||'')
     && /\bEOF\b|connection reset|forcibly closed|broken pipe|i\/o timeout|TLS handshake timeout/i.test(result.error)
     && !/cancel|interrupt|abort|stop/i.test(result.status||'')
     && turn?.sawErrorStep && last?.nativeType==='agent_response' && last.status==='complete'
-    && typeof result.response==='string' && !!result.response.trim()
-    && last.text?.trim()===result.response.trim();
+    && !!answer && typeof result.response==='string' && result.response.trim().endsWith(answer);
 }
 
 export function parseAntigravityEvent(e,state={}) {

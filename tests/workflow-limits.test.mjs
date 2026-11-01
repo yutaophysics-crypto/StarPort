@@ -12,7 +12,7 @@ const minute = 60000;
 const until = async check => { for (let i = 0; i < 500; i++) { if (check()) return; await new Promise(r => setTimeout(r, 10)); } assert.fail('fixture timed out'); };
 const registry = { resolve: () => ({ command: process.execPath, prefixArgs: [] }), probe: async () => ({}), record() {} };
 
-function fixture(t, saved = {}) {
+function fixture(t, saved = {}, mode = 'adhoc') {
   const dataDir = mkdtempSync(join(tmpdir(), 'hub-step-limits-')), store = new Store(join(dataDir, 'test.sqlite'));
   store.setSetting('workflows.settings', saved);
   let release, emit, stopCount = 0, logicalNow = 0, logicalActivity = 0, polls = 0;
@@ -30,7 +30,7 @@ function fixture(t, saved = {}) {
   const workflows = new Workflows({ store, runner, dataDir, clockFactory: options => {
     const clock = new CompanionClock({ ...options, startedAt: 0 });
     // Advance logical time without waiting 30 minutes or changing the live process clock.
-    return { deadlineAt: null, get expired() { return clock.expired; }, snapshot: () => clock.snapshot(),
+    return { deadlineAt: null, get expired() { return clock.expired; }, get idleStopped() { return clock.idleStopped; }, snapshot: () => clock.snapshot(),
       poll: () => { polls++; return clock.poll(logicalNow, logicalActivity); } };
   } });
   const chat = store.newChat({ workspace: dataDir });
@@ -39,7 +39,8 @@ function fixture(t, saved = {}) {
   const run = workflows.createRun(chat, { title: '时限测试', trigger: 'dispatch' });
   const step = { key: 's', companionId: 'test', companionName: '测试伙伴', order: 1, task: '检查输入', notes: [], status: 'waiting', attempt: 0 };
   run.card.details.workflowRun.steps.push(step);
-  run.promise = workflows.runStep(run, chat, step, { mode: 'adhoc', rows: [step], outputs: [], userMessageId: user.id, cardId: run.card.id, text: user.content });
+  run.promise = workflows.runStep(run, chat, step, mode === 'call' ? { mode, callerName: '主模型', chain: ['main'] }
+    : { mode, rows: [step], outputs: [], userMessageId: user.id, cardId: run.card.id, text: user.content });
   t.after(async () => { release(); await run.promise; workflows.runs.clear(); await runner.close(); store.close(); });
   return { store, runner, workflows, run, step, release, get stopCount() { return stopCount; },
     ready: () => until(() => { if (step.status === 'failed') throw new Error(step.error); return !!emit && !!step.runtime; }),
@@ -88,6 +89,21 @@ test('an explicit deadline warns, saves evidence, then stops only its own desk',
   assert.deepEqual(deskMessage.details.checkpoints.map(c => c.reason), ['deadline-warning', 'deadline']);
   assert.equal(deskMessage.details.tools[0].output, '已保存的工具结果');
   assert.equal(f.store.chat(unrelated.id).workspace, process.cwd());
+});
+
+test('a called companion is handed back as failed only after 30 minutes without any activity', { timeout: 15000 }, async t => {
+  const f = fixture(t, {}, 'call'); await f.ready();
+  await f.advance(6 * minute);
+  assert.match(f.step.notes.at(-1), /满 30 分钟仍无活动将停止，并以失败交回/);
+  // Activity restarts the window: the total time does not count, only the silence.
+  f.activity(); await f.advance(20 * minute, true);
+  await f.advance(49 * minute);
+  assert.equal(f.stopCount, 0); assert.equal(f.step.status, 'running');
+  await f.advance(50 * minute); await f.run.promise;
+  assert.equal(f.stopCount, 1); assert.equal(f.step.status, 'failed');
+  assert.match(f.step.error, /连续 30 分钟没有任何活动，已停止/);
+  assert.equal(f.step.checkpoint.reason, 'idle-stop');
+  assert.match(f.step.output, /已检查输入，验证尚未完成/, 'the work so far goes back with the failure');
 });
 
 test('users can still stop unlimited companion tasks', { timeout: 15000 }, async t => {

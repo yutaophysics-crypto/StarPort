@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 import { PROVIDERS } from './providers.mjs';
 import { redact } from './process.mjs';
 import { userFolders } from './folders.mjs';
-import { CompanionClock, companionLimits, validateCompanionLimits } from './companion-limits.mjs';
+import { CompanionClock, companionLimits, validateCompanionLimits, CALL_IDLE_STOP_MINUTES } from './companion-limits.mjs';
 import { fail, now, newId, clip, tail, sleep, localTime, text, oneLine } from './workflows/common.mjs';
 import { KNOWLEDGE, EXAM_LIMITS, examMinutes, examSource, resolveSource, placements, prepareSeats, auditSeat, strayCalls, freshFolder, seatFolder, safeName, sizeText } from './workflows/exam.mjs';
 import { DESK_FIELDS, DEFAULT_PLANNERS, companionOptions, companionData, deskOptions, workflowData, triggerData, nextSlot, assignmentsFor } from './workflows/records.mjs';
@@ -628,7 +628,9 @@ export class Workflows {
       if(context.mode==='adhoc'&&!context.isolated)this.db.prepare('UPDATE companion_desks SET cursor=? WHERE companion_id=? AND chat_id=?').run(context.userMessageId,companion.id,chat.id);
       this.saveCard(run);
       // An examinee gets no memory and none of the user's standing preferences: only the exam.
-      const result=await this.execDesk(run,desk.id,prompt,{minutes,memory:exam?null:this.memberMemory(chat.group_id,companion.id),bare:exam,callChain:context.chain||[],
+      // A called companion that falls silent is handed back as failed, so its caller can go on.
+      const result=await this.execDesk(run,desk.id,prompt,{minutes,idleStopMinutes:context.mode==='call'?CALL_IDLE_STOP_MINUTES:0,
+        memory:exam?null:this.memberMemory(chat.group_id,companion.id),bare:exam,callChain:context.chain||[],
         onRuntime:runtime=>{step.runtime=runtime;step.deskMessageId=runtime.messageId;this.saveCard(run);},
         onCheckpoint:checkpoint=>{step.checkpoint=checkpoint;this.saveCard(run);},
         onNote:note=>{step.notes.push(note);this.saveCard(run);}});

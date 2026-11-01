@@ -24,6 +24,17 @@ test('agy completion can be confirmed by finished streamed text without a full s
   assert.equal(events.some(event=>event.type==='error'),false);
 });
 
+// agy 1.4 joins every response of the turn into its result; the final response ends it.
+test('agy 1.4 recovery is confirmed when the joined result ends with the final response',()=>{
+  const joined=[step(1,'agent_response','DONE',{text:'已启动 4 个子代理。'}),step(2,'error_message'),step(3,'tool','DONE',{tool_name:'run_command'}),step(4,'agent_response','DONE',{text:'交付说明：全部完成。'})];
+  const events=parse([...joined,result(reset,'已启动 4 个子代理。\n交付说明：全部完成。\n')]);
+  assert.equal(events.some(event=>event.type==='error'),false);
+  assert.equal(events.find(event=>event.type==='final-answer').text,'已启动 4 个子代理。\n交付说明：全部完成。\n');
+  assert.equal(events.find(event=>event.type==='diagnostic').message,reset);
+  // The final response must be the end, not merely somewhere inside the result.
+  assert.equal(parse([...joined,result(reset,'交付说明：全部完成。\n还在继续')]).find(event=>event.type==='error').message,reset);
+});
+
 const failures={
   'partial text':[step(1,'error_message'),step(2,'agent_response','RUNNING',{text:'Final'})],
   'missing native completion':[step(1,'error_message'),{event:'step_update',step_update:{step_index:2,step_type:'agent_response',text:'Final'}}],

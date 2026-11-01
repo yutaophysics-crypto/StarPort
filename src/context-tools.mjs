@@ -1,6 +1,7 @@
 import {createServer} from 'node:http';
 import {randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import {CALL_IDLE_STOP_MINUTES} from './companion-limits.mjs';
 
 const object=properties=>({type:'object',properties,additionalProperties:false});
 const string={type:'string'},integer={type:'integer'};
@@ -95,7 +96,7 @@ export async function contextCommandBridge(host){
 const helperCommand=()=>{const quote=value=>"'"+value.replace(/'/g,"''")+"'";return '& '+quote(process.execPath)+' '+quote(fileURLToPath(new URL('../scripts/context-tool.mjs',import.meta.url)));};
 function callInstructions(provider,callees){
   if(!callees?.length)return '';
-  let text=`星港伙伴调用（可选能力，不是本次任务）：做事过程中，如果某一块交给别人做更好（需要另一种模型或专长、可以并行、需要独立复核），可以交给这些伙伴：${roster(callees)}。用 starport_companion_call 交代任务，写清目标、它需要的背景、相关文件和期望的产出；它看得到对话进展，但看不到你的思考和工具结果。再用 starport_companion_wait 取回结果，可以同时交出几件事。它在无人值守的新工位上做，需要审批的操作会被自动拒绝。本轮结束时没做完的调用会被停止，所以要等你需要的结果回来再结束。自己就能很快做完的事不要交出去。\n`;
+  let text=`星港伙伴调用（可选能力，不是本次任务）：做事过程中，如果某一块交给别人做更好（需要另一种模型或专长、可以并行、需要独立复核），可以交给这些伙伴：${roster(callees)}。用 starport_companion_call 交代任务，写清目标、它需要的背景、相关文件和期望的产出；它看得到对话进展，但看不到你的思考和工具结果。再用 starport_companion_wait 取回结果，可以同时交出几件事。它在无人值守的新工位上做，需要审批的操作会被自动拒绝。连续 ${CALL_IDLE_STOP_MINUTES} 分钟没有任何活动的调用会被停止，并以失败交回，这时可以改派或自己做。本轮结束时没做完的调用会被停止，所以要等你需要的结果回来再结束。自己就能很快做完的事不要交出去。\n`;
   if(['antigravity','deepseek'].includes(provider))text+=`通过命令调用：${helperCommand()} starport_companion_call --companion "伙伴名" --task "任务说明"；取结果：同一命令接 starport_companion_wait --callId "返回的callId" --seconds 60。保留 STARPORT_CONTEXT_URL / STARPORT_CONTEXT_TOKEN 环境变量。\n`;
   return text;
 }

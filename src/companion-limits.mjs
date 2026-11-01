@@ -2,6 +2,8 @@ import { redact } from './process.mjs';
 
 export const COMPANION_IDLE_MINUTES = 5;
 export const COMPANION_WARNING_MINUTES = 2;
+// A companion called mid-task that shows no activity for this long is handed back as failed.
+export const CALL_IDLE_STOP_MINUTES = 30;
 const minute = 60000;
 const stamp = value => typeof value === 'number' && Number.isFinite(value) ? value : Date.parse(value) || 0;
 
@@ -20,23 +22,29 @@ export function validateCompanionLimits(raw = {}, current = companionLimits()) {
   return { stepLimitEnabled, stepMinutes };
 }
 
-// Polling never infers a dead process from silence. Only an explicit deadline expires.
+// Silence alone stops nothing unless the clock was given idleStopMinutes (a called companion).
+// Otherwise only an explicit deadline expires.
 export class CompanionClock {
-  constructor({ startedAt = Date.now(), minutes = 0, idleMinutes = COMPANION_IDLE_MINUTES } = {}) {
+  constructor({ startedAt = Date.now(), minutes = 0, idleMinutes = COMPANION_IDLE_MINUTES, idleStopMinutes = 0 } = {}) {
     this.startedAt = stamp(startedAt);
     this.minutes = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
     this.deadlineAt = this.minutes ? this.startedAt + this.minutes * minute : null;
     this.warningAt = this.deadlineAt ? this.deadlineAt - Math.min(COMPANION_WARNING_MINUTES * minute, this.minutes * minute / 2) : null;
     this.idleMs = idleMinutes * minute;
-    this.idle = false; this.warned = false; this.expired = false;
+    this.idleStopMinutes = Number.isFinite(idleStopMinutes) && idleStopMinutes > 0 ? idleStopMinutes : 0;
+    this.idle = false; this.warned = false; this.expired = false; this.idleStopped = false;
   }
   poll(now = Date.now(), lastEventAt = this.startedAt) {
-    if (this.expired) return [];
+    if (this.expired || this.idleStopped) return [];
     const events = [], last = Math.min(now, Math.max(this.startedAt, stamp(lastEventAt)));
     const idle = now - last >= this.idleMs;
     if (this.deadlineAt !== null && now >= this.deadlineAt) {
       this.expired = true;
       return [{ type: 'deadline', at: now, minutes: this.minutes }];
+    }
+    if (this.idleStopMinutes && now - last >= this.idleStopMinutes * minute) {
+      this.idleStopped = true;
+      return [{ type: 'idle-stop', at: now, lastEventAt: last, minutes: this.idleStopMinutes }];
     }
     if (idle !== this.idle) {
       this.idle = idle;
@@ -49,7 +57,7 @@ export class CompanionClock {
     return events;
   }
   snapshot() {
-    return { startedAt: this.startedAt, limitMinutes: this.minutes, deadlineAt: this.deadlineAt, idleWarnMinutes: this.idleMs / minute, stalled: this.idle };
+    return { startedAt: this.startedAt, limitMinutes: this.minutes, deadlineAt: this.deadlineAt, idleWarnMinutes: this.idleMs / minute, idleStopMinutes: this.idleStopMinutes, stalled: this.idle };
   }
 }
 

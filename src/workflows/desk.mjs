@@ -1,5 +1,6 @@
 // Runs one prompt in a desk nobody is watching. Approval requests are declined and questions
 // skipped; the step time limit, when the user set one, is enforced with saved checkpoints.
+// `idleStopMinutes` stops a desk that has shown no activity at all for that long (called companions).
 import { redact } from '../process.mjs';
 import { historyMessage } from '../history-context.mjs';
 import { companionCheckpoint } from '../companion-limits.mjs';
@@ -12,13 +13,13 @@ function describe(request){
 
 // `bare` leaves out the user's standing preferences and project instructions (exam seats).
 // `callChain` is who called whom to reach this desk, when a companion was called mid-task.
-export async function runUnattended({runner,store,clockFactory},run,deskId,prompt,{minutes=0,memory=null,bare=false,callChain=[],onNote=()=>{},onRuntime=()=>{},onCheckpoint=()=>{}}={}){
+export async function runUnattended({runner,store,clockFactory},run,deskId,prompt,{minutes=0,idleStopMinutes=0,memory=null,bare=false,callChain=[],onNote=()=>{},onRuntime=()=>{},onCheckpoint=()=>{}}={}){
   run.desks.add(deskId);
   try{
     const started=await runner.start(deskId,prompt,[],{desk:true,...bare?{bare:true}:{},memory:{read:!!memory?.read,propose:!!memory?.propose},callChain});
     // Notices already present are Starport's own (context trimming); the tool's arrive later.
     const handled=new Set(),preset=started.assistant.details?.notices?.length||0;
-    const clock=clockFactory({minutes}),runtime=()=>({...clock.snapshot(),messageId:started.assistant.id});
+    const clock=clockFactory({minutes,idleStopMinutes}),runtime=()=>({...clock.snapshot(),messageId:started.assistant.id});
     onRuntime(runtime());
     const checkpoint=reason=>{
       const message=runner.active.get(deskId)?.message||store.messageById(deskId,started.assistant.id);
@@ -30,7 +31,9 @@ export async function runUnattended({runner,store,clockFactory},run,deskId,promp
     const inspect=()=>{
       const active=runner.active.get(deskId);if(!active||active.message?.status!=='running')return;
       for(const event of clock.poll(Date.now(),active.lastEventAt)){
-        if(event.type==='idle')onNote(`连续 ${event.idleMinutes} 分钟未收到新活动，任务仍在运行；不会因无活动自动停止。`);
+        if(event.type==='idle')onNote(idleStopMinutes
+          ?`连续 ${event.idleMinutes} 分钟未收到新活动，任务仍在运行；满 ${idleStopMinutes} 分钟仍无活动将停止，并以失败交回。`
+          :`连续 ${event.idleMinutes} 分钟未收到新活动，任务仍在运行；不会因无活动自动停止。`);
         if(event.type==='resumed')onNote('已收到新的活动，伙伴继续工作。');
         if(event.type==='warning'){
           checkpoint('deadline-warning');
@@ -39,6 +42,11 @@ export async function runUnattended({runner,store,clockFactory},run,deskId,promp
         if(event.type==='deadline'){
           checkpoint('deadline');
           onNote(`达到你设置的 ${minutes} 分钟时限，正在停止；已有进度和执行记录已保存。`);
+          runner.stop(deskId).catch(error=>onNote('停止请求未完成：'+redact(error.message)));
+        }
+        if(event.type==='idle-stop'){
+          checkpoint('idle-stop');
+          onNote(`连续 ${event.minutes} 分钟没有任何活动，正在停止并以失败交回；已有进度和执行记录已保存。`);
           runner.stop(deskId).catch(error=>onNote('停止请求未完成：'+redact(error.message)));
         }
         onRuntime(runtime());
@@ -60,6 +68,9 @@ export async function runUnattended({runner,store,clockFactory},run,deskId,promp
     // A turn that stopped hands on its tool calls (historyMessage), so it is read with its log.
     const message=store.messageById(deskId,started.assistant.id,{trace:true});
     const output=message?.status==='complete'?message.details?.finalAnswer||message.content||'':message?historyMessage(message)?.content||message.content||'':'';
-    return {status:message?.status||'error',output,error:clock.expired?`达到你设置的 ${minutes} 分钟时限，已停止；进度和执行记录已保留。`:message?.details?.error||'',notices:(message?.details?.notices||[]).slice(preset),messageId:started.assistant.id,memory:message?.details?.memory||null};
+    const error=clock.expired?`达到你设置的 ${minutes} 分钟时限，已停止；进度和执行记录已保留。`
+      :clock.idleStopped?`连续 ${idleStopMinutes} 分钟没有任何活动，已停止；进度和执行记录已保留。`
+      :message?.details?.error||'';
+    return {status:message?.status||'error',output,error,notices:(message?.details?.notices||[]).slice(preset),messageId:started.assistant.id,memory:message?.details?.memory||null};
   }finally{run.desks.delete(deskId);}
 }
