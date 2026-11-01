@@ -129,7 +129,9 @@ function readTrace(msg) {
 }
 
 function traceOptions(msg) {
-  if (!msg.deferredTrace) return {};
+  // The outline lists every step, so one with none has no process worth opening.
+  const model = globalThis.StarportActivityModel;
+  if (!msg.deferredTrace || (model && !model.entries(msg).length)) return {};
   const error = traceReads.get(traceKey(msg))?.error;
   if (!error) return { pending: true, onOpen: () => readTrace(msg) };
   const retry = el('button', { type: 'button', class: 'secondary-button', text: t('重试') });

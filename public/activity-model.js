@@ -47,6 +47,8 @@ globalThis.StarportActivityModel=(()=>{
     }
     const main=[];
     all.forEach((record,index)=>{
+      // A response step that only called tools (agy reports one before each call) has nothing to show.
+      if(record.kind==='text'&&!record.text)return;
       let id=record.scope?scopes.get(record.scope)||record.scope:null;
       if(!id)for(const agent of agents.values())if(record.id==='claude-task:'+agent.id||record.id===agent.scope){id=agent.id;break;}
       if(id){

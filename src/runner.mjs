@@ -200,8 +200,10 @@ export class Runner {
         if(e.type==='delta')assistant.content+=e.text||'';
         if(e.type==='replace')assistant.content=e.text||'';
         if(e.type==='final-answer')assistant.details.finalAnswer=e.text||'';
+        // agy names its conversation on every step; only a new one is worth saving at once.
+        const newSession=e.type==='session'&&nativeId!==e.id;
         if(e.type==='session'){
-          if(nativeId!==e.id)assistant.details.context={...emptyContext(chat.provider),provider:chat.provider,binding,fingerprint};
+          if(newSession)assistant.details.context={...emptyContext(chat.provider),provider:chat.provider,binding,fingerprint};
           nativeId=e.id;unsavedSession=!!e.ephemeral;assistant.details.sessionId=e.id;if(e.model)assistant.details.model=e.model;
         }
         if(e.type==='usage')assistant.details.usage=e.usage;
@@ -225,7 +227,7 @@ export class Runner {
         if(e.type==='approval')run.approvals.set(e.request.id,e.request);
         if(e.type==='approval-resolved')run.approvals.delete(e.id);
         const urgent=['approval','approval-resolved','phase','goal'].includes(e.type);
-        save(urgent||e.type==='session');push(urgent);
+        save(urgent||newSession);push(urgent);
       };
       let polling=null,watching=true;
       const pollSubagents=()=>{

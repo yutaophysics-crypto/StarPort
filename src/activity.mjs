@@ -2,12 +2,17 @@ import { redact } from './process.mjs';
 
 // Stable native ids reconcile streamed deltas with authoritative final items.
 // Never infer tool success merely because the surrounding turn has ended.
+// event.before: a new row goes in front of that row, for a record that arrives after its step.
 export function mergeActivity(rows, event) {
   const source=event.type==='tool'?{...event,kind:event.kind==='step'?'step':'tool'}:event.item;
   if(!source?.id)return;
-  const item=JSON.parse(redact(JSON.stringify(source)));delete item.type;
+  const item=JSON.parse(redact(JSON.stringify(source)));delete item.type;delete item.before;
   let row=rows.find(value=>value.id===item.id);
-  if(!row){row={id:item.id};rows.push(row);}
+  if(!row){
+    row={id:item.id};
+    const at=event.before?rows.findIndex(value=>value.id===event.before):-1;
+    if(at<0)rows.push(row);else rows.splice(at,0,row);
+  }
   if(row.status==='denied'&&item.status==='error')item.status='denied';
   for(const [key,value] of Object.entries(item))if(value!==undefined)row[key]=value;
   if(typeof event.delta==='string'){

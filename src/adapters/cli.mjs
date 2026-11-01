@@ -4,6 +4,7 @@ import { startProcess, stopProcess, redact } from '../process.mjs';
 import { parseClaudeEvent } from './claude-events.mjs';
 import { parseAntigravityEvent } from './antigravity-events.mjs';
 import { temporaryAntigravityStartup, withAntigravityStartupRetry } from './antigravity-startup.mjs';
+import { AntigravityTranscript, transcriptEvents, transcriptReady } from './antigravity-transcript.mjs';
 
 // Headless agy soft-denies any tool that needs approval and ends the turn with
 // an empty answer. Unattended desks ask it, in the same session, to carry on
@@ -52,10 +53,25 @@ export async function runCli(input) {
   const startupQueue=[];
   return withAntigravityStartupRetry(()=>runCliAttempt({...input,signal,startupQueue,setControl:control=>input.setControl({...control,stop:async()=>{controller.abort();await control.stop();}})}),{signal,emit:input.emit});
 }
-async function runCliAttempt({provider, runtime, options, session, initialContext, prompt,contextEnv={}, images=[], cwd, signal, emit, setControl,startupQueue,unattended=false}) {
+async function runCliAttempt({provider, runtime, options, session, initialContext, prompt,contextEnv={}, images=[], cwd, signal, emit, setControl,startupQueue,unattended=false,nativeHome}) {
   const payload=cliInput(provider,prompt,images);
   if(provider==='claude'&&Buffer.byteLength(payload)>10*1024*1024)throw new Error('Claude 图片输入超过 10 MB，请减少附件');
+  // Thought summaries and whole tool results come from agy's own transcript, which the stream leaves out.
+  const transcript=provider==='antigravity'?new AntigravityTranscript({...nativeHome?{home:nativeHome}:{},resumed:session}):null;
+  const seen=new Set(),tools=new Map(),waiting=[];let relaying=null;
+  const relay=(final=false)=>relaying??=(async()=>{
+    try{
+      waiting.push(...await transcript.entries());
+      for(let index=0;index<waiting.length;){
+        if(!transcriptReady(waiting[index],seen,tools,final)){index++;continue;}
+        for(const event of transcriptEvents(waiting.splice(index,1)[0],tools))emit(event);
+      }
+      if(final)waiting.length=0;
+    }catch{}finally{relaying=null;}
+  })();
   const child=startProcess(runtime.command,[...runtime.prefixArgs,...cliArguments(provider,options,session),...(provider==='claude'&&images.length?['--input-format','stream-json']:[])],{cwd,env:contextEnv});
+  const relayTimer=transcript?setInterval(relay,2000):null;
+  relayTimer?.unref?.();
   const state={model:initialContext?.model,windowTokens:initialContext?.windowTokens}; let stderr='', failure='', gotOutput=false, sawStdout=false, canceled=false, finishTimer=null,accepting=provider==='antigravity',currentInput=null;
   let startupRefusal=false,nativeWork=false,turnAnswer='',turnBlocked=false,followUps=0;
   const queued=startupQueue||[];let rejectCompleted;
@@ -90,6 +106,15 @@ async function runCliAttempt({provider, runtime, options, session, initialContex
     for(const event of parseEvent(provider,e,state)) {
       if(event.type==='error') failure=event.message;
       else emit(event);
+      if(transcript){
+        if(event.type==='session')transcript.attach(event.id);
+        const id=event.type==='activity'?event.item?.id:event.id;
+        if(typeof id==='string')seen.add(id);
+        if(event.type==='tool'){
+          const tool=tools.get(id)||{};if(event.output!==undefined)tool.output=event.output;
+          tool.done=!['running','pending'].includes(event.status);tools.set(id,tool);
+        }
+      }
       if(event.type==='tool'&&['error','denied'].includes(event.status))turnBlocked=true;
       if(event.type==='final-answer')turnAnswer=event.text||'';
     }
@@ -140,5 +165,9 @@ async function runCliAttempt({provider, runtime, options, session, initialContex
     });
   });
   if(provider==='antigravity')child.stdin.write(payload);else child.stdin.end(payload);
-  try { await completed; } finally { signal?.removeEventListener('abort',onAbort); }
+  try { await completed; } finally {
+    signal?.removeEventListener('abort',onAbort);
+    // agy has exited, so its transcript is complete: what is left goes in now.
+    if(transcript){clearInterval(relayTimer);await relaying;await relay(true);}
+  }
 }

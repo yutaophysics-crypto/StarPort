@@ -282,6 +282,12 @@ test('opening a finished reply reads its process log once, and a failed read off
   retry.onclick();
   await settle();
   assert.equal(context.state.messages[0].details.activity[0].output, big);
+  // A reply whose outline shows no step (agy's empty response step) has nothing to open or read.
+  vm.runInContext(source('activity-model.js'), context);
+  context.state.messages = [{ ...reply('t', 1), details: { liveRevision: 1, activity: [{ id: 'agy:1', kind: 'text', status: 'complete' }] } }];
+  context.renderMessages();
+  assert.equal(seen.at(-1).options.pending, undefined);
+  assert.equal(seen.at(-1).options.onOpen, undefined);
 });
 
 test('a refresh about other chats rereads only the chat list', async () => {

@@ -38,14 +38,21 @@
       const fill=()=>{if(node.open&&!populated){populated=true;populate(node);}};fill();
       node.ontoggle=()=>{if(node.isConnected){views.set(key,node.open);fill();}};return node;
     }
+    // The argument that says what a step works on; tools name it differently (agy: Path, CommandLine).
+    const subjects=['command','commandline','file_path','path','absolutepath','targetfile','directorypath','query','url'];
     function shortInput(item){
       let input=item.input;try{if(typeof input==='string'&&input.startsWith('{'))input=JSON.parse(input);}catch{}
-      return String(input?.command||input?.CommandLine||input?.file_path||input?.path||input?.query||(typeof input==='string'?input:'')||'').replace(/\s+/g,' ').slice(0,160);
+      let value=typeof input==='string'?input:'';
+      if(input&&typeof input==='object'){
+        const keys=Object.keys(input);
+        for(const name of subjects){const key=keys.find(key=>key.toLowerCase()===name);if(typeof input[key]==='string'&&input[key]){value=input[key];break;}}
+      }
+      return value.replace(/\s+/g,' ').slice(0,160);
     }
     const titles={commandExecution:'运行命令',fileChange:'文件更改',webSearch:'搜索网页',contextCompaction:'压缩上下文',enteredReviewMode:'开始审查',exitedReviewMode:'结束审查',checkpoint:'检查点'};
     function record(item,groupScope=scope){
       const current=model.status(item,message),kind=item.kind||'tool';
-      const label=t(kind==='thinking'?(message.provider==='codex'?'思考摘要':'思考过程'):kind==='text'?'过程说明':kind==='plan'?'计划':kind==='diff'?'本轮文件差异':titles[item.nativeType]||item.name||item.nativeType||'工具');
+      const label=t(kind==='thinking'?(['codex','antigravity'].includes(message.provider)?'思考摘要':'思考过程'):kind==='text'?'过程说明':kind==='plan'?'计划':kind==='diff'?'本轮文件差异':titles[item.nativeType]||item.name||item.nativeType||'工具');
       const preview=kind==='thinking'||kind==='text'?firstLine(item.text):shortInput(item)||firstLine(item.text);
       const title=el('summary',{class:'workflow-row-heading'},[
         el('span',{class:'native-glyph '+current,text:glyphs[current]||'·','aria-hidden':'true'}),
