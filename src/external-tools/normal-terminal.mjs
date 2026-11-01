@@ -4,10 +4,11 @@ import {join,resolve} from 'node:path';
 import {projectDrive} from './drive-alias.mjs';
 import {gitCredentialBroker} from './git-credentials.mjs';
 import {externalEnvironment,collectOutput,windowsPowerShell} from './processes.mjs';
+import {toolboxEnvironment} from './toolbox.mjs';
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
 const inside=(path,root)=>{path=resolve(path).toLowerCase();root=resolve(root).toLowerCase();return path===root||path.startsWith(root+'\\');};
 
-export async function runNormalWorkspaceCommand({workspace,command,timeoutMs=120000,signal,sandboxExecutable,filesystem,normalPolicy}){
+export async function runNormalWorkspaceCommand({workspace,command,timeoutMs=120000,signal,sandboxExecutable,filesystem,normalPolicy,snapshot={tools:[]}}){
  if(signal?.aborted)throw Error('终端命令已取消');
  if(!sandboxExecutable||!existsSync(sandboxExecutable))throw Error('需要可用的 Windows 文件隔离终端');
  workspace=realpathSync.native(workspace);
@@ -19,7 +20,7 @@ export async function runNormalWorkspaceCommand({workspace,command,timeoutMs=120
  try{
   drive=projectDrive(workspace,join(dataDir,'terminal-drives'));broker.setAlias(drive.root);
   const cache=join(workspace,'.starport-claude-runtime'),temp=join(cache,'tmp');
-  const env=externalEnvironment();for(const key of Object.keys(env))if(/^(https?|all|no)_proxy$/i.test(key))delete env[key];
+  const env=toolboxEnvironment(snapshot,workspace,externalEnvironment());for(const key of Object.keys(env))if(/^(https?|all|no)_proxy$/i.test(key))delete env[key];
   const dirs={TEMP:temp,TMP:temp,APPDATA:join(cache,'appdata'),LOCALAPPDATA:join(cache,'localappdata'),USERPROFILE:join(cache,'home'),HOME:join(cache,'home'),NPM_CONFIG_CACHE:join(cache,'npm-cache')};
   Object.assign(env,dirs,broker.environment,{NPM_CONFIG_USERCONFIG:join(cache,'npmrc'),GIT_CONFIG_GLOBAL:join(client,'gitconfig'),GIT_TERMINAL_PROMPT:'0',GIT_ASKPASS:join(client,'git-askpass.exe'),LC_ALL:'C',GIT_CONFIG_COUNT:'2',GIT_CONFIG_KEY_0:'credential.helper',GIT_CONFIG_VALUE_0:'',GIT_CONFIG_KEY_1:'credential.useHttpPath',GIT_CONFIG_VALUE_1:'true',NODE_OPTIONS:'--preserve-symlinks --preserve-symlinks-main'});
   delete env.NODE_PATH;

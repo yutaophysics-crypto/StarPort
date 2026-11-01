@@ -4,6 +4,7 @@ import { toolPathKey } from './grants.mjs';
 import { isLive } from './applications.mjs';
 import { externalToolCapability } from './claude-launch.mjs';
 import { runWorkspaceCommand, quotePowerShell } from './terminal.mjs';
+import { detectToolbox } from './toolbox.mjs';
 
 const fail=(message,status)=>Object.assign(Error(message),{status});
 // Lists the tool folder and reads the program version, inside the sandbox.
@@ -12,6 +13,21 @@ const verifyCommand=tool=>`Get-ChildItem -LiteralPath ${quotePowerShell(tool.can
 
 export async function handleExternalToolRoutes({store,registry,tools,applications,previews,isBusy},method,path,read){
   let match;const ok=(data,status=200)=>({data,status});
+  if((match=path.match(/^\/api\/toolbox(?:\/(detect|[\w-]+))?$/))){
+    const id=match[1],busy=()=>store.list().chats.some(chat=>isBusy(chat.id));
+    const status=()=>({tools:tools.globalTools(),candidates:detectToolbox(),busy:busy(),supported:process.platform==='win32'});
+    if(method==='GET'&&!id)return ok(status());
+    if(process.platform!=='win32')throw fail('全局工具箱目前支持 Windows',409);
+    if(busy())throw fail('请等待所有任务结束后修改全局工具箱',409);
+    const input=await read(16384);if(busy())throw fail('请等待所有任务结束后修改全局工具箱',409);
+    if(method==='POST'&&id==='detect'){
+      for(const candidate of detectToolbox())if(!tools.globalTools().some(tool=>tool.command===candidate.command))await tools.addGlobal(candidate);
+      return ok(status(),201);
+    }
+    if(method==='POST'&&!id){await tools.addGlobal(input);return ok(status(),201);}
+    if(method==='DELETE'&&id){if(await applications.toolInUse(id))throw fail('请先关闭此全局工具的常驻程序',409);await tools.removeGlobal(id);return ok(status());}
+    throw fail('请求方法无效',405);
+  }
   const projectWorkspace=id=>{const project=store.project(id);if(!project?.workspace)throw fail('项目不存在',404);return project.workspace;};
   if((match=path.match(/^\/api\/projects\/([\w-]+)\/previews(?:\/([\w-]+)\/(stop))?$/))){
     const workspace=projectWorkspace(match[1]),id=match[2];
@@ -34,7 +50,7 @@ export async function handleExternalToolRoutes({store,registry,tools,application
   const [,projectId,toolId,action]=match,workspace=projectWorkspace(projectId);
   const busy=()=>store.list().chats.some(chat=>toolPathKey(chat.workspace)===toolPathKey(workspace)&&isBusy(chat.id));
   const capability=await externalToolCapability(registry.resolve('claude'),workspace,registry.resolve('codex')?.command);
-  const status=async()=>({...tools.view(workspace),catalog:tools.catalog(),applications:await applications.list(workspace),previews:await previews.list(workspace),previewSupported:!!capability.normalPolicy&&!!capability.sandboxExecutable,supported:capability.supported,reason:capability.reason||'',busy:busy()});
+  const status=async()=>({...tools.view(workspace),globalTools:tools.globalTools(),catalog:tools.catalog(),applications:await applications.list(workspace),previews:await previews.list(workspace),previewSupported:!!capability.normalPolicy&&!!capability.sandboxExecutable,supported:capability.supported,reason:capability.reason||'',busy:busy()});
   if(method==='GET'&&!toolId)return ok(await status());
   if(!capability.supported)throw Error(capability.reason);
   // A running task keeps the grants it started with, so changes wait for it.

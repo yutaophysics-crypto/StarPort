@@ -2,16 +2,16 @@
 globalThis.StarportExternalTools = (() => {
   const panel=document.getElementById('external-tools-panel'),dialog=document.getElementById('external-tools-dialog'),button=document.getElementById('workspace-tools-button');
   const LIVE=['running','starting','unknown'];
-  let request=0,selected=null;
+  let request=0,selected=null,scope='global';
   const text=(tag,label,attrs={})=>el(tag,{...attrs,text:t(label),'data-i18n':label});
   const note=label=>text('p',label,{class:'settings-note'});
   function sync(){
     const project=currentProject(),workspace=state.chat?.workspace||state.workspace;
-    button.disabled=!workspace;
-    button.title=workspace?t('外部开发工具：{project}',{project:project?.name||workspace}):t('请先选择项目文件夹');
-    if(dialog.open&&(project?.id!==selected?.id||folderKey(project?.workspace||'')!==folderKey(selected?.workspace||'')))dialog.close();
+    button.disabled=false;
+    button.title=workspace?t('外部开发工具：{project}',{project:project?.name||workspace}):t('全局工具箱');
+    if(dialog.open&&scope==='project'&&(project?.id!==selected?.id||folderKey(project?.workspace||'')!==folderKey(selected?.workspace||'')))dialog.close();
   }
-  async function open(){
+  async function openProject(){
     const workspace=state.chat?.workspace||state.workspace,version=++request;
     let project=currentProject();
     if(!workspace){toast('请先选择项目文件夹');return;}
@@ -25,13 +25,44 @@ globalThis.StarportExternalTools = (() => {
       }catch(error){toast(error.message);return;}finally{sync();}
     }
     selected={...project};
+    scope='project';
     if(!dialog.open)dialog.showModal();
     button.setAttribute('aria-expanded','true');
     render();
   }
+  function open(){scope='global';if(!dialog.open)dialog.showModal();button.setAttribute('aria-expanded','true');render();}
   button.onclick=open;
   for(const id of ['external-tools-close','external-tools-done'])document.getElementById(id).onclick=()=>dialog.close();
   dialog.addEventListener('close',()=>{request++;button.setAttribute('aria-expanded','false');});
+  function scopeBar(){
+    const global=text('button','全局工具箱',{type:'button',class:'secondary-button','aria-pressed':scope==='global'}),project=text('button','当前项目',{type:'button',class:'secondary-button','aria-pressed':scope==='project',disabled:!(state.chat?.workspace||state.workspace)});
+    global.onclick=()=>{scope='global';render();};project.onclick=openProject;
+    return el('div',{class:'external-tool-scopes'},[global,project]);
+  }
+  async function renderGlobal(version){
+    const status=el('p',{role:'status',class:'settings-note'}),list=el('div',{class:'external-tools-list'});
+    panel.replaceChildren(scopeBar(),text('h3','全局工具箱'),note('一次接入，所有项目可用。工具使用本机权限运行，可访问项目外文件及网络；无需逐项目授权或反复批准。'),status,list);
+    const current=()=>version===request;
+    let data;try{data=await api('/toolbox');}catch(error){if(current())status.textContent=/404|没有这个接口/.test(error.message)?t('后台待更新；所有任务结束并加载更新后，可以配置外部工具。'):error.message;return;}
+    if(!current())return;
+    const disabled=data.busy||!data.supported;
+    status.textContent=t(!data.supported?'全局工具箱目前支持 Windows':data.busy?'请等待所有任务结束后修改全局工具箱':'新增或移除从下一轮任务生效。');
+    for(const tool of data.tools){
+      const remove=text('button','移出全局',{type:'button',class:'secondary-button',disabled});
+      remove.onclick=async()=>{remove.disabled=true;try{await api('/toolbox/'+tool.id,'DELETE');if(current())render();}catch(error){status.textContent=error.message;remove.disabled=disabled;}};
+      list.append(el('article',{class:'external-tool'},[el('div',{class:'external-tool-heading'},[el('strong',{text:tool.name}),el('code',{text:tool.command}),remove]),el('code',{text:tool.executable}),...tool.error?[el('p',{text:tool.error,class:'common-tools-error'})]:[]]));
+    }
+    if(!data.tools.length)list.append(note('全局工具箱尚未接入工具。'));
+    const detect=text('button','接入已安装工具',{type:'button',class:'primary-button',disabled});
+    detect.onclick=async()=>{detect.disabled=true;try{await api('/toolbox/detect','POST',{});if(current())render();}catch(error){status.textContent=error.message;detect.disabled=disabled;}};
+    panel.append(detect,note('自动查找本机已安装的 LaTeX、Git、Python；不会下载安装软件。'));
+    const name=el('input',{required:'',maxlength:'80'}),command=el('input',{required:'',maxlength:'40',placeholder:'python / xelatex / git'}),directory=el('input',{required:'',placeholder:t('工具安装文件夹的完整路径')}),executable=el('input',{required:'',placeholder:t('程序完整路径')});
+    const field=(label,input)=>el('label',{class:'external-tools-field'},[text('span',label),input]);
+    const add=text('button','加入全局工具箱',{type:'submit',class:'secondary-button',disabled}),form=el('form',{class:'external-tools-form'},[text('h3','手动添加工具'),field('工具名称',name),field('命令名',command),field('安装文件夹',directory),field('程序路径',executable),add]);
+    for(const input of [name,command,directory,executable])input.disabled=disabled;
+    form.onsubmit=async event=>{event.preventDefault();add.disabled=true;try{await api('/toolbox','POST',{name:name.value,command:command.value,directory:directory.value,executable:executable.value});if(current())render();}catch(error){status.textContent=error.message;add.disabled=disabled;}};
+    panel.append(form,note('仅登记的程序可通过全局入口启动；普通终端继续使用项目文件边界，模型客户端的联网设置保持原配置。'));
+  }
 
   // Each piece below receives the view of one render pass. current() turns
   // false once a newer render starts, so late callbacks do not redraw it.
@@ -131,10 +162,12 @@ globalThis.StarportExternalTools = (() => {
   }
   async function render(){
     const version=++request,project=selected;
+    if(scope==='global'){await renderGlobal(version);return;}
     if(!project)return;
     const reload=text('button','刷新项目状态',{type:'button',class:'secondary-button'});reload.onclick=render;
     const status=el('p',{id:'external-tools-status',role:'status',class:'settings-note'}),list=el('div',{class:'external-tools-list'});
     panel.replaceChildren(
+      scopeBar(),
       el('div',{class:'external-tools-toolbar'},[el('div',{class:'external-tools-scope'},[el('h3',{text:project.name}),el('code',{text:project.workspace})]),reload]),
       note('隔离终端中，工具安装目录只读，缓存和构建输出写入项目。程序能否启动需另行验证。'),status,list);
     const path='/projects/'+project.id+'/external-tools',current=()=>version===request;

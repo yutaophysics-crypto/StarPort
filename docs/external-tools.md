@@ -8,6 +8,16 @@ This integration supports Claude Code on native Windows with the Codex Windows M
 
 The exact working folder is the scope; subfolders are separate projects. In the isolated terminal, installations are read-only. The project and `.starport-claude-runtime` are writable. Temporary, home, npm cache, AppData and LocalAppData folders are redirected into that project cache. A readable executable may still fail to start: complete Electron/Chromium and other application runtimes can require OS facilities unavailable inside MXC. **Verify access proves file reads only**, not startup or a valid build. No unrestricted retry occurs. Personal editor preferences and login files outside the grant are not exposed to the isolated terminal automatically.
 
+## Global toolbox
+
+> **Testing:** built and covered by automated tests, but not yet used much in real work.
+
+**External tools → Global toolbox** is machine-wide authorization, available even before selecting a project. **Connect installed tools** discovers installed TeX Live engines (`xelatex`, `pdflatex`, `lualatex`, `latexmk`, `kpsewhich`), Git and a real Python executable, excluding WindowsApps aliases. It does not install software. Other programs can be added with a command name, installation root and `.exe` path.
+
+Global tools are available in every current and future project without copying project grants or repeatedly approving launches. Claude can use `mcp__starport_external_tools__run` with `command: "xelatex"`, `args: ["-interaction=nonstopmode", "-halt-on-error", "paper.tex"]`, or the corresponding `python` / `git` command and literal arguments. This registered-program route runs outside the project sandbox with normal Windows user file/network permissions. Python scripts, TeX build commands and Git hooks share those permissions. Ordinary terminal commands keep their existing filesystem boundaries and model-client network protection.
+
+The terminal also receives the global executable folders on PATH and read access to installation resources. Some desktop/runtime libraries still require host execution; use the global launcher rather than reporting the installed tool missing. Global entries live in `.data/external-tools.json` under `globalTools`, separately from project grants and the historical Common tools catalog. Missing/retargeted tools are shown as invalid and excluded from subsequent sessions. Changes wait for running tasks and apply next turn; close any managed instances before removing a global program. This integration currently supports native Windows Claude Code.
+
 ## Persistent project previews
 
 > **Testing:** built and covered by automated tests, but not yet used much in real work.

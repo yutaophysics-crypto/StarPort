@@ -4,16 +4,18 @@
 import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { insideToolPath, validateToolSnapshot, hostRunnable } from './grants.mjs';
-import { spawnLauncher, collectOutput } from './processes.mjs';
+import { spawnLauncher, collectOutput, externalEnvironment } from './processes.mjs';
+import { toolboxEnvironment } from './toolbox.mjs';
 
 export const EXTERNAL_APPLICATION_WARNING='本机兼容运行：程序及其子进程使用当前 Windows 用户权限，可访问项目外文件及网络；这不是项目沙箱。仅批准你信任的程序和参数。';
 const ISOLATION='Host Windows user; no project filesystem or network sandbox; owned process job is closed on completion/cancel/timeout';
 const canceled=()=>Error('本次运行已取消');
 
-export function externalApplicationRequest({workspace,snapshot,toolId,args=[],directory='.',timeoutMs=120000,successExitCodes=[0],persistent=false}){
+export function externalApplicationRequest({workspace,snapshot,toolId,command,args=[],directory='.',timeoutMs=120000,successExitCodes=[0],persistent=false}){
   if(process.platform!=='win32')throw Error('本机兼容运行目前支持 Windows');
   validateToolSnapshot(snapshot,workspace);
-  const tool=snapshot.tools.find(tool=>tool.id===toolId);
+  const tool=toolId?snapshot.tools.find(tool=>tool.id===toolId):snapshot.tools.find(tool=>tool.scope==='global'&&tool.command===command);
+  if(command&&tool?.command!==command)throw Error('全局命令与工具不匹配');
   if(!hostRunnable(tool))throw Error('请先为当前项目的工具配置 .exe 程序路径');
   if(!Array.isArray(args)||args.length>128||args.some(arg=>typeof arg!=='string'||arg.includes('\0'))||JSON.stringify(args).length>24000)throw Error('程序参数必须是 JSON 字符串数组，总长度不超过 24000');
   if(typeof directory!=='string'||directory.includes('\0')||directory.length>2000)throw Error('工作目录无效');
@@ -37,8 +39,9 @@ export async function runExternalApplication({approve,signal,manager,...input}){
   // Paths can be retargeted while the user decides; launch only what was approved.
   const checked=externalApplicationRequest(input);
   if(JSON.stringify(request)!==JSON.stringify(checked))throw Error('程序配置已变化，请重新批准');
-  if(checked.persistent){if(!manager)throw Error('常驻程序管理器不可用');return manager.start(checked,{signal,workspace:input.snapshot.workspace});}
-  const output=await collectOutput(spawnLauncher(checked,{cwd:checked.cwd,stdio:['pipe','pipe','pipe']}),{timeoutMs:checked.timeoutMs,signal});
+  const env=toolboxEnvironment(input.snapshot,input.workspace,externalEnvironment());
+  if(checked.persistent){if(!manager)throw Error('常驻程序管理器不可用');return manager.start(checked,{signal,workspace:input.snapshot.workspace,env});}
+  const output=await collectOutput(spawnLauncher(checked,{cwd:checked.cwd,env,stdio:['pipe','pipe','pipe']}),{timeoutMs:checked.timeoutMs,signal});
   const ok=!output.timedOut&&!output.canceled&&!output.stopError&&checked.successExitCodes.includes(output.exitCode);
   return {...checked,approved:true,ok,...output,isolation:ISOLATION};
 }

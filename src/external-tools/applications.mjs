@@ -40,6 +40,16 @@ export class ExternalApplicationManager {
     if(existsSync(path)&&toolPathKey(realpathSync.native(path))!==toolPathKey(path))throw Error('程序记录路径已变化');
     return path;
   }
+  async toolInUse(toolId){
+    let entries;try{entries=await readdir(this.root,{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return false;throw error;}
+    for(const entry of entries){
+      if(!entry.isDirectory()||!UUID.test(entry.name))continue;
+      const directory=this.directory(entry.name),request=await readJson(join(directory,'request.json'));
+      if(request?.toolId!==toolId)continue;
+      const status=await readJson(join(directory,'status.json'));if(!status||isLive(status))return true;
+    }
+    return false;
+  }
   // This project's applications, live ones first, then newest first.
   async list(workspace){
     const key=toolPathKey(canonicalToolPath(workspace));let entries;try{entries=await readdir(this.root,{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return [];throw error;}
@@ -70,7 +80,7 @@ export class ExternalApplicationManager {
   }
   // Starts the daemon and waits until the application has stayed up for a
   // second. An identical live launch is reused instead of started twice.
-  async start(request,{signal,workspace}){
+  async start(request,{signal,workspace,env}){
     const perform=async()=>{
       workspace=canonicalToolPath(workspace);
       if(signal?.aborted)throw canceled();
@@ -83,7 +93,7 @@ export class ExternalApplicationManager {
       await writePrivateFile(join(directory,'request.json'),JSON.stringify({...request,workspace,createdAt:Date.now(),jobName:jobName(id),statusFile:join(directory,'status.json'),stopFile:join(directory,'stop.request')}));
       for(const file of ['stdout.log','stderr.log','status.json'])await writePrivateFile(join(directory,file));
       let error;
-      const child=spawn(process.execPath,[DAEMON,join(directory,'request.json')],{cwd:request.cwd,env:externalEnvironment(),windowsHide:true,detached:true,shell:false,stdio:'ignore'});
+      const child=spawn(process.execPath,[DAEMON,join(directory,'request.json')],{cwd:request.cwd,env:env||externalEnvironment(),windowsHide:true,detached:true,shell:false,stdio:'ignore'});
       child.on('error',e=>error=e);child.unref();
       let handedOff=false,seenAt=0;
       const cancel=()=>void stopProcess(child).catch(()=>{});signal?.addEventListener('abort',cancel,{once:true});
