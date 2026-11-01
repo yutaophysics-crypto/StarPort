@@ -1,6 +1,6 @@
 import {existsSync,readFileSync} from 'node:fs';
 import {join,isAbsolute} from 'node:path';
-import {exec} from './process.mjs';
+import {exec,redact} from './process.mjs';
 
 export function readClaudeNetworkPolicy(root,dataDir){
  const file=join(dataDir,'claude-network-policy.json');if(!existsSync(file))return null;
@@ -15,9 +15,32 @@ export function applyClaudeNetworkPolicy(runtime,id,policy){
  Object.assign(env,{HTTP_PROXY:policy.proxyUrl,HTTPS_PROXY:policy.proxyUrl,http_proxy:policy.proxyUrl,https_proxy:policy.proxyUrl,ALL_PROXY:'',all_proxy:'',NO_PROXY:'localhost,127.0.0.1,::1',no_proxy:'localhost,127.0.0.1,::1',NODE_USE_ENV_PROXY:'1'});
  return {...runtime,env,...id==='claude'?{normalPolicy:policy}:{},claudeNetwork:{policyPath:policy.file,script:join(policy.root,'scripts','claude-network-firewall.ps1'),program:runtime.command}};
 }
-export async function requireClaudeNetworkProtection(runtime){
- const guard=runtime?.claudeNetwork;if(!guard)return;
- const env={...process.env};delete env.PSModulePath;
- try{await exec(join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe'),['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',guard.script,'-Mode','Audit','-PolicyPath',guard.policyPath,'-Program',guard.program,'-Quiet'],{env,timeout:20000,maxBuffer:20000,windowsHide:true});}
- catch{throw Error('Claude 联网保护尚未就绪；已阻止启动，未回退直连。请用管理员 PowerShell 执行 scripts/claude-network-firewall.ps1 -Mode Apply 后重试。');}
+const AUDIT_TIMEOUT=60000;
+function auditReport(stdout){try{return JSON.parse(String(stdout).replace(/^\uFEFF/,'').trim());}catch{return null;}}
+function auditFailure(guard,error,report){
+ const stopped='已阻止启动，未回退直连。';
+ if(error?.killed||error?.code==='ETIMEDOUT')return Object.assign(new Error(`Claude 防火墙检查超过 ${AUDIT_TIMEOUT/1000} 秒；${stopped}检查超时不代表规则缺失，请检查系统负载后重试。`),{code:'CLAUDE_NETWORK_AUDIT_TIMEOUT',cause:error});
+ const missing=Array.isArray(report?.Missing)?report.Missing:[];
+ const reason=redact(String(report?.Error||(missing.length?`缺少有效保护规则：${missing.slice(0,3).join('；')}`:error?.stderr||error?.message||'检查未返回有效的成功结果')).replace(/[\r\n]+/g,' ')).slice(0,600);
+ const repair=missing.length?` 请用管理员 PowerShell 执行 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${guard.script}" -Mode Apply 后重试。`:'';
+ return Object.assign(new Error(`Claude 联网保护检查失败：${reason}；${stopped}${repair}`),{code:'CLAUDE_NETWORK_AUDIT_FAILED',cause:error});
 }
+export function createClaudeNetworkGuard(run=exec){
+ const pending=new Map();
+ return function requireProtection(runtime){
+  const guard=runtime?.claudeNetwork;if(!guard)return Promise.resolve();
+  const key=JSON.stringify([guard.script,guard.policyPath,guard.program]);
+  // Only share an audit while it is running. Every later start checks again.
+  if(pending.has(key))return pending.get(key);
+  const check=(async()=>{
+   const env={...process.env};delete env.PSModulePath;
+   let output;
+   try{output=await run(join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe'),['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',guard.script,'-Mode','Audit','-PolicyPath',guard.policyPath,'-Program',guard.program],{env,timeout:AUDIT_TIMEOUT,maxBuffer:256000,windowsHide:true});}
+   catch(error){throw auditFailure(guard,error,auditReport(error.stdout));}
+   const report=auditReport(output.stdout);
+   if(report?.Success!==true)throw auditFailure(guard,null,report);
+  })().finally(()=>pending.delete(key));
+  pending.set(key,check);return check;
+ };
+}
+export const requireClaudeNetworkProtection=createClaudeNetworkGuard();

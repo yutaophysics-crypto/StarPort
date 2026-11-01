@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {readClaudeNetworkPolicy,applyClaudeNetworkPolicy} from '../src/claude-network.mjs';
+import {readClaudeNetworkPolicy,applyClaudeNetworkPolicy,createClaudeNetworkGuard} from '../src/claude-network.mjs';
 import {ProviderRegistry} from '../src/providers.mjs';
 import {Store} from '../src/storage.mjs';
 import {prepareExternalClaude} from '../src/external-tools/claude-launch.mjs';
@@ -13,7 +13,45 @@ import {runClaude} from '../src/adapters/claude.mjs';
 
 async function fixture(){const root=realpathSync.native(await mkdtemp(join(tmpdir(),'starport-client-network-'))),data=join(root,'data'),workspace=join(root,'project');for(const path of [data,workspace])await mkdir(path);return {root,data,workspace};}
 const configuration={version:1,enabled:true,toolNetwork:'normal',proxyUrl:'http://127.0.0.1:18080',protectedPrograms:[process.execPath],gitExecutable:process.execPath};
+const guarded={claudeNetwork:{script:'fixture-firewall.ps1',policyPath:'fixture-policy.json',program:process.execPath}};
+const auditPassed={stdout:JSON.stringify({Success:true,Missing:[],Error:null})};
 async function policy(f,value=configuration){await writeFile(join(f.data,'claude-network-policy.json'),JSON.stringify(value));return readClaudeNetworkPolicy(f.root,f.data);}
+
+test('concurrent launches share a pending audit but subsequent launches check again',async()=>{
+ let calls=0,release;
+ const guard=createClaudeNetworkGuard(async(command,args,options)=>{
+  calls++;assert.ok(options.timeout>=60000);assert.equal(options.env.PSModulePath,undefined);assert.ok(args.includes('Audit'));assert.ok(!args.includes('Apply'));
+  if(calls===1)await new Promise(resolve=>{release=resolve;});return auditPassed;
+ });
+ const first=guard(guarded),second=guard(guarded);assert.equal(first,second);assert.equal(calls,1);
+ release();await Promise.all([first,second]);await guard(guarded);assert.equal(calls,2);
+});
+
+test('an audit for a different executable cannot authorize another launch',async()=>{
+ let calls=0;const guard=createClaudeNetworkGuard(async()=>{calls++;return auditPassed;});
+ await Promise.all([guard(guarded),guard({claudeNetwork:{...guarded.claudeNetwork,program:'another-client.exe'}})]);assert.equal(calls,2);
+});
+
+test('a timed out audit blocks all waiting launches and does not instruct firewall reapplication',async()=>{
+ let calls=0;const guard=createClaudeNetworkGuard(async()=>{calls++;throw Object.assign(Error('fixture deadline'),{killed:true,signal:'SIGTERM'});});
+ const results=await Promise.allSettled([guard(guarded),guard(guarded)]);assert.equal(calls,1);
+ for(const result of results){assert.equal(result.status,'rejected');assert.equal(result.reason.code,'CLAUDE_NETWORK_AUDIT_TIMEOUT');assert.match(result.reason.message,/已阻止启动/);assert.doesNotMatch(result.reason.message,/-Mode Apply/);}
+ await assert.rejects(guard(guarded));assert.equal(calls,2);
+});
+
+test('missing coverage and query failures remain blocked with actionable original reasons',async()=>{
+ const missing=createClaudeNetworkGuard(async()=>{throw Object.assign(Error('exit 1'),{stdout:JSON.stringify({Success:false,Missing:['new-client.exe'],Error:null})});});
+ await assert.rejects(missing(guarded),error=>{assert.match(error.message,/new-client.exe/);assert.match(error.message,/-Mode Apply/);return true;});
+ const denied=createClaudeNetworkGuard(async()=>{throw Object.assign(Error('exit 1'),{stdout:JSON.stringify({Success:false,Missing:[],Error:'Access is denied'})});});
+ await assert.rejects(denied(guarded),error=>{assert.match(error.message,/Access is denied/);assert.match(error.message,/未回退直连/);assert.doesNotMatch(error.message,/-Mode Apply/);return true;});
+});
+
+test('a zero exit without an explicit successful audit never authorizes a launch',async()=>{
+ for(const stdout of ['', 'not JSON', '{}', JSON.stringify({Success:false,Missing:[]}),JSON.stringify({Success:'true'})]){
+  const guard=createClaudeNetworkGuard(async()=>({stdout}));await assert.rejects(guard(guarded),/已阻止启动/);
+ }
+ const failed=createClaudeNetworkGuard(async()=>{throw Object.assign(Error('exit 1'),auditPassed);});await assert.rejects(failed(guarded),/已阻止启动/);
+});
 
 test('only Claude clients force the proxy; DSH and ordinary providers stay unchanged',async()=>{
  const f=await fixture();assert.equal(readClaudeNetworkPolicy(f.root,f.data),null);const p=await policy(f);
