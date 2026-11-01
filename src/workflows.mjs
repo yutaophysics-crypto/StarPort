@@ -654,7 +654,7 @@ export class Workflows {
   // One step's turn at a desk, for its run card: the prompt it was given and its answer so far.
   deskTurn(deskId,messageId){
     const live=this.runner.active.get(deskId)?.message;
-    const message=live?.id===messageId?live:this.store.messageById(deskId,messageId);
+    const message=live?.id===messageId?live:this.store.messageById(deskId,messageId,{trace:true});
     if(!message||message.role!=='assistant')throw Object.assign(new Error('没有这次工作记录'),{status:404});
     return {prompt:this.store.promptBefore(deskId,messageId)?.content||'',message};
   }
@@ -664,7 +664,7 @@ export class Workflows {
     try{
       const audit=await auditSeat(step.seat.dir,context.manifest,{knowledge:step.seat.knowledge});
       const siblings=context.rows.filter(row=>row.key!==step.key).map(row=>basename(row.seat.dir));
-      audit.stray=strayCalls(this.store.messageById(deskId,messageId)?.details,{seat:step.seat.dir,forbidden:context.forbidden,siblings});
+      audit.stray=strayCalls(this.store.messageById(deskId,messageId,{trace:true})?.details,{seat:step.seat.dir,forbidden:context.forbidden,siblings});
       step.seat.audit=audit;
     }catch(error){step.notes.push('交卷检查没有完成：'+redact(error.message).slice(0,300));}
   }

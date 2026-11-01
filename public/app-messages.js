@@ -91,15 +91,53 @@ function messageSignature(msg) {
 }
 
 // What a row shows besides its message: language, trace level, tool name, chat title for memory
-// receipts, and for run cards their companions and toggles (StarportWorkflows.cardContext).
+// receipts, a failed read of its process log, and for run cards their companions and toggles
+// (StarportWorkflows.cardContext).
 function rowContext(msg) {
   return [
     i18n.language,
     globalThis.StarportActivityModel?.level,
     provider(msg.provider)?.name,
     state.chat?.title,
+    msg.deferredTrace ? traceReads.get(traceKey(msg))?.error || '' : '',
     msg.details?.workflowRun ? globalThis.StarportWorkflows?.cardContext?.(msg) : ''
   ].join('|');
+}
+
+// A finished reply arrives with an outline of its process log: names, statuses and commentary.
+// The log itself, with every input and output, is read the first time its process view opens.
+const traceReads = new Map();
+const traceKey = msg => (state.chat?.id || '') + ':' + msg.id;
+
+function readTrace(msg) {
+  const chatId = state.chat?.id;
+  const key = traceKey(msg);
+  if (!chatId || traceReads.get(key)?.loading) return;
+  traceReads.set(key, { loading: true });
+  api('/chats/' + chatId + '/messages/' + msg.id + '/trace')
+    .then(trace => {
+      traceReads.delete(key);
+      const index = state.chat?.id === chatId ? state.messages.findIndex(row => row.id === msg.id) : -1;
+      if (!state.messages[index]?.deferredTrace) return;
+      const next = { ...state.messages[index] };
+      next.details = { ...next.details, activity: trace.activity, tools: trace.tools };
+      delete next.deferredTrace;
+      state.messages[index] = next;
+    })
+    .catch(error => traceReads.set(key, { error: error.message }))
+    .finally(() => renderMessages());
+}
+
+function traceOptions(msg) {
+  if (!msg.deferredTrace) return {};
+  const error = traceReads.get(traceKey(msg))?.error;
+  if (!error) return { pending: true, onOpen: () => readTrace(msg) };
+  const retry = el('button', { type: 'button', class: 'secondary-button', text: t('重试') });
+  retry.onclick = () => {
+    traceReads.delete(traceKey(msg));
+    readTrace(msg);
+  };
+  return { lead: () => [el('p', { class: 'native-empty', text: error }), retry] };
 }
 
 // The branch line is kept too while its source chat's title stays the same.
@@ -188,7 +226,7 @@ function messageRow(msg) {
         ? el('div', { class: 'message-body', text: dispatchStep ? dispatchStep.task : msg.content })
         : workflows
           ? workflows.renderCard(msg)
-          : StarportActivity.render(msg, { el, t, markdown, chatId: state.chat?.id || '' })
+          : StarportActivity.render(msg, { el, t, markdown, chatId: state.chat?.id || '', ...traceOptions(msg) })
     ]
   );
   if (msg.details?.attachments?.length) {

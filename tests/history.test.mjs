@@ -24,7 +24,7 @@ test('import reads all pages, preserves dates and folders, and starts an indepen
   const store=new Store(':memory:');t.after(()=>store.close());const history=new HistoryImporter(store,registry,process.cwd(),fixtureHistoryConnect());
   const g=store.group('Research'),preview=await history.read('codex','history-0',{preview:true});assert.equal(preview.messages.length,2);assert.equal(preview.partial,true);assert.equal(store.list().chats.length,0);
   const result=await history.import('codex',{id:'history-0',group_id:g.id});assert.equal(result.messages,4);
-  const chat=store.chat(result.chatId),messages=store.messages(chat.id);
+  const chat=store.chat(result.chatId),messages=store.messages(chat.id,{trace:true});
   assert.equal(chat.group_id,g.id);assert.equal(chat.workspace,'C:\\projects\\starport');assert.equal(chat.created,new Date(1700000000*1000).toISOString());
   assert.equal(chat.updated,new Date(1700001000*1000).toISOString());assert.equal(messages[0].created,new Date(1700000001*1000).toISOString());
   assert.equal(messages[3].content,'Second page answer');assert.match(messages[0].content,/missing.png/);assert.equal(messages[0].details.notices.length,1);

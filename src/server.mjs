@@ -302,6 +302,8 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           if(item&&action==='steer'&&req.method==='POST'){json(res,await runner.steerQueued(id,item,await body(req)));return;}
           if(item&&action==='send'&&req.method==='POST'){const data=await body(req);await runner.dispatchQueue(id,item,data.revision);json(res,store.queue.snapshot(id));return;}
         }
+        const traceRoute=path.match(/^\/api\/chats\/([\w-]+)\/messages\/([\w-]+)\/trace$/);
+        if(traceRoute&&req.method==='GET'){const trace=store.trace(traceRoute[1],traceRoute[2]);if(!trace)throw Object.assign(new Error('这条回复不存在'),{status:404});json(res,trace);return;}
         const route=path.match(/^\/api\/chats\/([\w-]+)(?:\/(messages|guidance|stop|approval|goal|export|reset-session|read|question-skip|branch|context|move))?$/);
         if(route){
           const[,id,action]=route,chat=store.chat(id);if(!chat)throw Object.assign(new Error('对话不存在'),{status:404});

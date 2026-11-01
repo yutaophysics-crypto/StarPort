@@ -23,6 +23,7 @@ export const INPUT_BYTE_LIMITS={antigravity:184000};
 const attachmentIds=row=>(row.details.attachments||[]).map(item=>item.id);
 // Native sessions keep the tools they started with, so whom a model may call is part of its session.
 const callSuffix=grant=>grant?':calls='+grant.callees.map(c=>c.id).sort().join(','):'';
+const streaming=row=>['running','pending'].includes(row.status);
 
 export class Runner {
   constructor(store,registry,broadcast,implementations={},attachments=null,history=null) {this.store=store;this.registry=registry;this.broadcast=broadcast;this.active=new Map();this.implementations=implementations;this.attachments=attachments;this.subagentReader=new AntigravitySubagents();this.activityHistory=history?new ActivityHistory(history):null;}
@@ -44,7 +45,12 @@ export class Runner {
     const followed=chat?follow.filter(id=>id!==message?.id).map(id=>this.store.messageById(chatId,id)).filter(Boolean):[];
     return {chatId:chat?.id||null,chat,active:[...this.active.keys()],providerVerifications:this.registry.verifications?.()||{},message,...followed.length?{followed}:{},inputs:chat?this.store.interactionMessages(chatId,runId):[],...chat?this.store.queue.snapshot(chatId):{},runId,run:chat?this.state(chatId):null,context:chat?this.context(chatId):null};
   }
-  snapshot(chatId){return {chat:this.store.chat(chatId),messages:this.store.messages(chatId),...this.store.queue.snapshot(chatId),run:this.state(chatId),context:this.context(chatId)};}
+  // A running reply comes whole, since the page shows it open, and from memory, since saves trail
+  // it by up to a second; the others with an outline of their logs, read when opened (store.trace).
+  snapshot(chatId){
+    const reply=this.active.get(chatId)?.message,messages=this.store.messages(chatId,{trace:streaming}).map(row=>row.id===reply?.id?reply:row);
+    return {chat:this.store.chat(chatId),messages,...this.store.queue.snapshot(chatId),run:this.state(chatId),context:this.context(chatId)};
+  }
   async refreshContext(chatId,refresh=false){
     const chat=this.store.chat(chatId);if(!chat)return null;
     const options=validateOptions(chat.provider,chat.options[chat.provider]),sample=this.context(chatId);
@@ -137,9 +143,10 @@ export class Runner {
       let context=null,prompt='',archived=false;
       const assemble=()=>{
         const options={...limits,chatId:toolChatId,summary:fresh?this.compactor.summaryFor(chatId):null};
-        context=buildContext(this.store.messages(chatId),session?.cursor,{...options,historyFile});archived=false;
+        const messages=this.store.messages(chatId);
+        context=buildContext(messages,session?.cursor,{...options,historyFile});archived=false;
         try{archived=writeHistoryArchive(historyFile,chat,context);}catch{}
-        if(!archived&&(context.earlier.length||context.trimmed))context=buildContext(this.store.messages(chatId),session?.cursor,options);
+        if(!archived&&(context.earlier.length||context.trimmed))context=buildContext(messages,session?.cursor,options);
         prompt=preamble+context.text;
       };
       const contextNotices=(compacted=null)=>{
@@ -171,6 +178,14 @@ export class Runner {
         if(urgent)return pushNow();
         if(pushTimer)return;
         pushTimer=setTimeout(pushNow,Math.min(1000,Math.max(40,pushSize/2048)));pushTimer.unref?.();
+      };
+      // Saving rewrites the whole reply with its process log, so a turn saved on every token kept the
+      // server too busy to answer anyone. Saves wait up to a second; the end of the turn saves at once.
+      let saveTimer=null;
+      const saveNow=()=>{clearTimeout(saveTimer);saveTimer=null;this.store.saveMessage(assistant);};
+      const save=urgent=>{
+        if(urgent)return saveNow();
+        if(!saveTimer){saveTimer=setTimeout(saveNow,1000);saveTimer.unref?.();}
       };
       const emit=e=>{
         if(run.ended||this.active.get(chatId)!==run)return;
@@ -209,8 +224,8 @@ export class Runner {
         if(e.type==='phase'&&['answering','background'].includes(e.phase))run.phase=e.phase;
         if(e.type==='approval')run.approvals.set(e.request.id,e.request);
         if(e.type==='approval-resolved')run.approvals.delete(e.id);
-        this.store.saveMessage(assistant);
-        push(['approval','approval-resolved','phase','goal'].includes(e.type));
+        const urgent=['approval','approval-resolved','phase','goal'].includes(e.type);
+        save(urgent||e.type==='session');push(urgent);
       };
       let polling=null,watching=true;
       const pollSubagents=()=>{
@@ -291,7 +306,7 @@ export class Runner {
           clearInterval(watchdog);clearInterval(subagentTimer);
           if(polling)await polling;
           await pollSubagents();watching=false;
-          run.ended=true;clearTimeout(pushTimer);assistant.details.liveRevision++;
+          run.ended=true;clearTimeout(pushTimer);clearTimeout(saveTimer);assistant.details.liveRevision++;
           // Calls this turn handed out and never collected would keep working for nobody.
           try{contextTools?.close();}catch{}
           assistant.details.endedAt=Date.now();
@@ -317,7 +332,9 @@ export class Runner {
           if(assistant.status!=='complete')this.store.queue.hold(chatId,'当前任务已停止或失败，请确认后继续发送。');
           // Send the saved, settled state directly. Completion must not wait for
           // provider discovery, full history recovery or an optional refresh hint.
-          this.broadcast('message',this.live(chatId));this.broadcast('refresh',{chatId});
+          // The reply goes with its settled process log, which the page already shows.
+          const settled=this.live(chatId);if(settled.message?.id===assistant.id)settled.message=assistant;
+          this.broadcast('message',settled);this.broadcast('refresh',{chatId});
           // Tell the user once the chat is done: not for workflow desks, the conversation
           // model's part of an @-message (its run card tells once everyone is done), a stop
           // they pressed themselves, or a reply the queue is about to continue.
@@ -331,13 +348,14 @@ export class Runner {
     } catch(error) {await run.contextBridge?.close();this.active.delete(chatId);this.broadcast('message',this.live(chatId));throw error;}
   }
   async messages(chatId){
-    const messages=this.store.messages(chatId);
+    const messages=this.store.messages(chatId,{trace:streaming});
     for(let index=0;index<messages.length;index++){
       const message=messages[index];
       if(this.activityHistory&&!this.active.has(chatId)&&['codex','claude'].includes(message.provider)&&message.role==='assistant'&&message.details.sessionId&&!message.details.activity?.length){
         try{
           const source=await this.activityHistory.read(message.provider,message.details.sessionId),activity=recoverActivity(message,source);
-          if(activity){message.details.activity=activity;message.details.activityRecovered=true;this.store.saveMessage(message);}
+          // Saved with its tool list in full, not the outline it was read with.
+          if(activity){this.store.attachTrace(message);message.details.activity=activity;message.details.activityRecovered=true;this.store.saveMessage(message);}
         }catch{}
       }
       if(message.provider!=='antigravity'||message.role!=='assistant'||!message.details.sessionId||message.details.subagents!==undefined)continue;

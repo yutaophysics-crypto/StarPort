@@ -237,6 +237,53 @@ test('the conversation redraws only rows whose message or surroundings changed',
   assert.ok(all(root).length > 1);
 });
 
+test('opening a finished reply reads its process log once, and a failed read offers a retry', async () => {
+  const { document } = dom();
+  const root = document.createElement('div');
+  const seen = [], paths = [];
+  let fail = false;
+  const big = 'x'.repeat(5000);
+  const context = vm.createContext({ document, window: { addEventListener() {} },
+    $: selector => selector === '#messages' ? root : { scrollHeight: 0, scrollTop: 0, clientHeight: 0, scrollTo() {} },
+    state: { chat: { id: 'chat', title: 'T', options: {} }, chats: [], messages: [] },
+    StarportLive: { orderedMessages: messages => messages },
+    StarportActivity: { render: (msg, options) => { seen.push({ msg, options }); return document.createElement('div'); }, remember() {}, restoreFocus() {} },
+    api: async path => { paths.push(path); if (fail) throw new Error('读不到'); return { activity: [{ id: 'c', kind: 'tool', output: big }], tools: [], liveRevision: 2 }; },
+    provider: () => ({ name: 'Claude' }), mark: () => null, t: value => value, notice: value => value, i18n: { language: 'zh', locale: 'zh-CN' },
+    renderRun() {}, markViewed() {} });
+  context.globalThis = context;
+  vm.runInContext(source('ui-kit.js'), context);
+  context.el = context.StarportUI.el;
+  vm.runInContext(source('app-messages.js'), context);
+  Object.assign(context, { renderRun() {}, markViewed() {} });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const reply = (id, revision) => ({ id, role: 'assistant', provider: 'claude', status: 'complete', content: '答', created: '2026-10-31T10:00:00Z',
+    deferredTrace: true, details: { liveRevision: revision, activity: [{ id: 'c', kind: 'tool' }] } });
+  context.state.messages = [reply('r', 2)];
+  context.renderMessages();
+  assert.equal(seen.at(-1).options.pending, true);
+  seen.at(-1).options.onOpen();
+  seen.at(-1).options.onOpen();
+  await settle();
+  assert.deepEqual(paths, ['/chats/chat/messages/r/trace'], 'one read, however often it opens');
+  assert.equal(context.state.messages[0].deferredTrace, undefined);
+  assert.equal(seen.at(-1).msg.details.activity[0].output, big);
+  assert.equal(seen.at(-1).options.pending, undefined);
+  fail = true;
+  context.state.messages = [reply('s', 1)];
+  context.renderMessages();
+  seen.at(-1).options.onOpen();
+  await settle();
+  const failed = seen.at(-1).options;
+  assert.equal(failed.pending, undefined);
+  const [note, retry] = failed.lead();
+  assert.equal(note.textContent, '读不到');
+  fail = false;
+  retry.onclick();
+  await settle();
+  assert.equal(context.state.messages[0].details.activity[0].output, big);
+});
+
 test('a refresh about other chats rereads only the chat list', async () => {
   const app = source('app.js');
   const code = app.slice(app.indexOf('function applyStateList('), app.indexOf('async function openChat('));

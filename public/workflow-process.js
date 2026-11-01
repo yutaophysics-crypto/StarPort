@@ -75,7 +75,7 @@
       chatId: step.deskChatId,
       answer: step.status === 'running',
       autoOpen: false,
-      pending: !turn.message && !turn.error,
+      pending: (!turn.message || !!turn.message.deferredTrace) && !turn.error,
       lead: () => lead(step, turn),
       onOpen: () => load(key)
     });
@@ -97,8 +97,13 @@
 
   async function load(key) {
     const turn = turns.get(key);
+    if (!turn || turn.loading || (turn.loaded && !turn.stale)) return;
     // At most one read every few seconds: a turn still finishing on the server stays stale a moment.
-    if (!turn || turn.loading || (turn.loaded && !turn.stale) || Date.now() - (turn.at || 0) < 3000) return;
+    // A finished turn shown open without its process log is read once the few seconds are up.
+    if (Date.now() - (turn.at || 0) < 3000) {
+      if (turn.message?.deferredTrace && !turn.retry) turn.retry = setTimeout(() => { turn.retry = null; load(key); }, 3000);
+      return;
+    }
     turn.loading = true;
     const [desk, id] = key.split(':');
     try {
@@ -123,6 +128,8 @@
     const turn = turns.get(key);
     if (!turn) return;
     turn.message = turn.message ? StarportLive.preferMessage(turn.message, message) : message;
+    // The finished turn is sent without its process log, which is read again when shown open.
+    if (turn.message.deferredTrace) turn.loaded = false;
     patch(key);
   }
 

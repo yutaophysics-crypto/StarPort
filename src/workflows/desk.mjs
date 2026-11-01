@@ -57,7 +57,8 @@ export async function runUnattended({runner,store,clockFactory},run,deskId,promp
     const timer=clock.deadlineAt===null?null:setTimeout(inspect,Math.max(0,clock.deadlineAt-Date.now()));timer?.unref?.();
     if(run.stopped)runner.stop(deskId).catch(()=>{});
     try{await started.done?.catch(()=>{});}finally{clearInterval(watch);clearTimeout(timer);}
-    const message=store.messageById(deskId,started.assistant.id);
+    // A turn that stopped hands on its tool calls (historyMessage), so it is read with its log.
+    const message=store.messageById(deskId,started.assistant.id,{trace:true});
     const output=message?.status==='complete'?message.details?.finalAnswer||message.content||'':message?historyMessage(message)?.content||message.content||'':'';
     return {status:message?.status||'error',output,error:clock.expired?`达到你设置的 ${minutes} 分钟时限，已停止；进度和执行记录已保留。`:message?.details?.error||'',notices:(message?.details?.notices||[]).slice(preset),messageId:started.assistant.id,memory:message?.details?.memory||null};
   }finally{run.desks.delete(deskId);}

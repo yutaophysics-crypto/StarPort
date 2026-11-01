@@ -84,7 +84,7 @@ test('an explicit deadline warns, saves evidence, then stops only its own desk',
   assert.match(f.step.output, /已检查输入，验证尚未完成/);
   assert.match(f.step.output, /已保存的工具结果/);
   assert.equal(f.step.output.includes('PRIVATE_REASONING'), false);
-  const deskMessage = f.store.messageById(f.step.deskChatId, f.step.deskMessageId);
+  const deskMessage = f.store.messageById(f.step.deskChatId, f.step.deskMessageId, { trace: true });
   assert.deepEqual(deskMessage.details.checkpoints.map(c => c.reason), ['deadline-warning', 'deadline']);
   assert.equal(deskMessage.details.tools[0].output, '已保存的工具结果');
   assert.equal(f.store.chat(unrelated.id).workspace, process.cwd());

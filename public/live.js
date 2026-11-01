@@ -14,6 +14,11 @@ globalThis.StarportLive=(()=>{
     if(!current||current.id!==incoming?.id)return incoming;
     if(terminal(current)&&!terminal(incoming))return current;
     if((current.details?.liveRevision||0)>(incoming.details?.liveRevision||0))return current;
+    // The same reply sent again without its process log keeps the log this page already read.
+    if(incoming.deferredTrace&&!current.deferredTrace&&(current.details?.liveRevision||0)===(incoming.details?.liveRevision||0)){
+      incoming.details.activity=current.details?.activity||[];if(current.details?.tools)incoming.details.tools=current.details.tools;
+      delete incoming.deferredTrace;
+    }
     return incoming;
   }
   function mergeChatStatus(current,incoming){

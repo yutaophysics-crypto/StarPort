@@ -45,7 +45,8 @@ test('late adapter events cannot change a saved terminal result or interfere wit
     const chat=store.newChat({provider:'codex',workspace:process.cwd()});await runner.start(chat.id,'one');await runner.active.get(chat.id).done;const saved=store.lastAssistant(chat.id),count=events.length;
     callbacks[0]({type:'tool',id:'late',status:'running'});assert.deepEqual(store.lastAssistant(chat.id),saved);assert.equal(events.length,count);
     await runner.start(chat.id,'two');await new Promise(resolve=>setImmediate(resolve));const newRun=runner.state(chat.id);
-    callbacks[0]({type:'replace',text:'stale result'});assert.equal(runner.state(chat.id).id,newRun.id);assert.equal(store.lastAssistant(chat.id).content,'answer');release.resolve();await runner.active.get(chat.id).done;
+    callbacks[0]({type:'replace',text:'stale result'});assert.equal(runner.state(chat.id).id,newRun.id);assert.equal(runner.live(chat.id).message.content,'answer');release.resolve();await runner.active.get(chat.id).done;
+    assert.equal(store.lastAssistant(chat.id).content,'answer');
   }finally{release.resolve();await runner.close();store.close();}
 });
 test('lightweight live status bypasses provider probes and history, remains authenticated and reflects completion',async t=>{
@@ -59,7 +60,7 @@ test('lightweight live status bypasses provider probes and history, remains auth
   assert.equal((await fetch(base+'/api/live?chatId=missing',{headers})).status,404);
   await hub.runner.start(chat.id,'hello');const run=hub.runner.active.get(chat.id);await run.done;
   const response=await fetch(base+'/api/live?chatId='+chat.id,{headers,signal:AbortSignal.timeout(2000)});assert.equal(response.status,200);const live=await response.json();
-  assert.equal(live.run,null);assert.equal(live.message.status,'complete');assert.equal(live.message.content,'answer');assert.equal(live.message.details.tools[0].status,'unknown');assert.deepEqual(live.active,[]);assert.equal(probes,0);assert.equal(historyReads,0);
+  assert.equal(live.run,null);assert.equal(live.message.status,'complete');assert.equal(live.message.content,'answer');assert.equal(live.message.details.activity[0].status,'unknown');assert.deepEqual(live.active,[]);assert.equal(probes,0);assert.equal(historyReads,0);
   assert.deepEqual(live.providerVerifications.antigravity,verification);
   const card=hub.store.message(chat.id,'assistant',null,'card','complete',{liveRevision:2});hub.store.message(chat.id,'assistant','codex','later','complete',{});
   const followed=await(await fetch(base+'/api/live?chatId='+chat.id+'&follow='+card.id+',bad%20id,'+chat.id,{headers})).json();

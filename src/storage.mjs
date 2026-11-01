@@ -10,6 +10,11 @@ import { ChatStatus } from './chat-status.mjs';
 import { HistoryArchives, historyArchivePath } from './history-archives.mjs';
 export { historyArchivePath } from './history-archives.mjs';
 import { historyRows, compatibleHistorySummary } from './history-context.mjs';
+import { splitTrace, isOutline, withTrace, unfinishedReply } from './message-trace.mjs';
+
+// Message rows with a flag for a saved process log, and with the log itself (message-trace.mjs).
+const MESSAGE = 'SELECT m.*, t.message_id IS NOT NULL AS traced FROM messages m LEFT JOIN message_traces t ON t.message_id=m.id';
+const MESSAGE_WITH_TRACE = 'SELECT m.*, t.message_id IS NOT NULL AS traced, t.data AS trace FROM messages m LEFT JOIN message_traces t ON t.message_id=m.id';
 
 export class Store {
   constructor(file) {
@@ -29,6 +34,7 @@ export class Store {
         PRIMARY KEY(provider,source_id));
       CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, workspace TEXT NOT NULL, group_id TEXT REFERENCES groups(id), created TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id,created);
+      CREATE TABLE IF NOT EXISTS message_traces (message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE, data TEXT NOT NULL);
     `);
     this.db.prepare("UPDATE messages SET status='interrupted' WHERE status='running'").run();
     if(!this.db.prepare('PRAGMA table_info(chats)').all().some(row=>row.name==='project_id'))this.db.exec('ALTER TABLE chats ADD COLUMN project_id TEXT REFERENCES projects(id)');
@@ -36,6 +42,7 @@ export class Store {
     // The place a conversation was dragged to in its room; NULL until the room is first rearranged.
     // Rooms keep their order in settings instead: older builds insert rooms without naming columns.
     if(!this.db.prepare('PRAGMA table_info(chats)').all().some(row=>row.name==='sort_order'))this.db.exec('ALTER TABLE chats ADD COLUMN sort_order INTEGER');
+    if(!this.setting('messages.traceSplit',false))this.splitTraces(file);
     this.queue=new MessageQueue(this);
     this.memory=new SharedMemory(this);
     this.instructions=new ContextInstructions(this);
@@ -45,6 +52,47 @@ export class Store {
   }
   close() {
     this.db.close();
+  }
+  // Older builds kept each reply's process log inside the message. Moved out once, after a copy
+  // of the database is made beside it; if the move fails, those rows keep working as they are.
+  splitTraces(file) {
+    const ids = this.db.prepare(`SELECT id FROM messages WHERE instr(details,'"activity":[{')>0 OR instr(details,'"tools":[{')>0`).all().map(row => row.id);
+    if (ids.length && file !== ':memory:') {
+      try {
+        const dir = join(dirname(file), 'db-backups');
+        mkdirSync(dir, { recursive: true });
+        this.db.prepare('VACUUM INTO ?').run(join(dir, 'hub-before-trace-split-' + new Date().toISOString().replaceAll(':', '-') + '.sqlite'));
+      } catch (error) { console.error('Process logs stay inside their messages; no backup could be made: ' + error.message); return; }
+    }
+    const read = this.db.prepare('SELECT * FROM messages WHERE id=?');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const id of ids) { const row = read.get(id); this.saveMessage({ ...row, details: JSON.parse(row.details) }); }
+      this.setSetting('messages.traceSplit', true);
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); console.error('Process logs stay inside their messages: ' + error.message); }
+  }
+  // A message row as callers use it. With its trace, details hold the whole process log; without,
+  // an outline of it, and deferredTrace says the log is saved apart (trace()).
+  decode(row) {
+    const { traced, trace, ...message } = row;
+    message.details = JSON.parse(row.details);
+    if (traced && isOutline(message.details)) {
+      if (trace !== undefined) withTrace(message.details, trace);
+      else message.deferredTrace = true;
+    }
+    return message;
+  }
+  attachTrace(row) {
+    if (!row?.deferredTrace) return row;
+    withTrace(row.details, this.db.prepare('SELECT data FROM message_traces WHERE message_id=?').get(row.id)?.data);
+    delete row.deferredTrace;
+    return row;
+  }
+  // A reply's whole process log, for the page that opens it.
+  trace(chatId, id) {
+    const row = this.messageById(chatId, id, { trace: true });
+    return row && { activity: row.details.activity || [], tools: row.details.tools || [], liveRevision: row.details.liveRevision || 0 };
   }
   list() {
     return { groups: this.rooms(),
@@ -185,12 +233,13 @@ export class Store {
     try {
       const chat=this.newChat({group_id:source.group_id,title:(base+' · 分支'+(siblings?' '+(siblings+1):'')).slice(0,300),provider:source.provider,
         workspace:source.workspace,options,project_id:source.project_id||null});
-      const ids=new Map(),insert=this.db.prepare('INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)');
+      const ids=new Map(),copyTrace=this.db.prepare('INSERT INTO message_traces SELECT ?,data FROM message_traces WHERE message_id=?');
       for(const row of rows.slice(0,end+1)){
         if(['running','pending'].includes(row.status))continue;
         const id=randomUUID(),details={...row.details};ids.set(row.id,id);
         if(details.replyTo?.messageId)details.replyTo={...details.replyTo,messageId:ids.get(details.replyTo.messageId)||details.replyTo.messageId};
-        insert.run(id,chat.id,row.role,row.provider,row.content,row.status,JSON.stringify(details),row.created);
+        this.insertMessage({id,chat_id:chat.id,role:row.role,provider:row.provider,content:row.content,status:row.status,details,created:row.created});
+        if(row.deferredTrace)copyTrace.run(id,row.id);
       }
       const at=ids.get(target.id);
       this.db.prepare('UPDATE chats SET options=? WHERE id=?').run(JSON.stringify({...options,branch:{chatId,messageId,at}}),chat.id);
@@ -200,29 +249,41 @@ export class Store {
       return this.chat(chat.id);
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
-  messages(id) {
-    return this.db.prepare('SELECT * FROM messages WHERE chat_id=? ORDER BY rowid').all(id).map(m => ({ ...m, details: JSON.parse(m.details) }));
+  // trace: which rows come with their whole process log; the rest with an outline of it. By default
+  // the replies that stopped or failed, whose history text is built from their tool calls.
+  messages(id, { trace = unfinishedReply } = {}) {
+    const rows = this.db.prepare((trace === true ? MESSAGE_WITH_TRACE : MESSAGE) + ' WHERE m.chat_id=? ORDER BY m.rowid').all(id).map(row => this.decode(row));
+    if (typeof trace === 'function') for (const row of rows) if (row.deferredTrace && trace(row)) this.attachTrace(row);
+    return rows;
   }
-  messageById(chatId,id){const row=this.db.prepare('SELECT * FROM messages WHERE chat_id=? AND id=?').get(chatId,id);return row?{...row,details:JSON.parse(row.details)}:null;}
+  messageById(chatId,id,{trace=false}={}){const row=this.db.prepare((trace?MESSAGE_WITH_TRACE:MESSAGE)+' WHERE m.chat_id=? AND m.id=?').get(chatId,id);return row?this.decode(row):null;}
   // The user message that opened an assistant turn: the last one written before it.
-  promptBefore(chatId,messageId){const row=this.db.prepare("SELECT * FROM messages WHERE chat_id=? AND role='user' AND rowid<(SELECT rowid FROM messages WHERE chat_id=? AND id=?) ORDER BY rowid DESC LIMIT 1").get(chatId,chatId,messageId);return row?{...row,details:JSON.parse(row.details)}:null;}
-  lastAssistant(chatId){const row=this.db.prepare("SELECT * FROM messages WHERE chat_id=? AND role='assistant' ORDER BY rowid DESC LIMIT 1").get(chatId);return row?{...row,details:JSON.parse(row.details)}:null;}
+  promptBefore(chatId,messageId){const row=this.db.prepare(MESSAGE+" WHERE m.chat_id=? AND m.role='user' AND m.rowid<(SELECT rowid FROM messages WHERE chat_id=? AND id=?) ORDER BY m.rowid DESC LIMIT 1").get(chatId,chatId,messageId);return row?this.decode(row):null;}
+  lastAssistant(chatId){const row=this.db.prepare(MESSAGE+" WHERE m.chat_id=? AND m.role='assistant' ORDER BY m.rowid DESC LIMIT 1").get(chatId);return row?this.decode(row):null;}
   message(chatId, role, provider, content, status = 'complete', details = {}) {
     const row = { id: randomUUID(), chat_id: chatId, role, provider, content, status, details, created: new Date().toISOString() };
-    this.db.prepare('INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)').run(row.id, chatId, role, provider, content, status, JSON.stringify(details), row.created);
+    this.insertMessage(row);
     this.db.prepare('UPDATE chats SET updated=? WHERE id=?').run(row.created, chatId);
     return row;
   }
+  insertMessage(row) {
+    const { details, trace } = splitTrace(row.details);
+    this.db.prepare('INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)').run(row.id, row.chat_id, row.role, row.provider, row.content, row.status, JSON.stringify(details), row.created);
+    if (trace) this.db.prepare('INSERT OR REPLACE INTO message_traces VALUES(?,?)').run(row.id, JSON.stringify(trace));
+  }
+  // A row read without its log (deferredTrace) is an outline: the saved log stays as it is.
   saveMessage(row) {
-    this.db.prepare('UPDATE messages SET content=?,status=?,details=? WHERE id=?').run(row.content, row.status, JSON.stringify(row.details), row.id);
+    const { details, trace } = splitTrace(row.details);
+    this.db.prepare('UPDATE messages SET content=?,status=?,details=? WHERE id=?').run(row.content, row.status, JSON.stringify(details), row.id);
+    if (trace && !row.deferredTrace) this.db.prepare('INSERT OR REPLACE INTO message_traces VALUES(?,?)').run(row.id, JSON.stringify(trace));
   }
   guidanceReceipt(chatId,clientId){
-    const row=this.db.prepare("SELECT * FROM messages WHERE chat_id=? AND json_extract(details,'$.guidance.clientId')=? ORDER BY rowid DESC LIMIT 1").get(chatId,clientId);
-    return row?{...row,details:JSON.parse(row.details)}:null;
+    const row=this.db.prepare(MESSAGE+" WHERE m.chat_id=? AND json_extract(m.details,'$.guidance.clientId')=? ORDER BY m.rowid DESC LIMIT 1").get(chatId,clientId);
+    return row?this.decode(row):null;
   }
   interactionMessages(chatId,runId){
     if(!runId)return [];
-    return this.db.prepare("SELECT * FROM messages WHERE chat_id=? AND (json_extract(details,'$.guidance.runId')=? OR json_extract(details,'$.nativeQuestionReply.runId')=?) ORDER BY rowid LIMIT 128").all(chatId,runId,runId).map(row=>({...row,details:JSON.parse(row.details)}));
+    return this.db.prepare(MESSAGE+" WHERE m.chat_id=? AND (json_extract(m.details,'$.guidance.runId')=? OR json_extract(m.details,'$.nativeQuestionReply.runId')=?) ORDER BY m.rowid LIMIT 128").all(chatId,runId,runId).map(row=>this.decode(row));
   }
   session(chat, provider) { return this.db.prepare('SELECT * FROM sessions WHERE chat_id=? AND provider=?').get(chat, provider); }
   saveSession(chat, provider, nativeId, cursor, fingerprint) {
@@ -249,9 +310,8 @@ export class Store {
     try {
       const chat=this.newChat({group_id:groupId,title:source.title,provider,workspace:source.workspace,
         options:provider==='codex'?{codex:{permissionMode:'ask',sandbox:'workspace-write',mode:'chat'}}:{}});
-      const insert=this.db.prepare('INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)');
       // A reply from another model, unpacked from a Starport prompt, keeps its own label.
-      for(const m of source.messages)insert.run(randomUUID(),chat.id,m.role,m.role==='assistant'&&['codex','claude','antigravity','deepseek'].includes(m.provider)?m.provider:provider,m.content,m.status,JSON.stringify(m.details),m.created);
+      for(const m of source.messages)this.insertMessage({id:randomUUID(),chat_id:chat.id,role:m.role,provider:m.role==='assistant'&&['codex','claude','antigravity','deepseek'].includes(m.provider)?m.provider:provider,content:m.content,status:m.status,details:m.details,created:m.created});
       this.db.prepare('UPDATE chats SET created=?,updated=? WHERE id=?').run(source.created,source.updated,chat.id);
       this.db.prepare('INSERT INTO history_imports VALUES(?,?,?,?)').run(provider,source.id,chat.id,new Date().toISOString());
       this.db.exec('COMMIT');
@@ -261,7 +321,7 @@ export class Store {
   export() {
     // Hidden desk conversations are workflow machinery and stay out of backups.
     const listed=this.list(),visible=new Set(listed.chats.map(chat=>chat.id));
-    const messages=this.db.prepare('SELECT * FROM messages ORDER BY rowid').all().filter(m=>visible.has(m.chat_id)).map(m=>({...m,details:JSON.parse(m.details)}));
+    const messages=this.db.prepare(MESSAGE_WITH_TRACE+' ORDER BY m.rowid').all().filter(m=>visible.has(m.chat_id)).map(m=>this.decode(m));
     const linked=new Set(messages.flatMap(m=>(m.details.attachments||[]).map(a=>a.id)));
     const attachments=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'").get()?this.db.prepare('SELECT * FROM attachments ORDER BY created').all().filter(a=>linked.has(a.id)):[];
     return {format:'harness-hub',version:2,exported:new Date().toISOString(),...listed,attachments,messages,
