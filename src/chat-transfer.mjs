@@ -84,7 +84,7 @@ export class ChatTransfer {
     const chat = this.store.chat(chatId);
     if (!chat) throw Object.assign(new Error('对话不存在'), { status: 404 });
     const linked = new Map();
-    const messages = this.store.messages(chatId).map(message => {
+    const messages = this.store.messages(chatId, { trace: true }).map(message => {
       const ids = (message.details.attachments || []).map(ref => {
         const row = this.attachments.raw(ref.id);
         if (!row) throw new Error('对话附件缺失，无法完整导出');
@@ -183,7 +183,6 @@ export class ChatTransfer {
         for (const row of prepared.values()) this.attachments.insert(row);
         const runs = new Map(), messageIds = new Map(data.messages.map(row => [row.id, randomUUID()]));
         const remap = id => { if (!runs.has(id)) runs.set(id, randomUUID()); return runs.get(id); };
-        const insert = this.store.db.prepare('INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)');
         for (const message of data.messages) {
           const details = message.details;
           if (details.runId) details.runId = remap(details.runId);
@@ -197,7 +196,7 @@ export class ChatTransfer {
           const folders = message.attachmentIds.map(id => data.attachments.find(row => row.id === id)).filter(row => row.kind === 'folder');
           if (folders.length) details.notices = [...details.notices || [], ...folders.map(row => `原电脑文件夹未复制，请在本机重新添加：${row.path}`)];
           const content = message.content.replace(/\/api\/attachments\/([\w-]+)/g, (url, id) => prepared.has(id) ? '/api/attachments/' + prepared.get(id).id : url);
-          insert.run(messageIds.get(message.id), chat.id, message.role, message.provider, content, message.status, JSON.stringify(details), message.created);
+          this.store.insertMessage({ id: messageIds.get(message.id), chat_id: chat.id, role: message.role, provider: message.provider, content, status: message.status, details, created: message.created });
         }
         this.store.db.prepare('UPDATE chats SET created=?,updated=? WHERE id=?').run(data.chat.created, data.chat.updated, chat.id);
         this.store.db.prepare('INSERT INTO chat_transfers VALUES(?,?,?)').run(digest, chat.id, new Date().toISOString());

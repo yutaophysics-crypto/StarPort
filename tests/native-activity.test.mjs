@@ -104,8 +104,8 @@ test('runner persists ordered native activity across reload and leaves unconfirm
     emit({type:'activity',item:{id:'a',kind:'text',text:'Final',status:'complete'}});emit({type:'replace',text:'Final'});
   }});
   const chat=store.newChat({provider:'claude',workspace:process.cwd()});await runner.start(chat.id,'hi');await runner.active.get(chat.id).done;
-  const saved=store.messages(chat.id).at(-1);assert.deepEqual(saved.details.activity.map(row=>row.id),['think','t','a']);assert.equal(saved.details.tools[0].status,'unknown');
+  const saved=store.messages(chat.id,{trace:true}).at(-1);assert.deepEqual(saved.details.activity.map(row=>row.id),['think','t','a']);assert.equal(saved.details.tools[0].status,'unknown');
   assert.equal(saved.details.activity[1].status,'unknown');assert.equal(saved.content,'Final');
-  store.close();store=new Store(file);assert.deepEqual(store.messages(chat.id).at(-1).details.activity,saved.details.activity);
+  store.close();store=new Store(file);assert.deepEqual(store.messages(chat.id,{trace:true}).at(-1).details.activity,saved.details.activity);
   const interrupted={activity:[{id:'t',status:'running'}],tools:[]};settleActivity(interrupted,'interrupted');assert.equal(interrupted.activity[0].status,'interrupted');
 });

@@ -13,6 +13,9 @@ export function ensureSchema(db){
       desk_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE, PRIMARY KEY(companion_id,chat_id));
     CREATE TABLE IF NOT EXISTS prediction_scores (mount_id TEXT NOT NULL, claim_id TEXT NOT NULL, companion_id TEXT NOT NULL, probability REAL NOT NULL,
       outcome INTEGER NOT NULL, brier REAL NOT NULL, resolved TEXT NOT NULL, PRIMARY KEY(mount_id,claim_id));
+    -- Per room, whom each caller (the conversation's own model, 'main', or a member) may call mid-task.
+    CREATE TABLE IF NOT EXISTS room_calls (group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE, caller_id TEXT NOT NULL,
+      callee_id TEXT NOT NULL REFERENCES companions(id) ON DELETE CASCADE, PRIMARY KEY(group_id,caller_id,callee_id));
     CREATE INDEX IF NOT EXISTS workflow_mounts_chat ON workflow_mounts(chat_id);
     CREATE TRIGGER IF NOT EXISTS desk_chats_follow_parent AFTER DELETE ON chats BEGIN
       DELETE FROM chats WHERE json_extract(options,'$.desk.parentChatId')=OLD.id; END;`);

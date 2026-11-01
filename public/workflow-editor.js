@@ -20,7 +20,11 @@
       body: [
         el('p', {
           class: 'room-dialog-note',
-          text: '执行顺序里的每一行会变成一个位置：同一步并行，后一步看得到前一步的产出。现在坐着的伙伴会作为默认人选。'
+          text:
+            '执行顺序里的每一行会变成一个位置：同一步并行，后一步看得到前一步的产出。现在坐着的伙伴会作为默认人选。' +
+            ((run.plan?.rows || []).some(row => row.companionId === Workflows.MAIN.id)
+              ? '主模型那一行不会保存：工作流只在伙伴的工位里运行。'
+              : '')
         }),
         planTable(run),
         field('工作流名称', name)

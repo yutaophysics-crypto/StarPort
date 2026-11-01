@@ -148,8 +148,8 @@ function opts() {
   return values;
 }
 
-function draftKey() {
-  return 'hub-draft-' + (state.chat?.id || 'new');
+function draftKey(chatId = state.chat?.id) {
+  return 'hub-draft-' + (chatId || 'new');
 }
 
 function forgetChatDraft(id) {
@@ -199,6 +199,13 @@ async function refresh() {
     result = await api('/chats/' + state.chat.id);
     if (!valid()) return;
   }
+  applyStateList(data);
+  if (result) Object.assign(state, result);
+  renderView();
+  globalThis.StarportMemory?.refresh().catch(() => {});
+}
+
+function applyStateList(data) {
   Object.assign(state, {
     groups: data.groups,
     chats: data.chats,
@@ -206,10 +213,29 @@ async function refresh() {
     providers: data.providers,
     active: data.active
   });
+  // The open chat is a separate copy; keep its place in the list in step.
+  const listed = state.chat && data.chats.find(c => c.id === state.chat.id);
+  if (listed) state.chat.sort_order = listed.sort_order;
   if (!state.workspace) state.workspace = data.defaultWorkspace;
-  if (result) Object.assign(state, result);
-  renderView();
-  globalThis.StarportMemory?.refresh().catch(() => {});
+}
+
+// The chat list's half of refresh(): folders, chats, tools and what is running, without
+// rereading the open conversation (which can be tens of megabytes).
+async function refreshList() {
+  const revision = viewRevision;
+  const request = refreshSequence;
+  await saveChain.catch(() => {});
+  await preferenceChain.catch(() => {});
+  const version = liveSync?.revision || 0;
+  const data = await api('/state');
+  // A full refresh started meanwhile, or a live change arrived: that one is newer.
+  if (revision !== viewRevision || request !== refreshSequence || version !== (liveSync?.revision || 0)) return;
+  if (state.chat && !data.chats.some(c => c.id === state.chat.id)) return refresh();
+  applyStateList(data);
+  renderGroups();
+  renderHeader();
+  renderFeatures();
+  globalThis.StarportAgentsRoom?.scheduleRender();
 }
 
 async function openChat(id) {

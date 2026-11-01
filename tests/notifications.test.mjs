@@ -172,6 +172,33 @@ test('a workflow run notifies once with its label and last result, unless it was
   }finally{await f.close();}
 });
 
+test('an @-message notifies once everyone named is done, not when 主模型 finishes its own part',async t=>{
+  const dataDir=await mkdtemp(join(tmpdir(),'starport-notify-dispatch-')),companionDone=gate();
+  const notifier={available:true,shown:[],show(item){this.shown.push(item);},dismiss(){},close(){}};
+  const reply=(emit,text)=>{emit({type:'replace',text});emit({type:'final-answer',text});};
+  const implementations={
+    codex:async({prompt,emit})=>{
+      if(prompt.includes('你是星港的排程员'))return reply(emit,'{"steps":[{"order":1,"companion":"a","task":"查资料"},{"order":1,"companion":"main","task":"同时汇总"}]}');
+      await companionDone.promise;reply(emit,'我负责：查资料\n资料：42');
+    },
+    claude:async({emit})=>reply(emit,'主模型汇总完成')};
+  const hub=createHub({port:0,dataDir,registry,implementations,notifier});
+  t.after(()=>{companionDone.resolve();return hub.close();});
+  await hub.listen();
+  const {store,workflows}=hub,room=store.group('点名室');workflows.deskPollMs=20;
+  workflows.createCompanion({name:'甲',avatar:'🦉',provider:'codex'},{id:'a'});workflows.addMember(room.id,'a');
+  const chat=store.newChat({group_id:room.id,provider:'claude',workspace:dataDir,title:'汇总'});
+  const sent=await workflows.dispatch(chat.id,{text:'@甲 查资料 @主模型 同时汇总'});
+  const step=who=>store.messageById(chat.id,sent.message.id).details.workflowRun.steps.find(s=>s.companionId===who);
+  await until(()=>step('main')?.status==='done'&&!hub.runner.active.has(chat.id));
+  assert.equal(step('a').status,'running');
+  assert.equal(notifier.shown.length,0,'甲 is still at work');
+  companionDone.resolve();
+  await until(()=>!workflows.runs.size);
+  assert.equal(notifier.shown.length,1);
+  assert.equal(notifier.shown[0].kind,'workflow');assert.equal(notifier.shown[0].chatId,chat.id);assert.match(notifier.shown[0].body,/^点名 /);
+});
+
 test('clicking the popup opens its chat in the raised window, or in a new window once it loads',async()=>{
   const f=await fixture();
   try{

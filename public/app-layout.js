@@ -3,13 +3,26 @@
 // The frame around the conversation: the sidebar's room and chat list, the top bar,
 // the theme cover, and the two resizable side panels.
 
+// A room's conversations as listed, the same order the server keeps: the ones dragged into place
+// keep it, and any not yet placed sit above them, most recently active first.
+function chatsInRoom(groupId) {
+  const rank = chat => chat.sort_order ?? -Infinity;
+  const recent = (a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0);
+  return state.chats
+    .filter(c => c.group_id === groupId)
+    .sort((a, b) => (rank(a) === rank(b) ? recent(a, b) : rank(a) - rank(b)));
+}
+
 function renderGroups() {
+  // A drag in progress holds the list still; sidebar-order.js redraws it when the drag ends.
+  if (globalThis.StarportSidebarOrder?.holding()) return;
   const root = $('#groups');
   root.replaceChildren();
+  // Companions at work for a conversation (an exam, a workflow, an @-message) make it running too,
+  // like its own model; they work on hidden desks, so state.active alone never lists it.
+  const companionsAt = new Set((globalThis.StarportWorkflows?.data?.running || []).map(run => run.chatId));
   for (const group of [...state.groups.filter(g => g.name !== '__DELETED_ROOM__'), { id: null, name: t('未分组') }]) {
-    const chats = state.chats.filter(
-      c => c.group_id === group.id && (!state.filter || c.title.toLowerCase().includes(state.filter))
-    );
+    const chats = chatsInRoom(group.id).filter(c => !state.filter || c.title.toLowerCase().includes(state.filter));
     if (group.id === null && !chats.length && state.groups.length) continue;
 
     const heading = el('div', { class: 'group-heading', 'data-group-id': group.id || '' });
@@ -53,7 +66,7 @@ function renderGroups() {
     if (!state.collapsed.has(group.id)) {
       for (const chat of chats) {
         const active = state.chat?.id === chat.id;
-        const running = state.active?.includes(chat.id);
+        const running = state.active?.includes(chat.id) || companionsAt.has(chat.id);
         const status = running ? 'running' : chat.unread ? 'unread' : '';
         const label = status ? t(running ? '正在执行任务' : '回答完成，待查看') : '';
         const button = el(

@@ -42,6 +42,18 @@ test('long silence produces one reminder, never a deadline; resumed activity res
   assert.deepEqual(clock.poll(46 * minute, 41 * minute).map(e => e.type), ['idle']);
 });
 
+test('an idle stop counts only silence: activity restarts it, and it fires once', () => {
+  const clock = new CompanionClock({ startedAt: 0, idleStopMinutes: 30 });
+  assert.deepEqual(clock.poll(5 * minute, 0).map(e => e.type), ['idle']);
+  assert.deepEqual(clock.poll(29 * minute, 0), []);
+  assert.deepEqual(clock.poll(40 * minute, 20 * minute).map(e => e.type), [], 'still quiet since minute 20, not yet 30 minutes');
+  assert.deepEqual(clock.poll(200 * minute, 190 * minute), [], 'hours of total time with recent activity never stop it');
+  const stop = clock.poll(220 * minute, 190 * minute);
+  assert.deepEqual(stop.map(e => e.type), ['idle-stop']); assert.equal(stop[0].minutes, 30);
+  assert.equal(clock.idleStopped, true); assert.equal(clock.expired, false);
+  assert.deepEqual(clock.poll(230 * minute, 190 * minute), []);
+});
+
 test('an explicitly limited task gets advance warning and one deadline, including while it is active', () => {
   const clock = new CompanionClock({ startedAt: 0, minutes: 30 });
   assert.deepEqual(clock.poll(27 * minute, 27 * minute), []);
@@ -83,5 +95,8 @@ test('limit policy and runtime reminders are available in English while provider
   assert.match(i18n.notice('连续 5 分钟未收到新活动，任务仍在运行；不会因无活动自动停止。'), /will not be stopped for inactivity/);
   assert.match(i18n.notice('即将达到你设置的 30 分钟时限，剩余约 2 分钟；到时将停止，已有进度和执行记录会保留。'), /30-minute limit.*2 minutes left/);
   assert.match(i18n.notice('达到你设置的 30 分钟时限，已停止；进度和执行记录已保留。'), /Progress and activity have been kept/);
+  assert.match(i18n.notice('连续 5 分钟未收到新活动，任务仍在运行；满 30 分钟仍无活动将停止，并以失败交回。'), /after 30 minutes without activity it will be stopped/);
+  assert.match(i18n.notice('连续 30 分钟没有任何活动，正在停止并以失败交回；已有进度和执行记录已保存。'), /handing back as failed/);
+  assert.match(i18n.notice('连续 30 分钟没有任何活动，已停止；进度和执行记录已保留。'), /Stopped after 30 minutes without any activity/);
   const raw = 'Provider: native failure E_123'; assert.equal(i18n.notice(raw), raw);
 });

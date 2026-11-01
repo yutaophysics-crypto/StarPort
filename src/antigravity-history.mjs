@@ -61,7 +61,7 @@ export function antigravityRequest(content){
 }
 
 // agy prefixes every tool result with when it started and finished.
-function toolResult(record){
+export function toolResult(record,limit=FIELD_LIMIT){
   let text=typeof record.content==='string'?record.content:'',durationMs;
   const head=/^Created At: ([^\n]*)\n(?:Completed At: ([^\n]*)\n)?/.exec(text);
   if(head){
@@ -71,7 +71,7 @@ function toolResult(record){
   }
   if(record.error)text=(text?text+'\n\n':'')+String(record.error);
   if(Array.isArray(record.media)&&record.media.length)text+=(text?'\n':'')+record.media.map(m=>`[${typeof m?.mime_type==='string'?m.mime_type:'media'}]`).join('\n');
-  return {output:capText(text.trim()),durationMs};
+  return {output:capText(text.trim(),limit),durationMs};
 }
 
 // One transcript becomes user and assistant messages. Hidden reasoning, agy's own system

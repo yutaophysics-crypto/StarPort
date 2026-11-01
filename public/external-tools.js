@@ -2,16 +2,16 @@
 globalThis.StarportExternalTools = (() => {
   const panel=document.getElementById('external-tools-panel'),dialog=document.getElementById('external-tools-dialog'),button=document.getElementById('workspace-tools-button');
   const LIVE=['running','starting','unknown'];
-  let request=0,selected=null;
+  let request=0,selected=null,scope='global';
   const text=(tag,label,attrs={})=>el(tag,{...attrs,text:t(label),'data-i18n':label});
   const note=label=>text('p',label,{class:'settings-note'});
   function sync(){
     const project=currentProject(),workspace=state.chat?.workspace||state.workspace;
-    button.disabled=!workspace;
-    button.title=workspace?t('外部开发工具：{project}',{project:project?.name||workspace}):t('请先选择项目文件夹');
-    if(dialog.open&&(project?.id!==selected?.id||folderKey(project?.workspace||'')!==folderKey(selected?.workspace||'')))dialog.close();
+    button.disabled=false;
+    button.title=workspace?t('外部开发工具：{project}',{project:project?.name||workspace}):t('全局工具箱');
+    if(dialog.open&&scope==='project'&&(project?.id!==selected?.id||folderKey(project?.workspace||'')!==folderKey(selected?.workspace||'')))dialog.close();
   }
-  async function open(){
+  async function openProject(){
     const workspace=state.chat?.workspace||state.workspace,version=++request;
     let project=currentProject();
     if(!workspace){toast('请先选择项目文件夹');return;}
@@ -25,13 +25,44 @@ globalThis.StarportExternalTools = (() => {
       }catch(error){toast(error.message);return;}finally{sync();}
     }
     selected={...project};
+    scope='project';
     if(!dialog.open)dialog.showModal();
     button.setAttribute('aria-expanded','true');
     render();
   }
+  function open(){scope='global';if(!dialog.open)dialog.showModal();button.setAttribute('aria-expanded','true');render();}
   button.onclick=open;
   for(const id of ['external-tools-close','external-tools-done'])document.getElementById(id).onclick=()=>dialog.close();
   dialog.addEventListener('close',()=>{request++;button.setAttribute('aria-expanded','false');});
+  function scopeBar(){
+    const global=text('button','全局工具箱',{type:'button',class:'secondary-button','aria-pressed':scope==='global'}),project=text('button','当前项目',{type:'button',class:'secondary-button','aria-pressed':scope==='project',disabled:!(state.chat?.workspace||state.workspace)});
+    global.onclick=()=>{scope='global';render();};project.onclick=openProject;
+    return el('div',{class:'external-tool-scopes'},[global,project]);
+  }
+  async function renderGlobal(version){
+    const status=el('p',{role:'status',class:'settings-note'}),list=el('div',{class:'external-tools-list'});
+    panel.replaceChildren(scopeBar(),text('h3','全局工具箱'),note('一次接入，所有项目可用。工具使用本机权限运行，可访问项目外文件及网络；无需逐项目授权或反复批准。'),status,list);
+    const current=()=>version===request;
+    let data;try{data=await api('/toolbox');}catch(error){if(current())status.textContent=/404|没有这个接口/.test(error.message)?t('后台待更新；所有任务结束并加载更新后，可以配置外部工具。'):error.message;return;}
+    if(!current())return;
+    const disabled=data.busy||!data.supported;
+    status.textContent=t(!data.supported?'全局工具箱目前支持 Windows':data.busy?'请等待所有任务结束后修改全局工具箱':'新增或移除从下一轮任务生效。');
+    for(const tool of data.tools){
+      const remove=text('button','移出全局',{type:'button',class:'secondary-button',disabled});
+      remove.onclick=async()=>{remove.disabled=true;try{await api('/toolbox/'+tool.id,'DELETE');if(current())render();}catch(error){status.textContent=error.message;remove.disabled=disabled;}};
+      list.append(el('article',{class:'external-tool'},[el('div',{class:'external-tool-heading'},[el('strong',{text:tool.name}),el('code',{text:tool.command}),remove]),el('code',{text:tool.executable}),...tool.error?[el('p',{text:tool.error,class:'common-tools-error'})]:[]]));
+    }
+    if(!data.tools.length)list.append(note('全局工具箱尚未接入工具。'));
+    const detect=text('button','接入已安装工具',{type:'button',class:'primary-button',disabled});
+    detect.onclick=async()=>{detect.disabled=true;try{await api('/toolbox/detect','POST',{});if(current())render();}catch(error){status.textContent=error.message;detect.disabled=disabled;}};
+    panel.append(detect,note('自动查找本机已安装的 LaTeX、Git、Python；不会下载安装软件。'));
+    const name=el('input',{required:'',maxlength:'80'}),command=el('input',{required:'',maxlength:'40',placeholder:'python / xelatex / git'}),directory=el('input',{required:'',placeholder:t('工具安装文件夹的完整路径')}),executable=el('input',{required:'',placeholder:t('程序完整路径')});
+    const field=(label,input)=>el('label',{class:'external-tools-field'},[text('span',label),input]);
+    const add=text('button','加入全局工具箱',{type:'submit',class:'secondary-button',disabled}),form=el('form',{class:'external-tools-form'},[text('h3','手动添加工具'),field('工具名称',name),field('命令名',command),field('安装文件夹',directory),field('程序路径',executable),add]);
+    for(const input of [name,command,directory,executable])input.disabled=disabled;
+    form.onsubmit=async event=>{event.preventDefault();add.disabled=true;try{await api('/toolbox','POST',{name:name.value,command:command.value,directory:directory.value,executable:executable.value});if(current())render();}catch(error){status.textContent=error.message;add.disabled=disabled;}};
+    panel.append(form,note('仅登记的程序可通过全局入口启动；普通终端继续使用项目文件边界，模型客户端的联网设置保持原配置。'));
+  }
 
   // Each piece below receives the view of one render pass. current() turns
   // false once a newer render starts, so late callbacks do not redraw it.
@@ -66,6 +97,30 @@ globalThis.StarportExternalTools = (() => {
       close.onclick=async()=>{close.disabled=true;try{await api('/projects/'+project.id+'/external-applications/'+item.id+'/stop','POST',{});refresh();}catch(error){status.textContent=error.message;close.disabled=false;}};
       const label=item.state==='running'?'正在运行':item.state==='starting'?'正在启动':'状态待确认';
       section.append(el('article',{class:'external-tool'},[el('div',{class:'external-tool-heading'},[el('strong',{text:item.tool}),text('small',label)]),el('code',{text:item.cwd}),close]));
+    }
+    return [section];
+  }
+  function previewsSection(data,{project,status,current,refresh}){
+    if(!data.previewSupported&&!data.previews?.length)return [];
+    const path='/projects/'+project.id+'/previews';
+    const section=el('section',{class:'project-previews'},[text('h3','项目预览'),note('本机静态预览会跨命令和对话轮次保持运行，重启星港后也可继续使用。')]);
+    for(const item of data.previews||[]){
+      const live=LIVE.includes(item.state),close=text('button','停止预览',{type:'button',class:'secondary-button',disabled:!live});
+      close.onclick=async()=>{close.disabled=true;try{await api(path+'/'+item.id+'/stop','POST',{});refresh();}catch(error){status.textContent=error.message;close.disabled=!live;}};
+      const label=item.state==='running'?'正在运行':item.state==='starting'?'正在启动':live?'状态待确认':'已停止';
+      const card=el('article',{class:'external-tool'},[el('div',{class:'external-tool-heading'},[el('strong',{text:item.directory}),text('small',label)])]);
+      if(item.url)card.append(el('a',{href:item.url,target:'_blank',rel:'noopener noreferrer',text:item.url}));
+      if(item.error)card.append(el('p',{class:'settings-note',text:item.error}));
+      card.append(close);section.append(card);
+    }
+    if(data.previewSupported){
+      const directory=el('input',{value:'.',required:'',maxlength:'2000','aria-label':t('项目内文件夹')}),port=el('input',{type:'number',min:'1024',max:'65535',placeholder:t('自动选择端口'),'aria-label':t('预览端口')});
+      const start=text('button','启动预览',{type:'submit',class:'secondary-button'});
+      const form=el('form',{class:'preview-form'},[
+        el('label',{class:'external-tools-field'},[text('span','项目内文件夹'),directory]),
+        el('label',{class:'external-tools-field'},[text('span','预览端口'),port]),start]);
+      form.onsubmit=async event=>{event.preventDefault();start.disabled=true;status.textContent=t('正在启动预览…');try{await api(path,'POST',{directory:directory.value,port:port.value?Number(port.value):0});if(current())refresh();}catch(error){if(current()){status.textContent=error.message;start.disabled=false;}}};
+      section.append(note('填写已构建网页所在的项目内文件夹；留空端口会自动选择。'),form);
     }
     return [section];
   }
@@ -107,10 +162,12 @@ globalThis.StarportExternalTools = (() => {
   }
   async function render(){
     const version=++request,project=selected;
+    if(scope==='global'){await renderGlobal(version);return;}
     if(!project)return;
     const reload=text('button','刷新项目状态',{type:'button',class:'secondary-button'});reload.onclick=render;
     const status=el('p',{id:'external-tools-status',role:'status',class:'settings-note'}),list=el('div',{class:'external-tools-list'});
     panel.replaceChildren(
+      scopeBar(),
       el('div',{class:'external-tools-toolbar'},[el('div',{class:'external-tools-scope'},[el('h3',{text:project.name}),el('code',{text:project.workspace})]),reload]),
       note('隔离终端中，工具安装目录只读，缓存和构建输出写入项目。程序能否启动需另行验证。'),status,list);
     const path='/projects/'+project.id+'/external-tools',current=()=>version===request;
@@ -121,7 +178,7 @@ globalThis.StarportExternalTools = (() => {
     const view={project,path,status,disabled:data.busy||!data.supported,current,refresh:()=>{if(current())render();}};
     list.append(...data.tools.map(tool=>toolCard(tool,view)));
     if(!data.tools.length)list.append(note('此项目尚未授权外部工具。'));
-    panel.append(...applicationsSection(data.applications||[],view),
+    panel.append(...previewsSection(data,view),...applicationsSection(data.applications||[],view),
       note('让 Claude 保持编辑器打开时，它会使用常驻运行；可在这里查看和关闭。'),commonTools(data,view),addForm(view),
       note('目前接入 Windows 上的 Claude Code 隔离终端；其他工具仍遵循各自的原生权限配置。'));
   }

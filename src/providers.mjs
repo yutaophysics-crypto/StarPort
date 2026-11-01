@@ -8,6 +8,7 @@ import { UsageReader } from './usage.mjs';
 import { deepseekDesktopRuntime } from './deepseek-desktop.mjs';
 import { ContextLimits } from './context-limits.mjs';
 import { ExternalTools } from './external-tools/grants.mjs';
+import {readClaudeNetworkPolicy,applyClaudeNetworkPolicy,requireClaudeNetworkProtection} from './claude-network.mjs';
 
 const magi = JSON.parse(readFileSync(new URL('./magi-hosts.json', import.meta.url), 'utf8'));
 const select = (key, label, values, value = '') => ({ key, label, type: 'select', default: value,
@@ -128,8 +129,10 @@ export class ProviderRegistry {
   models(id,cwd,refresh=false){return this.modelCatalog.get(id,this.resolve(id),cwd,refresh);}
   resolve(id,cwd) {
     if (!PROVIDERS[id]) throw new Error('未知工具');
-    const runtime=discover(this.root,id,this.store.setting('providers',{})[id]);
+    const network=readClaudeNetworkPolicy(this.root,this.dataDir);
+    const runtime=applyClaudeNetworkPolicy(discover(this.root,id,this.store.setting('providers',{})[id]),id,network);
     if(runtime&&id==='claude'&&cwd){
+      if(network&&existsSync(cwd))return {...runtime,externalTools:{...this.externalTools.snapshot(cwd),executionPolicy:'claude-client-network-v3-git',dataDir:this.dataDir,sandboxExecutable:this.resolve('codex')?.command,normalPolicy:network}};
       const externalTools=this.externalTools.runtimePolicy(cwd,()=>this.resolve('codex')?.command);
       if(externalTools)return {...runtime,externalTools};
     }
@@ -149,12 +152,13 @@ export class ProviderRegistry {
       status:found ? 'installed' : 'missing', statusLabel:found ? '已安装 · 连接待验证' : '未找到程序', version:'', nativeGoal:false,nativeAutoReview:false,nativePlan:['claude','antigravity'].includes(id) };
     if (found) {
       try {
+        await requireClaudeNetworkProtection(found);
         const result = await exec(found.command,[...found.prefixArgs,'--version'],{timeout:12000,maxBuffer:200000,windowsHide:true,env:childEnvironment(found.env)});
         value.version = result.stdout.trim().split('\n').slice(-1)[0].slice(0,150);
         if(id==='claude'){
           Object.assign(value,claudeCapabilities(value.version));
           try{
-            const result=await exec(found.command,[...found.prefixArgs,'auth','status'],{timeout:12000,maxBuffer:200000,windowsHide:true,env:childEnvironment()});
+            const result=await exec(found.command,[...found.prefixArgs,'auth','status'],{timeout:12000,maxBuffer:200000,windowsHide:true,env:childEnvironment(found.env)});
             const auth=JSON.parse(result.stdout);
             if(typeof auth.loggedIn==='boolean'){
               value.loggedIn=auth.loggedIn;

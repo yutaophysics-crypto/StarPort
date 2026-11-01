@@ -21,7 +21,13 @@ function publicText(value) {
 function companionRecord(message) {
   const run = message.details.workflowRun;
   const steps = list(run.steps).filter(step => step.output || step.error);
-  const blocks = steps.map(step => [
+  // The conversation model's part is its own reply in the conversation; it is not copied here.
+  const blocks = steps.map(step => step.companionId === 'main' ? [
+    `### 主模型（本对话自己的模型） · ${label(step.status)}`,
+    step.task ? `当时的分工：${step.task}` : '',
+    step.mainMessageId ? `它的回答是对话里的一条助手消息（messageId=${step.mainMessageId}）。` : '',
+    step.error ? `执行错误：${publicText(step.error)}` : ''
+  ].filter(Boolean).join('\n\n') : [
     `### 伙伴 ${step.companionName || step.companionId || step.label || '未命名'}${step.label ? ' · ' + step.label : ''} · ${label(step.status)}`,
     step.task ? `当时的分工：${step.task}` : '',
     step.output || '', step.error ? `执行错误：${publicText(step.error)}` : '',
@@ -89,7 +95,9 @@ export function historyMessage(message, options = {}) {
   if (message.role === 'user') {
     if (message.details?.guidance && message.status !== 'complete') return null;
     let content = message.content || '';
-    if (message.details?.dispatch) content = '[此前交给伙伴的用户请求，仅作历史参考]\n' + content;
+    if (message.details?.dispatch) content = (message.details.dispatch.main
+      ? '[此前点名伙伴和主模型的用户请求：伙伴的部分见运行卡片，排给主模型的部分由星港另行交给对话模型]\n'
+      : '[此前交给伙伴的用户请求，仅作历史参考]\n') + content;
     for (const key of ['attachmentContext', 'runContext']) if (message.details?.[key]) content += '\n\n' + message.details[key];
     return { ...message, content };
   }

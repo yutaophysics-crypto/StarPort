@@ -157,7 +157,7 @@ test('DeepSeek sessions keep messages and tool records, drop injected context an
   const home=deepseekHome(),store=new Store(':memory:');t.after(()=>store.close());
   const importer=new HistoryImporter(store,registry,process.cwd(),undefined,undefined,{deepseek:new DeepseekHistory(home)});
   const preview=await importer.read('deepseek','session-1',{preview:true});assert.equal(preview.messages.length,5);
-  const result=await importer.import('deepseek',{id:'session-1'}),messages=store.messages(result.chatId);
+  const result=await importer.import('deepseek',{id:'session-1'}),messages=store.messages(result.chatId,{trace:true});
   assert.deepEqual(messages.map(m=>[m.role,m.content,m.status]),[
     ['user','Summarize the paper\n\n[image]','complete'],['assistant','Reading it.','complete'],['assistant','Summary done.','complete'],
     ['user','Follow up','complete'],['assistant','Partial','interrupted']]);

@@ -4,6 +4,20 @@ globalThis.StarportI18n = (() => {
 const english = {
   "外部开发工具": "External development tools",
   "外部工具": "External tools",
+  "全局工具箱": "Global toolbox",
+  "全局工具箱目前支持 Windows": "The global toolbox currently supports Windows",
+  "当前项目": "Current project",
+  "一次接入，所有项目可用。工具使用本机权限运行，可访问项目外文件及网络；无需逐项目授权或反复批准。": "Connect once for all projects. Tools run with host permissions, including files outside the project and network access, without per-project grants or repeated approval.",
+  "请等待所有任务结束后修改全局工具箱": "Wait for all tasks to finish before changing the global toolbox",
+  "新增或移除从下一轮任务生效。": "Additions and removals apply from the next turn.",
+  "移出全局": "Remove globally",
+  "全局工具箱尚未接入工具。": "No global tools are connected yet.",
+  "接入已安装工具": "Connect installed tools",
+  "自动查找本机已安装的 LaTeX、Git、Python；不会下载安装软件。": "Find installed LaTeX, Git and Python on this computer; this does not install software.",
+  "程序完整路径": "Full executable path",
+  "命令名": "Command name",
+  "加入全局工具箱": "Add to global toolbox",
+  "仅登记的程序可通过全局入口启动；普通终端继续使用项目文件边界，模型客户端的联网设置保持原配置。": "Only registered programs can use the global launcher. Ordinary terminal commands retain project file boundaries and model clients keep their existing network configuration.",
   "本机运行授权": "Host execution permission",
   "每次询问": "Ask every time",
   "此项目始终允许": "Always allow for this project",
@@ -72,6 +86,15 @@ const english = {
   "请等待此项目的任务结束后修改或验证工具权限": "Wait for this project's tasks to finish before changing or verifying tool access",
   "工具不存在": "Tool not found",
   "需要可用的 Windows 隔离终端": "A working Windows isolated terminal is required",
+  "项目预览":"Project previews",
+  "本机静态预览会跨命令和对话轮次保持运行，重启星港后也可继续使用。":"Local static previews stay available across commands, turns and Starport restarts.",
+  "停止预览":"Stop preview",
+  "项目内文件夹":"Folder within project",
+  "自动选择端口":"Choose automatically",
+  "预览端口":"Preview port",
+  "启动预览":"Start preview",
+  "正在启动预览…":"Starting preview…",
+  "填写已构建网页所在的项目内文件夹；留空端口会自动选择。":"Choose the project folder containing your built website. Leave the port empty to choose automatically.",
   "工作文件夹就是项目。同一文件夹里的对话共用项目要求和项目记忆；子文件夹各自独立。": "Your working folder is the project. Conversations in the same folder share project instructions and project memory; subfolders are separate projects.",
   "仅用于工作目录恰好是这个文件夹的对话。": "Applies only to conversations whose working directory is this exact folder.",
   "选择对话的工作文件夹后会自动创建项目。": "A project is created automatically when you choose a conversation's working folder.",
@@ -1057,6 +1080,8 @@ const english = {
   "这段对话没有可导入的用户或助手消息": "This conversation has no user or assistant messages to import",
   "原对话的图片、音频和文件未复制；保留文字与附件引用。": "Images, audio and files from the original were not copied; text and attachment references were preserved.",
   "目标分组不存在，请重新选择": "The target group no longer exists. Please select another.",
+  "列表刚刚有变化，请再拖一次": "The list just changed. Please drag again.",
+  "目标位置无效": "Invalid target position",
   "目前支持从 Codex 导入对话": "Conversation import currently supports Codex",
   "未找到 Codex，请在连接与数据中检查工具": "Codex was not found. Check it in Connections & data.",
   "Codex 未返回完整消息，请升级 Codex 后重试": "Codex did not return full messages. Update Codex and try again.",
@@ -1104,6 +1129,10 @@ const english = {
   "单向可见": "One-way",
   "单步限时 {minutes} 分钟": "{minutes}-minute limit per step",
   "进度已保留": "Progress saved",
+  "正在读取…": "Loading…",
+  "交给 {name} 的完整提示": "Full prompt given to {name}",
+  "无人值守：需要审批的操作自动拒绝，提问自动跳过。": "Unattended: actions that need approval are declined and questions are skipped.",
+  "这一轮没有工具调用或思考记录。": "No tool calls or thinking were recorded for this turn.",
   "未收到新活动": "No recent activity",
   "等待更新": "Update pending",
   "已收到新的活动，伙伴继续工作。": "New activity received. The companion is continuing.",
@@ -1111,6 +1140,9 @@ const english = {
   "即将达到你设置的 {minutes} 分钟时限，剩余约 {remaining} 分钟；到时将停止，已有进度和执行记录会保留。": "The {minutes}-minute limit you set is approaching, with about {remaining} minutes left. The task will stop at the deadline; existing progress and activity will be kept.",
   "达到你设置的 {minutes} 分钟时限，正在停止；已有进度和执行记录已保存。": "The {minutes}-minute limit you set has been reached. Stopping; existing progress and activity have been saved.",
   "达到你设置的 {minutes} 分钟时限，已停止；进度和执行记录已保留。": "Stopped at the {minutes}-minute limit you set. Progress and activity have been kept.",
+  "连续 {minutes} 分钟未收到新活动，任务仍在运行；满 {stop} 分钟仍无活动将停止，并以失败交回。": "No new activity for {minutes} minutes. The task is still running; after {stop} minutes without activity it will be stopped and handed back as failed.",
+  "连续 {minutes} 分钟没有任何活动，正在停止并以失败交回；已有进度和执行记录已保存。": "No activity at all for {minutes} minutes. Stopping and handing back as failed; existing progress and activity have been saved.",
+  "连续 {minutes} 分钟没有任何活动，已停止；进度和执行记录已保留。": "Stopped after {minutes} minutes without any activity. Progress and activity have been kept.",
   "不限时更新尚未加载。当前任务结束后会自动更新；更新前仍沿用旧规则，不会为了更新中断任务。": "The unlimited-runtime update is pending. It will load after current tasks finish. Existing rules apply until then; tasks will not be interrupted for the update.",
   "上下文": "Context",
   "上下文与压缩": "Context and compaction",
@@ -1188,6 +1220,9 @@ const english = {
     if((m=/^即将达到你设置的 (\d+) 分钟时限，剩余约 (\d+) 分钟；到时将停止，已有进度和执行记录会保留。$/.exec(source)))return t('即将达到你设置的 {minutes} 分钟时限，剩余约 {remaining} 分钟；到时将停止，已有进度和执行记录会保留。',{minutes:m[1],remaining:m[2]});
     if((m=/^达到你设置的 (\d+) 分钟时限，正在停止；已有进度和执行记录已保存。$/.exec(source)))return t('达到你设置的 {minutes} 分钟时限，正在停止；已有进度和执行记录已保存。',{minutes:m[1]});
     if((m=/^达到你设置的 (\d+) 分钟时限，已停止；进度和执行记录已保留。$/.exec(source)))return t('达到你设置的 {minutes} 分钟时限，已停止；进度和执行记录已保留。',{minutes:m[1]});
+    if((m=/^连续 (\d+) 分钟未收到新活动，任务仍在运行；满 (\d+) 分钟仍无活动将停止，并以失败交回。$/.exec(source)))return t('连续 {minutes} 分钟未收到新活动，任务仍在运行；满 {stop} 分钟仍无活动将停止，并以失败交回。',{minutes:m[1],stop:m[2]});
+    if((m=/^连续 (\d+) 分钟没有任何活动，正在停止并以失败交回；已有进度和执行记录已保存。$/.exec(source)))return t('连续 {minutes} 分钟没有任何活动，正在停止并以失败交回；已有进度和执行记录已保存。',{minutes:m[1]});
+    if((m=/^连续 (\d+) 分钟没有任何活动，已停止；进度和执行记录已保留。$/.exec(source)))return t('连续 {minutes} 分钟没有任何活动，已停止；进度和执行记录已保留。',{minutes:m[1]});
     if((m=/^(Antigravity 账号信息服务暂时不可用；启动阶段已自动重试 2 次，仍未恢复，请稍后重发。)\n([\s\S]*)$/.exec(source)))return t(m[1])+'\n'+m[2];
     if((m=/^原电脑文件夹未复制，请在本机重新添加：(.+)$/.exec(source)))return t('原电脑文件夹未复制，请在本机重新添加：{path}',{path:m[1]});
     if((m=/^请求失败 \((.+)\)$/.exec(source)))return t('请求失败 ({status})',{status:m[1]});

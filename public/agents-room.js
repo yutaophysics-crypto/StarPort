@@ -86,7 +86,9 @@ globalThis.StarportAgentsRoom = (() => {
   function toggleMention(c) {
     const input = prompt();
     if (!input) return;
-    const hits = W.parseMentions(input.value, currentRoom().members).filter(hit => hit.companion.id === c.id);
+    const hits = W.parseMentions(input.value, currentRoom().members, { main: true }).filter(
+      hit => hit.companion.id === c.id
+    );
     if (hits.length) {
       let text = input.value;
       for (const hit of hits.reverse()) text = text.slice(0, hit.start) + text.slice(hit.end).replace(/^ /, '');
@@ -598,7 +600,8 @@ globalThis.StarportAgentsRoom = (() => {
     const people = ready ? room.members : [];
     const mounts = ready ? W.mountsFor(state.chat?.id) : [];
     const hits = W.mentioned(prompt()?.value || '', people);
-    const target = ready ? activeWorkflowMount() : null;
+    // @主模型 always reaches the conversation's model, even in 工作流 mode.
+    const target = ready && !W.mentionsMain(prompt()?.value || '', people) ? activeWorkflowMount() : null;
     const route = hits.length ? 'dispatch' : target ? 'workflow' : 'chat';
     composer.classList.toggle('room-dispatch', route !== 'chat');
     syncPlaceholder(route === 'workflow' ? target : null);
@@ -636,15 +639,33 @@ globalThis.StarportAgentsRoom = (() => {
     let switcher = null;
     if (hits.length) {
       const isolated = oneWay();
+      // A message that names companions is theirs alone, unless it names 主模型 too.
+      const main = W.mentionsMain(prompt()?.value || '', people);
+      const canMain = !people.some(c => c.name === W.MAIN.name);
       switcher = el('span', { class: 'room-route-group' }, [
         el('span', {
           class: 'room-route',
-          title:
-            hits.length > 1
-              ? '先排执行顺序，再按顺序交给他们；结果作为一张卡片出现在对话里'
-              : '交给这位伙伴；结果作为一张卡片出现在对话里',
-          text: `交给 ${hits.map(c => c.name).join('、')}`
+          title: main
+            ? '先排执行顺序；伙伴的结果在卡片里，主模型在对话里完成排给它的部分'
+            : (hits.length > 1
+                ? '先排执行顺序，再按顺序交给他们；结果作为一张卡片出现在对话里'
+                : '交给这位伙伴；结果作为一张卡片出现在对话里') + '。主模型不处理这条消息',
+          text: `交给 ${hits.map(c => c.name).join('、')}${main ? ' 和主模型' : ''}`
         }),
+        canMain &&
+          el(
+            'button',
+            {
+              type: 'button',
+              class: 'room-main-toggle',
+              'aria-pressed': String(main),
+              title: main
+                ? '取消 @主模型：整条消息只交给伙伴'
+                : '这条消息不会交给主模型。点一下加上 @主模型，在它后面写主模型要做的事',
+              onclick: () => toggleMention(W.MAIN)
+            },
+            [el('span', { text: '主模型' })]
+          ),
         W.data?.oneWay &&
           el(
             'button',
@@ -705,7 +726,7 @@ globalThis.StarportAgentsRoom = (() => {
     if (W.status !== 'ready') return false;
     const text = prompt()?.value || '';
     const hits = W.mentioned(text, currentRoom().members);
-    const target = hits.length ? null : activeWorkflowMount();
+    const target = hits.length || W.mentionsMain(text, currentRoom().members) ? null : activeWorkflowMount();
     if (!hits.length && !target) return false;
     if (routing) return true;
     if (globalThis.StarportComposer?.ids().length) {
@@ -713,7 +734,7 @@ globalThis.StarportAgentsRoom = (() => {
       return true;
     }
     if (hits.length) {
-      const rest = W.parseMentions(text, currentRoom().members)
+      const rest = W.parseMentions(text, currentRoom().members, { main: true })
         .reduceRight((value, hit) => value.slice(0, hit.start) + value.slice(hit.end), text)
         .trim();
       if (!rest) {
@@ -764,9 +785,20 @@ globalThis.StarportAgentsRoom = (() => {
     });
   }
 
+  // The sidebar marks a conversation running while companions work for it; redraw it when that
+  // set of conversations changes, not on every workflow update.
+  let workingChats = '';
+  function syncWorkingChats() {
+    const next = [...new Set((W.data?.running || []).map(run => run.chatId))].sort().join(',');
+    if (next === workingChats) return;
+    workingChats = next;
+    renderGroups();
+  }
+
   function installHooks() {
     installed = true;
     W.subscribe(scheduleRender);
+    W.subscribe(syncWorkingChats);
 
     const promptEl = prompt();
     if (promptEl) {

@@ -11,9 +11,10 @@ import { writePrivateFile } from '../process.mjs';
 const MAX_PROJECT_TOOLS=12;
 // Part of the Claude session fingerprint. Change it when what a grant allows
 // changes, so a session started under older rules is not resumed.
-const EXECUTION_POLICY='managed-applications-v2';
+const EXECUTION_POLICY='global-toolbox-v1';
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 const missingTool=()=>fail('工具不存在',404);
+const validCommand=value=>typeof value==='string'&&/^[a-zA-Z][a-zA-Z0-9_.-]{0,39}$/.test(value);
 
 export const toolPathKey=path=>process.platform==='win32'?resolve(path).toLowerCase():resolve(path);
 export const insideToolPath=(path,root)=>{const p=toolPathKey(path),r=toolPathKey(root);return p===r||p.startsWith(r.endsWith(sep)?r:r+sep);};
@@ -50,6 +51,8 @@ export class ExternalTools {
     if(!existsSync(this.file))return {version:1,projects:{},catalog:[]};
     let value;try{value=JSON.parse(readFileSync(this.file,'utf8'));}catch{throw fail('开发工具配置无法读取，请恢复本机备份');}
     if(value.version!==1||!value.projects||typeof value.projects!=='object'||Array.isArray(value.projects)||value.catalog!==undefined&&!Array.isArray(value.catalog))throw fail('开发工具配置无效');
+    if(value.globalTools!==undefined&&!Array.isArray(value.globalTools))throw fail('全局工具箱配置无效');
+    for(const tool of value.globalTools||[])if(!tool||typeof tool.id!=='string'||!validCommand(tool.command)||!hostRunnable(tool))throw fail('全局工具箱配置无效');
     // Old configurations already contain the user's tool choices. Reading them
     // seeds the catalog without writing or changing any project's permissions.
     const entries=new Map();
@@ -63,10 +66,38 @@ export class ExternalTools {
     const canonical=canonicalToolPath(workspace);
     return {workspace:canonical,tools:this.read().projects[toolPathKey(canonical)]?.tools||[]};
   }
-  snapshot(workspace){return validateToolSnapshot(this.saved(workspace),workspace);}
+  snapshot(workspace){
+    const policy=this.saved(workspace);
+    policy.tools=[...this.globalTools().filter(tool=>!tool.error).map(({error,...tool})=>tool),...policy.tools];
+    return validateToolSnapshot(policy,workspace);
+  }
   // Like snapshot, but reports a broken grant on the tool instead of throwing.
   view(workspace){const {workspace:canonical,tools}=this.saved(workspace);return {workspace:canonical,tools:tools.map(withPathError)};}
   catalog(){return this.read().catalog.map(withPathError);}
+  globalTools(){return (this.read().globalTools||[]).map(tool=>withPathError({...tool,scope:'global',hostApproval:'always'}));}
+  async changeGlobal(mutate){
+    const perform=async()=>{
+      const all=this.read();all.globalTools=mutate(all.globalTools||[]);
+      await mkdir(this.dataDir,{recursive:true});const temporary=this.file+'.'+randomUUID()+'.tmp';
+      try{await writePrivateFile(temporary,JSON.stringify(all,null,2));await rename(temporary,this.file);}finally{await unlink(temporary).catch(()=>{});}
+      return this.globalTools();
+    };
+    const pending=this.writes.then(perform);this.writes=pending.catch(()=>{});return pending;
+  }
+  async addGlobal(input){
+    if(!input||typeof input.name!=='string'||!input.name.trim()||input.name.length>80||!validCommand(input.command))throw fail('请输入工具名称和命令名');
+    const canonical=canonicalToolPath(input.directory),executable=canonicalToolPath(input.executable,false);
+    if(!this.allowedToolFolder(canonical,join(this.dataDir,'__toolbox_validation__')))throw fail('请选择单独的工具安装文件夹');
+    if(!insideToolPath(executable,canonical)||!/\.exe$/i.test(executable))throw fail('程序必须是安装文件夹内的 .exe');
+    const command=input.command.toLowerCase();
+    const tool={id:randomUUID(),name:input.name.trim(),command,directory:resolve(input.directory),canonical,executable:resolve(input.executable),canonicalExecutable:executable,access:'read',scope:'global',hostApproval:'always'};
+    return this.changeGlobal(tools=>{
+      if(tools.length>=32)throw fail('全局工具箱最多添加 32 个命令');
+      if(tools.some(item=>item.command===command))throw fail('这个全局命令已经添加');
+      return [...tools,tool];
+    });
+  }
+  removeGlobal(id){return this.changeGlobal(tools=>tools.filter(tool=>tool.id!==id));}
   // The grants a Claude run receives, or null when the project has none.
   runtimePolicy(workspace,sandboxExecutable){
     if(!existsSync(this.file)||!existsSync(workspace))return null;

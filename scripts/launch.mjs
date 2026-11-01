@@ -43,7 +43,8 @@ if(!await health()){
   mkdirSync(data,{recursive:true});
   const output=openSync(join(data,'server.log'),'a');
   const child=spawn(process.execPath,[join(root,'src/server.mjs')],{cwd:root,detached:true,stdio:['ignore',output,output],windowsHide:true});child.unref();closeSync(output);
-  let ready=false;for(let attempt=0;attempt<40;attempt++){await new Promise(resolve=>setTimeout(resolve,250));if(await health()){ready=true;break;}}
+  // Up to a minute: a start that first moves data to a new layout can take longer than usual.
+  let ready=false;for(let attempt=0;attempt<240;attempt++){await new Promise(resolve=>setTimeout(resolve,250));if(await health()){ready=true;break;}}
   if(!ready)throw new Error('工作台未能启动，请查看 .data/server.log');
 }
 if(!process.argv.includes('--no-open')){

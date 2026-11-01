@@ -88,7 +88,7 @@ export class DesktopWorker {
     }catch(error){this.setStatus('offline',error.message);if(error.status===401)this.disabled=true;if(this.active&&(this.disabled||Date.now()-this.lastLeaseAt>115000)){this.active.lostLease=true;if(this.active.chatId)await this.runner.stop(this.active.chatId);}}
     finally{this.polling=null;}})();return this.polling;
   }
-  snapshot(){const active=this.active;if(!active?.chatId)return null;const message=this.store.lastAssistant(active.chatId),run=this.runner.state(active.chatId);if(!message)return null;
+  snapshot(){const active=this.active;if(!active?.chatId)return null;const message=this.runner.active.get(active.chatId)?.message||this.store.lastAssistant(active.chatId),run=this.runner.state(active.chatId);if(!message)return null;
     return {status:message.status==='complete'?'complete':message.status==='error'?'error':message.status==='interrupted'?'interrupted':'running',content:redact(message.content),progress:(message.details.activity||[]).slice(-100).map(item=>({id:item.id,name:item.name||item.kind,status:item.status})),approvals:JSON.parse(redact(JSON.stringify(run?.approvals||[]))),notices:(message.details.notices||[]).slice(-10).map(redact),error:message.details.error||''};
   }
   schedule(snapshot){const active=this.active;if(!active||!snapshot||active.lostLease||active.deliveryError)return;const signature=JSON.stringify(snapshot);if(signature===active.pendingSignature||signature===active.inFlightSignature||signature===active.lastSignature)return;active.pending=snapshot;active.pendingSignature=signature;if(!active.flushTimer)active.flushTimer=setTimeout(()=>{active.flushTimer=null;this.flush(active).catch(()=>{});},200);active.flushTimer?.unref();}

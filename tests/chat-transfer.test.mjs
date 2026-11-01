@@ -44,7 +44,7 @@ test('single chat roundtrip carries attachments/activity/timestamps but no unrel
   const preview = f.importer.preview(data);
   assert.equal(preview.messages, 2); assert.equal(preview.attachments, 2); assert.equal(preview.externalFolders, 1);
   const result = await f.importer.import(JSON.parse(encoded), { workspace: f.dir, group_name: 'Imported group' });
-  const chat = f.target.chat(result.chatId), messages = f.target.messages(chat.id);
+  const chat = f.target.chat(result.chatId), messages = f.target.messages(chat.id, { trace: true });
   assert.notEqual(chat.id, f.chat.id); assert.equal(chat.title, f.chat.title); assert.equal(chat.workspace, f.dir); assert.equal(chat.project_id, null);
   assert.equal(chat.created, f.chat.created); assert.equal(messages[1].created, original[1].created); assert.equal(messages[1].content, original[1].content);
   assert.equal(chat.options.claude.model, 'opus-test'); assert.equal(chat.options.claude.effort, 'high');

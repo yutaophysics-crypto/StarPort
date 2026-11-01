@@ -10,6 +10,7 @@ import { hostRunnable } from './grants.mjs';
 import { runWorkspaceCommand } from './terminal.mjs';
 import { runExternalApplication, EXTERNAL_APPLICATION_WARNING } from './host-run.mjs';
 import { externalApplicationManager } from './applications.mjs';
+import {previewTools} from '../previews/mcp.mjs';
 
 const TERMINAL_DESCRIPTION='PowerShell in the current project with Windows MXC: project writable; approved installations read-only; network disabled. Use real physical paths for external programs, not StarPort: virtual paths. Complete desktop applications may not start inside MXC; use starport_external_tools.run with project authorization. This terminal is hosted by Starport and available again each turn.';
 const runDescription=applications=>'Launch a registered external application when the sandbox terminal cannot run its runtime (Electron, browsers, game engines or other installed software). '+
@@ -17,7 +18,8 @@ const runDescription=applications=>'Launch a registered external application whe
   'An ask-policy tool requires explicit approval; an always-policy tool was already authorized by the user for this project and needs no repeat approval. Native auto/bypass modes never change this project policy. '+
   'The application and its descendants have normal Windows user access, including files outside the project and network. '+
   'Use real absolute paths in arguments, not StarPort: PSDrive paths. By default it waits for exit and cleans up. Set persistent=true to keep an editor/server open across turns and Starport restarts; list/stop manage it. Repeating the identical persistent launch reuses it. '+
-  'Pass documented successExitCodes for tools using nonzero success codes. Available applications: '+JSON.stringify(applications.map(item=>({toolId:item.id,name:item.name,executable:item.canonicalExecutable,hostApproval:item.hostApproval||'ask'})));
+  'Global toolbox commands (scope=global) are preauthorized for every project. Invoke them with command="xelatex", "python", "git", etc and literal args; no project grant is needed. If the sandbox cannot find/run a registered global command, use this host tool. '+
+  'Pass documented successExitCodes for tools using nonzero success codes. Available applications: '+JSON.stringify(applications.map(item=>({toolId:item.id,name:item.name,command:item.command,scope:item.scope,executable:item.canonicalExecutable,hostApproval:item.hostApproval||'ask'})));
 
 const reply=(value,isError)=>({content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}],...isError===undefined?{}:{isError}});
 // The model sees the end of long output.
@@ -32,23 +34,30 @@ export function externalToolServers({runtime,cwd,signal:runSignal,canUseTool,emi
   const pending=new Set(),servers={},allowed=[],policy=runtime.externalTools;
   const track=async running=>{pending.add(running);try{return await running;}finally{pending.delete(running);}};
   const callSignal=extra=>extra?.signal?AbortSignal.any([runSignal,extra.signal]):runSignal;
+  if(runtime.workspaceTerminal?.normalPolicy&&runtime.workspaceTerminal.sandboxExecutable){
+    const previews=previewTools({dataDir:policy.dataDir,workspace:cwd,sandboxExecutable:runtime.workspaceTerminal.sandboxExecutable,signal:runSignal,track});
+    servers.starport_preview=previews.server;allowed.push(...previews.allowed);
+  }
   if(runtime.workspaceTerminal){
-    servers.starport_workspace=createSdkMcpServer({name:'starport_workspace',version:'2.0.0',tools:[tool('run_command',TERMINAL_DESCRIPTION,
+    const description=runtime.workspaceTerminal.normalPolicy?'PowerShell in the project filesystem sandbox, with normal development networking. Git and ordinary build processes may access their own services and local ports. This is a one-shot command: background children end when the command returns. Use starport_preview.start for a persistent built HTML/game preview, not Start-Process here. Claude/AI clients retain separate executable firewall protection and fixed proxy settings. Shell networking is not a whole-process-tree proxy restriction. Use registered host application tools for full desktop engines such as Creator; successExitCodes=[36] is its documented successful build exit code. Existing host approval policy still applies.':runtime.workspaceTerminal.runner?'PowerShell in this project through the owner-configured isolated runner. Its filesystem and network policy covers all descendants; external tool grants do not replace that policy. Network access may require the configured fixed proxy. Use starport_runtime_status and starport_reload_when_idle for Starport coordination instead of its privileged HTTP API. No unrestricted host fallback.':TERMINAL_DESCRIPTION;
+    const globalCommands=(policy?.tools||[]).filter(tool=>tool.scope==='global').map(tool=>tool.command);
+    const toolboxHint=globalCommands.length?' Globally installed toolbox commands: '+globalCommands.join(', ')+'. Their host execution is preauthorized. If command discovery or the sandbox runtime blocks them, invoke mcp__starport_external_tools__run with command=<name> and args=[...]. Do not report an installed compiler/runtime unavailable without trying this global toolbox route.':'';
+    servers.starport_workspace=createSdkMcpServer({name:'starport_workspace',version:'2.0.0',tools:[tool('run_command',description+toolboxHint,
       {command:z.string().min(1).max(20000),timeoutMs:z.number().int().min(1000).max(300000).optional()},
       async(input,extra)=>{
         try{
-          const result=await track(runWorkspaceCommand({...input,workspace:cwd,snapshot:policy,sandboxExecutable:runtime.workspaceTerminal.sandboxExecutable,signal:callSignal(extra)}));
+          const result=await track(runWorkspaceCommand({...input,workspace:cwd,snapshot:policy,...runtime.workspaceTerminal,signal:callSignal(extra)}));
           return reply(compactResult(result),result.exitCode!==0||result.timedOut||result.canceled);
         }catch(error){return reply('隔离命令未执行；权限未放宽：'+redact(error.message),true);}
       })]});
     allowed.push('mcp__starport_workspace__run_command');
   }
-  const applications=policy?.tools.filter(hostRunnable)||[];
+  const applications=runtime.workspaceTerminal?.hostExecution===false?[]:policy?.tools.filter(hostRunnable)||[];
   if(applications.length){
     const manager=externalApplicationManager(policy.dataDir);
     servers.starport_external_tools=createSdkMcpServer({name:'starport_external_tools',version:'1.0.0',tools:[
       tool('run',runDescription(applications),
-        {toolId:z.enum(applications.map(item=>item.id)),args:z.array(z.string()).max(128),directory:z.string().optional(),
+        {toolId:z.enum(applications.map(item=>item.id)).optional(),command:z.string().optional(),args:z.array(z.string()).max(128),directory:z.string().optional(),
           timeoutMs:z.number().int().min(1000).max(900000).optional(),successExitCodes:z.array(z.number().int().min(0).max(0xffffffff)).min(1).max(16).optional(),persistent:z.boolean().optional()},
         async(input,extra)=>{
           // The approval card is a separate tool row, finished here once the launch ends.

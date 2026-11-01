@@ -13,6 +13,8 @@ StarPort drives each agent tool through its own native interface and existing lo
 | Antigravity | Local AGY CLI with streaming JSON | Resumable session |
 | DeepSeek Harness | Published official SDK over JSON-RPC | New SDK session each turn |
 
+Desks that StarPort uses only once (compaction, planning, calls between companions, workflow steps and exam seats) ask Codex for ephemeral threads. Codex does not save these, so they stay out of the Codex app's list. Conversations and @companion desks keep resumable threads and stay listed. A Codex version without ephemeral threads saves them as before.
+
 **Settings → Connections & data** shows installation and a real connection check separately: a tool can be installed without its account being usable. After you sign in with the tool's own login method, choose **Check tools again**. StarPort does not store API keys, login tokens or account passwords.
 
 StarPort looks for tools in this order: a path you set in **Connections & data**, the current `PATH`, then each tool's standard per-user installation folder. For Antigravity the last fallback is a copy in StarPort's own `.runtime/antigravity` folder. Antigravity's chat and usage queries run in its normal local login environment; StarPort does not add an SSH marker, which could make the tool use a different credential store.
@@ -72,7 +74,7 @@ With Codex and Claude Code, **Steer** sends a queued message to the running task
 
 **Activity display** offers **Hidden**, **Overview** and **Full**, shared by all four tools and kept after a refresh. In the default overview, the task's steps stay open while it runs; select a step or subagent to see its records. When the task finishes, fails or stops, the activity collapses behind **View activity**. Hiding activity never hides approvals, errors or the stop button.
 
-Activity is saved and shown in the order the tool reported it. Codex shows public reasoning summaries, live command output, exit codes, file diffs and native plans. Claude shows public thinking, native tool names, inputs and results. Antigravity uses its native step states, and DeepSeek shows reasoning, replies, steps and structured tool results separately. Tool inputs and outputs can be expanded in full. StarPort does not fill in reasoning a tool does not expose, and it does not show Codex's raw reasoning blocks or signatures.
+Activity is saved and shown in the order the tool reported it. Codex shows public reasoning summaries, live command output, exit codes, file diffs and native plans. Claude shows public thinking, native tool names, inputs and results. Antigravity uses its native step states. Its stream leaves out thought summaries and gives file reads only as a line and byte count, so while it works StarPort also reads agy's own local transcript (`~/.gemini/antigravity-cli`, read-only) and adds both to the reply's steps; read results keep up to 8,000 characters *(testing)*. DeepSeek shows reasoning, replies, steps and structured tool results separately. Tool inputs and outputs can be expanded in full. StarPort does not fill in reasoning a tool does not expose, and it does not show Codex's raw reasoning blocks or signatures.
 
 Failures, declines, stops and unconfirmed endings are shown separately; the next step starting or the conversation ending is not treated as proof that a tool call succeeded. When a task ends, StarPort shows the saved final state immediately. While a task runs, the page reconciles its state every 5 seconds and after reconnecting, without calling a model or clearing your draft.
 

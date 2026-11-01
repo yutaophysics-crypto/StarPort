@@ -28,6 +28,9 @@ StarPort is a personal project that its author uses every day, and most of what 
 | [One-way mentions](docs/rooms-and-workflows.md#one-way-mentions) | Testing |
 | [Importing from Claude Code, Antigravity and DeepSeek](#import-export-and-move-to-another-computer) | Testing |
 | [Workflow ledgers](docs/rooms-and-workflows.md#ledgers) | Testing |
+| [`@主模型` in mentions](docs/rooms-and-workflows.md#mentions) | Testing |
+| [Companions calling companions](docs/rooms-and-workflows.md#companions-calling-companions) | Testing |
+| [Project previews and per-service networking for Claude on Windows](docs/external-tools.md#persistent-project-previews) | Testing |
 | [Group conversations and phones](#group-conversations-and-phones) | In development |
 | [Exams](docs/rooms-and-workflows.md#exams) | In development |
 
@@ -83,10 +86,10 @@ Details: [Agent tools: models, permissions and usage](docs/agents.md).
 
 ## Conversations
 
-- **Rooms** in the sidebar group your conversations. Conversations in one room can use different folders, tools and models.
+- **Rooms** in the sidebar group your conversations. Conversations in one room can use different folders, tools and models. Drag rooms, and conversations within a room, into your own order.
 - The working folder is the project. Conversations in the same folder share project instructions and project memory; subfolders are separate projects. Choose or rename the folder from the folder picker below the input.
 - **Activity display** sets how much of a task you see: **Hidden**, **Overview** or **Full**. During a task the overview stays open; afterwards it collapses behind **View activity**. Subagents appear inside the reply they belong to. StarPort shows only what the tool reports and does not invent hidden reasoning.
-- A spinner marks a running conversation; a blue dot marks a finished reply you have not viewed. Failures, stopped tasks and unconfirmed endings are shown separately.
+- A spinner marks a running conversation, including one that companions are working for; a blue dot marks a finished reply you have not viewed. Failures, stopped tasks and unconfirmed endings are shown separately.
 - Messages you send during a task wait in **Queued messages**, where you can edit or delete them. With Codex and Claude Code, **Steer** hands a queued message to the running task. Queued messages can carry attachments. A task is never stopped just because it is quiet.
 - **Branch from here**, under a finished reply, starts a new conversation with the history up to that reply. **Prompts**, next to the send button, inserts your saved prompts. Each code block has a **Copy** button that copies the original text.
 - The **Context** indicator below the input shows the latest context usage reported by Codex or Claude Code.
@@ -120,6 +123,8 @@ Rooms can also hold **companions**: named agents with an avatar, role, personali
 - **Mentions**: type `@name` to give a task to a companion. A single mention goes straight to that companion. When a message mentions several, a planner model first sets the order, for example one companion does the work and another reviews it. **Settings → Workflows** sets three planner models, tried in order; if none responds, the order in your message is used. Each companion has its own desk session in each conversation.
 - **One-way** *(testing)*: the companion receives only this message, plus results from companions earlier in the same mention, and not the conversation history. Its reply still returns to the conversation. This is an instruction, not technical isolation, because the companion shares the working folder.
 - **Working alongside** *(testing)*: while a companion works, you can mention other companions to work in parallel, or talk to the conversation's model without a mention. A second request to the same companion waits its turn and shows as queued; its clock starts when its turn comes. The room panel shows each working companion's elapsed time, updated every second.
+- **`@主模型`** *(testing)*: a message that mentions companions goes to them alone. Write `@主模型` before a part of the message to give that part to the conversation's own model, which takes its place in the order of work, for example after the companion whose results it summarizes.
+- **Calling companions** *(testing, off by default)*: per room, tick whom the conversation's model and each companion may call while they work. An allowed caller hands part of its task to a companion, which works at a fresh desk and reports back; a "X calls Y" card shows the call. Calls nest at most three deep and cannot loop.
 - **Workflows** are reusable templates made of stages and seats. Seats in one stage run in parallel, and the next stage sees their results. A review seat can send work back for up to three retries. Manage workflows in the **Workflow library**, then mount one on any conversation and choose a companion for each seat. Companions from outside the room join it automatically.
 - **Triggers**: manual, daily at a set time (optionally on chosen weekdays), or at an interval. Schedules run in the StarPort service, so closing the page does not stop them, but nothing runs while the service is off. A missed run can catch up once or be skipped.
 - **Run cards** record each run in the conversation. Expand a card to follow each step, stop the run, or **Reply** so that your next message includes the run's results. Every run starts fresh desk sessions that do not read the conversation history.
@@ -131,7 +136,7 @@ Details: [Rooms, companions and workflows](docs/rooms-and-workflows.md).
 
 ## Notifications and settings
 
-When a task finishes or fails, StarPort shows a notification with the room, conversation title and a short summary; clicking it opens the conversation. On Windows this is a native popup with a short chime, and the taskbar button flashes while StarPort is in the background. Other systems use browser notifications. The conversation you are viewing, tasks you stopped and tasks with messages still queued do not notify. The bell in the top bar turns **Do not disturb** on or off.
+When a task finishes or fails, StarPort shows a notification with the room, conversation title and a short summary; clicking it opens the conversation. On Windows this is a native popup with a short chime, and the taskbar button flashes while StarPort is in the background. Other systems use browser notifications. A message that mentions companions notifies once, when everyone it named has finished. The conversation you are viewing, tasks you stopped and tasks with messages still queued do not notify. The bell in the top bar turns **Do not disturb** on or off.
 
 **Settings** holds the global options: **General** (language and theme), **Notifications** (sound and a test notice), **Workflows** (planner models, retries and step time limits), **Context** (compaction and budgets) and **Connections & data** (tool locations, the local server and backups).
 
@@ -249,3 +254,5 @@ StarPort's own source is licensed under [MIT](LICENSE). Bundled third-party code
 Click **External tools** beside the workspace folder below the message box to grant the current project's Claude Code session read/run access to an installed SDK or engine on Windows, while keeping installation files read-only. See [project tool access](docs/external-tools.md).
 
 **Host compatibility execution and persistent applications** *(testing)*: when a registered program cannot run in the sandbox, Claude can ask to launch it with your Windows user permissions after your approval, and can keep an editor open across turns. See [host compatibility execution](docs/external-tools.md#host-compatibility-execution).
+
+**Project previews** *(testing)*: Claude can serve a built website or Cocos build from the project on a local address that stays up across commands, turns and StarPort restarts, and you can start or stop previews under **External tools → Project previews**. **Per-service networking** *(testing)* keeps Claude clients behind a fixed proxy while Git, downloads and builds in the project terminal use normal networking. See [persistent project previews](docs/external-tools.md#persistent-project-previews) and [service-scoped networking](docs/external-tools.md#service-scoped-networking-on-windows).

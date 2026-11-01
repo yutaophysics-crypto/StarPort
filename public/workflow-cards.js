@@ -1,10 +1,10 @@
 'use strict';
 
-// Run cards: one card per workflow or @companion run in the conversation, and each step's desk
-// (the companion's own session, read-only). Part of StarportWorkflows (workflows.js).
+// Run cards: one card per workflow or @companion run in the conversation. Each step shows its
+// companion's process inline (workflow-process.js). Part of StarportWorkflows (workflows.js).
 (() => {
   const Workflows = globalThis.StarportWorkflows;
-  const { el, icon, avatar, textAction, showDialog, PROVIDER_LABELS } = globalThis.StarportUI;
+  const { el, icon, avatar, textAction, PROVIDER_LABELS } = globalThis.StarportUI;
   const {
     tr,
     notice,
@@ -22,7 +22,7 @@
     liveSince
   } = Workflows;
   const STEP_LABEL = { waiting: '等待', running: '工作中', done: '完成', failed: '失败', stopped: '已停止' };
-  const TRIGGER_LABEL = { schedule: '定时', catchup: '补跑', manual: '手动', dispatch: '点名' };
+  const TRIGGER_LABEL = { schedule: '定时', catchup: '补跑', manual: '手动', dispatch: '点名', call: '调用' };
   const LIVE = ['planning', 'running'];
   // A step waiting for its companion to finish an earlier request at the same desk.
   const queued = step => step.status === 'running' && !!step.queued;
@@ -47,7 +47,12 @@
 
   function cardHeader(msg) {
     const run = msg.details.workflowRun;
-    const kind = run.kind === 'adhoc' ? ['at', '伙伴'] : run.kind === 'exam' ? ['exam', '考场'] : ['flow', '工作流'];
+    const kind =
+      run.kind === 'adhoc' || run.kind === 'call'
+        ? ['at', run.kind === 'call' ? '调用' : '伙伴']
+        : run.kind === 'exam'
+          ? ['exam', '考场']
+          : ['flow', '工作流'];
     return el('div', { class: 'message-header' }, [
       el('span', { class: 'provider-mark wf-mark' }, [icon(kind[0])]),
       el('strong', { text: kind[1] }),
@@ -95,8 +100,10 @@
     if (working.length) return `${working.map(s => s.companionName).join('、')} 工作中…`;
     if (running.length) return `${running.map(s => s.companionName).join('、')} 排队中，做完手上的事就开始`;
     if (run.status === 'stopped') return run.notes?.at(-1) || '已停止';
-    const last = steps.findLast(s => s.output);
-    return last ? `${last.companionName}：${oneLine(splitDuty(last.output).body, 140)}` : run.notes?.at(-1) || '';
+    // The conversation model's answer sits right below the card; the line names a companion's.
+    const last = steps.findLast(s => s.output && s.companionId !== Workflows.MAIN.id);
+    if (last) return `${last.companionName}：${oneLine(splitDuty(last.output).body, 140)}`;
+    return steps.some(s => s.output) ? '主模型已在对话里回答' : run.notes?.at(-1) || '';
   }
 
   function planNote(run) {
@@ -119,7 +126,7 @@
       'ol',
       { class: 'wf-plan' },
       rows.map(row => {
-        const c = companion(row.companionId);
+        const c = row.companionId === Workflows.MAIN.id ? Workflows.MAIN : companion(row.companionId);
         return el('li', {}, [
           el('span', { class: 'wf-plan-order', text: String(row.order) }),
           el('span', { class: 'wf-plan-who' }, [
@@ -157,8 +164,10 @@
     ]);
   }
 
-  function renderStep(run, step, index, msg) {
-    const { duty, body } = splitDuty(step.output);
+  function renderStep(run, step, index) {
+    // The conversation model answers its part in the conversation; the card only points there.
+    const main = step.companionId === Workflows.MAIN.id;
+    const { duty, body } = main ? { duty: '', body: '' } : splitDuty(step.output);
     const key = run.id + ':' + index;
     const long = body.length > 900;
     const showAll = fullSteps.has(key);
@@ -170,13 +179,6 @@
       step.checkpoint ? tr('进度已保留') : '',
       step.ended && step.started && step.status !== 'running' ? duration(step.started, step.ended) : ''
     ];
-    const process = step.deskChatId
-      ? el(
-          'button',
-          { type: 'button', class: 'room-text-action wf-step-process', onclick: () => openDesk(msg.id, run.id, index) },
-          [icon('process'), el('span', { text: '过程' })]
-        )
-      : null;
     const output = body.trim()
       ? (() => {
           const node = renderMarkdown(body);
@@ -201,16 +203,20 @@
                 'aria-live': 'polite',
                 text: step.status === 'running' && step.runtime?.stalled ? tr('未收到新活动') : stepLabel(step)
               }),
-          process
         ])
       ]),
       run.kind === 'exam' ? Workflows.seatInfo(step) : null,
       duty
         ? el('p', { class: 'wf-step-duty', text: `我负责：${duty}` })
-        : !output && step.status === 'waiting'
+        : main || (!output && step.status === 'waiting')
           ? el('p', { class: 'wf-step-duty', text: oneLine(step.task, 200) })
           : null,
-      output,
+      main ? null : Workflows.processBlock?.(step),
+      main && step.mainMessageId
+        ? textAction(step.status === 'running' ? '看它正在回答' : '看它的回答', () =>
+            Workflows.scrollToMessage(step.mainMessageId)
+          )
+        : output,
       long
         ? textAction(showAll ? '收起' : '展开全文', () => {
             if (showAll) fullSteps.delete(key);
@@ -286,7 +292,7 @@
     const body = el('div', { class: 'wf-card-body', hidden: !open }, [
       ...(exam ? Workflows.examFacts(run) : [planNote(run), planTable(run)]),
       run.status === 'planning' && !steps.length ? el('p', { class: 'wf-plan-note', text: '正在排执行顺序…' }) : null,
-      ...steps.map((step, index) => renderStep(run, step, index, msg)),
+      ...steps.map((step, index) => renderStep(run, step, index)),
       run.notes?.length
         ? el(
             'ul',
@@ -348,72 +354,19 @@
     return card;
   }
 
-  // --- a step's desk: the companion's own session, read-only --------------------------------
-  function findRun(messageId) {
-    return state.messages.find(m => m.id === messageId)?.details?.workflowRun || null;
-  }
-
-  async function openDesk(messageId, runId, index) {
-    const step = findRun(messageId)?.steps?.[index];
-    if (!step?.deskChatId) return;
-    const body = el('div', { class: 'wf-desk' }, [el('p', { class: 'room-dialog-note', text: '正在读取…' })]);
-    let timer = null;
-    let closed = false;
-    const draw = async () => {
-      const current = findRun(messageId)?.steps?.[index] || step;
-      try {
-        const snapshot = await api('/chats/' + current.deskChatId);
-        if (closed) return;
-        const prompt = snapshot.messages.find(m => m.role === 'user');
-        const answer = snapshot.messages.findLast(m => m.role === 'assistant');
-        const tools = page || { el, t: text => text, markdown: text => el('div', { class: 'message-body', text }) };
-        body.replaceChildren(
-          prompt
-            ? el('details', { class: 'wf-desk-prompt' }, [
-                el('summary', { text: `交给 ${current.companionName} 的完整提示` }),
-                el('pre', { text: prompt.content })
-              ])
-            : '',
-          answer
-            ? el('article', { class: 'message assistant wf-desk-answer' }, [
-                globalThis.StarportActivity?.render(answer, {
-                  el: tools.el,
-                  t: tools.t,
-                  markdown: tools.markdown,
-                  chatId: current.deskChatId
-                }) || tools.markdown(answer.content)
-              ])
-            : el('p', { class: 'room-dialog-note', text: '还没有开始。' })
-        );
-      } catch (error) {
-        body.replaceChildren(el('p', { class: 'wf-step-error', text: error.message }));
-      }
-      if (
-        !closed &&
-        LIVE.includes(findRun(messageId)?.status) &&
-        findRun(messageId)?.steps?.[index]?.status === 'running'
-      )
-        timer = setTimeout(draw, 1500);
-    };
-    showDialog({
-      size: 'wide',
-      eyebrow: [step.label, step.attempt ? `第 ${step.attempt + 1} 次` : ''].filter(Boolean).join(' · ') || '工位',
-      title: `${step.companionName} 的工位`,
-      lead: avatar(companion(step.companionId) || step, 'room-avatar large'),
-      body: [
-        el('p', {
-          class: 'room-dialog-note',
-          text: `${PROVIDER_LABELS[step.provider] || step.provider || ''}${step.model ? ' · ' + step.model : ''} · 无人值守：需要审批的操作自动拒绝，提问自动跳过。`
-        }),
-        body
-      ],
-      onclose: () => {
-        closed = true;
-        clearTimeout(timer);
-      }
+  // What a card draws besides its own message: its companions' names and avatars, whether its
+  // folder still exists, and which long outputs are open. The conversation rebuilds a card only
+  // when this or the message changes, so one companion's progress does not redraw every card.
+  function cardContext(msg) {
+    const run = msg.details.workflowRun;
+    const ids = new Set([...(run.steps || []), ...(run.plan?.rows || [])].map(item => item.companionId));
+    const people = [...ids].map(id => {
+      const c = companion(id);
+      return c ? [id, c.name, c.avatar] : id;
     });
-    draw();
+    const open = [...fullSteps].filter(key => key.startsWith(run.id + ':'));
+    return JSON.stringify([people, run.mountId ? !!mount(run.mountId) : 0, open]);
   }
 
-  Object.assign(Workflows, { renderCard, cardHeader, planTable, openDesk });
+  Object.assign(Workflows, { renderCard, cardHeader, cardContext, planTable });
 })();

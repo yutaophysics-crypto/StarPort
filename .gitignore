@@ -3,6 +3,7 @@ node_modules/
 StarportMemory/
 .reference/
 .runtime/
+.starport-claude-runtime/
 test-results/
 vendor/magi/
 *.log

@@ -298,9 +298,39 @@ body.resizing-panels * {
 }
 
 .groups {
+  position: relative;
   flex: 1;
   overflow: auto;
   margin: 8px -6px;
+}
+
+/* Dragging rooms and conversations into order (sidebar-order.js). */
+.sort-source {
+  opacity: 0.4;
+}
+
+.sort-indicator {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+body.sorting-sidebar,
+body.sorting-sidebar * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+body.sorting-sidebar .groups > * {
+  pointer-events: none;
+}
+
+body.sorting-sidebar .groups :is(.icon-button, .chat-more) {
+  visibility: hidden;
 }
 
 .group {

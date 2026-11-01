@@ -21,6 +21,7 @@ StarPort uses relational SQLite. A single main database file is SQLite's normal 
 | `chat_summaries` | Compaction summaries and their coverage | One per conversation; removed with it |
 | `companions` | Companion identity, tool, model and working mode | Joined to rooms through membership |
 | `room_members` | Room membership and memory options | References groups and companions |
+| `room_calls` | Per room, whom each caller (主模型 or a companion) may call mid-task | References groups and the called companion; removed when a companion leaves the room |
 | `workflows` | Reusable stages, seats and verification | Mounted on conversations |
 | `workflow_mounts` | Conversation placement, seat assignments and triggers | References workflows and conversations |
 | `companion_desks` | Companion sessions within a conversation | Hidden desk conversations follow the parent |

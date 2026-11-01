@@ -12,7 +12,9 @@ export async function connectCodex(runtime, cwd, handlers={}) {
   } catch(e) {await rpc.close();throw e;}
 }
 
-export async function runCodex({runtime,options,session,prompt,contextTools,contextEnv={},images=[],goalObjective,cwd,signal,emit,setControl,reconcileIntervalMs=15000,reconcileAfterMs=45000}) {
+// `ephemeral` asks for a thread Codex keeps out of its saved history (and so out of the Codex
+// app), for one-off desks nobody resumes. A server without the option just saves it as usual.
+export async function runCodex({runtime,options,session,ephemeral=false,prompt,contextTools,contextEnv={},images=[],goalObjective,cwd,signal,emit,setControl,reconcileIntervalMs=15000,reconcileAfterMs=45000}) {
   const permissions=codexPermissions(options,cwd);
   let rpc,threadId,turnId,canceled=false,pendingTurn=null,goal=null,paused=false,model=null;
   // Turns that already ended. Their late deltas must not append to the answer.
@@ -99,8 +101,13 @@ export async function runCodex({runtime,options,session,prompt,contextTools,cont
     const config={cwd,approvalPolicy:permissions.approvalPolicy,approvalsReviewer:permissions.approvalsReviewer,sandbox:permissions.sandbox};
     if(contextTools&&!session)config.dynamicTools=contextTools.definitions.map(def=>({type:'function',...def}));
     if(options.model)config.model=options.model;
-    const result=await rpc.request(session?'thread/resume':'thread/start',session?{...config,threadId:session}:{...config,experimentalRawEvents:false});
-    threadId=result.thread.id;model=result.model;emit({type:'session',id:threadId,model});
+    const result=await rpc.request(session?'thread/resume':'thread/start',session?{...config,threadId:session}:{...config,experimentalRawEvents:false,...ephemeral?{ephemeral:true}:{}});
+    threadId=result.thread.id;model=result.model;
+    // Trust what the server made, not what was asked: only a thread it confirms as ephemeral
+    // is left unresumable and spared the status check (it cannot list its turns).
+    const unsaved=!session&&result.thread.ephemeral===true;
+    if(unsaved)probeDisabled=true;
+    emit({type:'session',id:threadId,model,...unsaved?{ephemeral:true}:{}});
     const reconcileTurn=()=>{
       if(checking||probeDisabled||rpc.ended||canceled||!pendingTurn||!turnId||approvals.size||Date.now()-lastNativeEventAt<reconcileAfterMs)return;
       const expectedTurnId=turnId;
