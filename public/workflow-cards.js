@@ -26,7 +26,28 @@
   const LIVE = ['planning', 'running'];
   // A step waiting for its companion to finish an earlier request at the same desk.
   const queued = step => step.status === 'running' && !!step.queued;
-  const stepLabel = step => (queued(step) ? '排队中' : STEP_LABEL[step.status] || step.status);
+  const stalled = step => step.status === 'running' && !queued(step) && !!step.runtime?.stalled;
+  const stopping = step => step.status === 'running' && ['deadline', 'idle-stop'].includes(step.checkpoint?.reason);
+  function stepLabel(step) {
+    if (queued(step)) return '排队中';
+    if (stopping(step)) return '正在停止…';
+    return stalled(step) ? '未收到新活动' : STEP_LABEL[step.status] || step.status;
+  }
+
+  const idleNotice = /^连续 \d+ 分钟未收到新活动，/;
+  const deadlineNotice = /^即将达到你设置的 \d+ 分钟时限，/;
+  const stopNotice = /^(?:达到你设置的 \d+ 分钟时限，正在停止；|连续 \d+ 分钟没有任何活动，正在停止并以失败交回；)/;
+  function stepNotices(step) {
+    const notes = step.notes || [];
+    const history = notes.filter(note => note !== '已收到新的活动，伙伴继续工作。' &&
+      !idleNotice.test(note) && !deadlineNotice.test(note) && !stopNotice.test(note)).slice(-6);
+    if (step.status !== 'running' || queued(step)) return history;
+    const current = stopping(step) ? notes.findLast(note => stopNotice.test(note))
+      : stalled(step) ? notes.findLast(note => idleNotice.test(note))
+      : notes.findLast(note => deadlineNotice.test(note));
+    if (current) history.push(current);
+    return history;
+  }
   // Meta parts joined by dots; a part may be a live clock rather than text.
   const metaParts = parts => parts.filter(Boolean).flatMap((part, i) => (i ? [' · ', part] : [part]));
 
@@ -96,8 +117,18 @@
     if (rejected)
       return `${rejected.companionName}：${oneLine(splitDuty(rejected.output).body.split('\n').filter(Boolean).at(-1), 140)}`;
     const running = steps.filter(s => s.status === 'running');
-    const working = running.filter(s => !queued(s));
-    if (working.length) return `${working.map(s => s.companionName).join('、')} 工作中…`;
+    const active = running.filter(s => !queued(s));
+    if (active.length) {
+      const labels = new Map();
+      for (const step of active) {
+        const label = stepLabel(step);
+        if (!labels.has(label)) labels.set(label, []);
+        labels.get(label).push(step.companionName);
+      }
+      return [...labels].map(([label, names]) => label === '工作中'
+        ? tr('{names} 工作中…', { names: names.join('、') })
+        : `${names.join('、')} · ${tr(label)}`).join(' · ');
+    }
     if (running.length) return `${running.map(s => s.companionName).join('、')} 排队中，做完手上的事就开始`;
     if (run.status === 'stopped') return run.notes?.at(-1) || '已停止';
     // The conversation model's answer sits right below the card; the line names a companion's.
@@ -171,6 +202,7 @@
     const key = run.id + ':' + index;
     const long = body.length > 900;
     const showAll = fullSteps.has(key);
+    const notes = stepNotices(step);
     const meta = [
       step.label && step.label !== step.companionName ? step.label : '',
       step.attempt ? `第 ${step.attempt + 1} 次` : '',
@@ -201,7 +233,7 @@
             : el('span', {
                 class: `wf-step-status ${queued(step) ? 'queued' : step.status}`,
                 'aria-live': 'polite',
-                text: step.status === 'running' && step.runtime?.stalled ? tr('未收到新活动') : stepLabel(step)
+                text: tr(stepLabel(step))
               }),
         ])
       ]),
@@ -225,11 +257,11 @@
           })
         : null,
       step.error ? el('p', { class: 'wf-step-error', text: notice(step.error) }) : null,
-      step.notes?.length
+      notes.length
         ? el(
             'ul',
             { class: 'wf-step-notes' },
-            step.notes.slice(-6).map(note => el('li', { text: notice(note) }))
+            notes.map(note => el('li', { text: notice(note) }))
           )
         : null,
       ledgerChanges(step)
@@ -299,16 +331,22 @@
             { class: 'wf-card-notes' },
             run.notes.map(note => el('li', { text: notice(note) }))
           )
+        : null,
+      steps.some(step => step.companionId !== Workflows.MAIN.id)
+        ? el('button', { type: 'button', class: 'room-text-action wf-card-collapse', text: tr('收起卡片'), onclick: () => {
+            setOpen(false);
+            head.focus();
+          } })
         : null
     ]);
 
-    head.onclick = () => {
-      const next = !card.classList.contains('open');
+    function setOpen(next) {
       expanded.set(run.id, next);
       card.classList.toggle('open', next);
       head.setAttribute('aria-expanded', String(next));
       body.hidden = !next;
-    };
+    }
+    head.onclick = () => setOpen(body.hidden);
 
     const target = run.mountId ? mount(run.mountId) : null;
     const actions = el('div', { class: 'wf-card-actions' }, [

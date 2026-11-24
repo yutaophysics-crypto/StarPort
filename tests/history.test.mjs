@@ -9,6 +9,38 @@ import {createHub} from '../src/server.mjs';
 import {fixtureHistoryConnect} from './fixtures/history.mjs';
 const registry={resolve:()=>({command:process.execPath,prefixArgs:[]}),list:async()=>[]};
 
+test('old desk threads are archived only when Starport named them and nobody resumes them',async t=>{
+  const store=new Store(':memory:');t.after(()=>store.close());
+  const threads=[
+    {id:'desk-old',name:'StarPort · [工位] 压缩',updatedAt:100},
+    {id:'seat-old',name:'StarPort · [考位] 甲 · 期中',updatedAt:100},
+    {id:'desk-kept',name:'StarPort · [工位] 画师',updatedAt:100},
+    {id:'desk-new',name:'StarPort · [工位] 排程',updatedAt:300},
+    {id:'conversation',name:'StarPort · 自走棋',updatedAt:100},
+    {id:'users-own',name:'My [工位] notes',updatedAt:100},
+    {id:'unnamed',name:null,preview:'StarPort · [工位] 压缩',updatedAt:100}];
+  const calls=[],connect=async()=>({request:async(method,params)=>{
+    calls.push({method,params});
+    if(method==='thread/list')return params.cursor?{data:threads.slice(4),nextCursor:null}:{data:threads.slice(0,4),nextCursor:'page-2'};
+    if(method==='thread/archive')return {};
+    throw new Error('Unexpected method: '+method);
+  },close:async()=>{}});
+  const history=new HistoryImporter(store,registry,process.cwd(),connect);
+  assert.deepEqual(await history.archiveCodexDesks({before:200,keep:new Set(['desk-kept'])}),{archived:2,failed:0});
+  assert.deepEqual(calls.filter(c=>c.method==='thread/archive').map(c=>c.params.threadId),['desk-old','seat-old']);
+  // Every page is read before anything moves, and only the unarchived list is read.
+  assert.deepEqual(calls.map(c=>c.method).slice(0,3),['thread/list','thread/list','thread/archive']);
+  assert.ok(calls.filter(c=>c.method==='thread/list').every(c=>c.params.archived===false));
+});
+
+test('sessions a later turn may resume: conversations and @companion desks, not one-off desks',t=>{
+  const store=new Store(':memory:');t.after(()=>store.close());
+  const chat=(id,options)=>{const row=store.newChat({provider:'codex',options});store.saveSession(row.id,'codex',id,null,'fingerprint');};
+  chat('conversation',{});chat('companion-desk',{desk:{parentChatId:'x',persistent:true}});
+  chat('compaction-desk',{desk:{parentChatId:'x',compact:true}});chat('call-desk',{desk:{parentChatId:'x',call:true}});
+  assert.deepEqual([...store.resumableSessionIds('codex')].sort(),['companion-desk','conversation']);
+});
+
 test('history picker pages, filters archives and titles, and marks existing copies',async t=>{
   const store=new Store(':memory:');t.after(()=>store.close());const calls=[],history=new HistoryImporter(store,registry,process.cwd(),fixtureHistoryConnect(calls));
   const first=await history.list('codex');assert.equal(first.data.length,2);assert.equal(first.nextCursor,'2');

@@ -102,6 +102,8 @@ export function historyMessage(message, options = {}) {
     return { ...message, content };
   }
   if (message.role !== 'assistant') return null;
+  // A refused connection produced no model turn or work to hand over.
+  if (message.details?.nativeConflict?.delivery === 'not-delivered' && !message.content && !message.details.activity?.length && !message.details.tools?.length) return null;
   if (message.details?.workflowRun) return { ...message, content: message.details.workflowRun.kind === 'exam' ? examRecord(message) : companionRecord(message) };
   if (!settled.has(message.status)) return null;
   return { ...message, content: message.status === 'complete' ? message.content || '' : unfinishedRecord(message, options) };

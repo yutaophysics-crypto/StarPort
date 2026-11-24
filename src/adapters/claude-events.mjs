@@ -14,6 +14,9 @@ export function parseClaudeEvent(e,state={}) {
   const scope=e.parent_tool_use_id||null;
   state.streams??={};const stream=state.streams[scope||'root']??={};
   const activity=(id,kind,fields={},delta)=>emit('activity',{item:{id,kind,scope,...fields},...(delta!==undefined?{delta}:{})});
+  // An API error arrives as a made-up assistant message (model "<synthetic>") whose text is the error.
+  // The failed result reports the same error, so this is neither part of the reply nor a model sample.
+  if(e.type==='assistant'&&e.error)return events;
   if(e.type==='system'&&e.subtype==='init'){
     if(state.model!==e.model)state.windowTokens=null;state.model=e.model;emit('session',{id:e.session_id,model:e.model});
   }
@@ -96,13 +99,15 @@ export function parseClaudeEvent(e,state={}) {
   if(e.type==='permission_denied'||e.type==='system'&&e.subtype==='permission_denied')emit('tool',{id:e.tool_use_id||e.toolUseID,name:e.tool_name,status:'denied',input:e.tool_input||e.input,output:e.message,scope:e.agent_id||scope});
   if(e.type==='result'&&!scope){
     state.terminal=true;if(e.session_id)emit('session',{id:e.session_id});
-    if(e.result){emit('replace',{text:e.result});emit('final-answer',{text:e.result});}
+    // A failed result's text is the error itself, reported below; it must not replace what the turn wrote.
+    const failed=e.is_error||(e.subtype&&e.subtype!=='success');
+    if(e.result&&!failed){emit('replace',{text:e.result});emit('final-answer',{text:e.result});}
     if(e.usage)emit('usage',{usage:e.usage});
     const modelUsage=e.modelUsage?.[state.model]||Object.values(e.modelUsage||{}).find(item=>state.model&&item.canonicalModel===state.model);
     if(modelUsage?.contextWindow){state.windowTokens=modelUsage.contextWindow;emit('context',{context:claudeContext(state.requestUsage,state.windowTokens,state.model)});}
     for(const denied of e.permission_denials||[])emit('tool',{id:denied.tool_use_id,name:denied.tool_name,input:denied.tool_input,status:'denied'});
     if(e.permission_denials?.length)emit('notice',{text:`${e.permission_denials.length} 个操作未获权限，未执行。`});
-    if(e.is_error||(e.subtype&&e.subtype!=='success'))emit('error',{message:(e.errors||[]).join('\n')||e.result||e.subtype});
+    if(failed)emit('error',{message:(e.errors||[]).join('\n')||e.result||e.subtype});
   }
   return events;
 }

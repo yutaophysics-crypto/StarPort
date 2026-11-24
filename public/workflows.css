@@ -391,6 +391,11 @@
   color: var(--wf-bad);
 }
 
+.wf-card-collapse {
+  align-self: flex-end;
+  margin-top: 4px;
+}
+
 .wf-card-actions {
   display: flex;
   flex-wrap: wrap;

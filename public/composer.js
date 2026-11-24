@@ -565,31 +565,63 @@ globalThis.StarportComposer = (() => {
 
   const sketches = new Map();
 
+  // Captions are inlined into the prompt, so auto-reading is bounded by total length, not by video count.
+  // 512 KB of UTF-8 is roughly 8 hours of Chinese subtitles with timestamps.
+  const CAPTION_BUDGET = 512 * 1024;
+  const isCaption = row => row.kind === 'web' && row.name.startsWith('视频字幕 · ');
+
+  // Best effort: a video that cannot be read stays in the message as a plain link.
   async function prepareVideos(text) {
     const key = draftKey();
     const { findVideoReferences } = await import('/video-reference.mjs');
     const references = findVideoReferences(text).filter(
-      ref => !read(key).some(row => row.kind === 'web' && row.path === ref.url && row.name.startsWith('视频字幕 · '))
+      ref => !read(key).some(row => isCaption(row) && row.path === ref.url)
     );
     if (!references.length) return;
-    if (read(key).length + references.length > 16) throw new Error(t('每条消息最多添加 16 个附件'));
     const info = await api('/edge/status');
     if (!info.connected) {
       await openEdge();
       throw new Error(t('请先连接 Edge，再发送视频；输入已保留'));
     }
+    let used = read(key).filter(isCaption).reduce((sum, row) => sum + (row.size || 0), 0);
+    let attached = 0, skipped = 0, full = false;
+    const failed = [];
     busy++;
     render();
     try {
-      toast('正在通过已登录的 Edge 读取字幕…');
-      for (const reference of references) {
-        const data = await api('/videos/read', 'POST', { reference: reference.url });
-        add(data.attachment, key);
+      for (const [index, reference] of references.entries()) {
+        if (read(key).length >= 16 || used >= CAPTION_BUDGET) {
+          skipped = references.length - index;
+          full = read(key).length >= 16;
+          break;
+        }
+        toast(references.length > 1 ? '正在通过已登录的 Edge 读取字幕 {done}/{total}…' : '正在通过已登录的 Edge 读取字幕…', {
+          done: index + 1,
+          total: references.length
+        });
+        try {
+          const data = await api('/videos/read', 'POST', { reference: reference.url });
+          add(data.attachment, key);
+          used += data.attachment.size || 0;
+          attached++;
+        } catch (error) {
+          failed.push(t(error.message));
+        }
       }
     } finally {
       busy--;
       render();
     }
+    const notes = [];
+    if (failed.length) notes.push(t('{count} 个视频没读到字幕（{reason}）', { count: failed.length, reason: failed[0] }));
+    if (skipped)
+      notes.push(
+        t(full ? '{count} 个视频超过每条消息 16 个附件的上限' : '{count} 个视频超过单条消息的字幕总长度上限', { count: skipped })
+      );
+    if (!notes.length) return;
+    const summary = notes.join(t('；'));
+    if (attached) toast('已附加 {count} 个视频的字幕；另有 {notes}，只发送了链接', { count: attached, notes: summary });
+    else toast('{notes}，只发送了链接', { notes: summary });
   }
 
   function openVideo() {
@@ -773,6 +805,13 @@ globalThis.StarportComposer = (() => {
     },
     clear(key = draftKey()) {
       write([], key);
+    },
+    // An attachment uploaded elsewhere (a picture taken from the LaTeX PDF). Every Starport tab
+    // hears about it and they share the draft, so the same one is added only once.
+    attach(row, key = draftKey()) {
+      if (!row?.id || read(key).some(item => item.id === row.id)) return false;
+      add(row, key);
+      return true;
     },
     consume(ids, key = draftKey()) {
       const sent = new Set(ids);

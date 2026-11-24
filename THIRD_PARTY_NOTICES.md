@@ -16,4 +16,9 @@
 - DOMPurify 3.4.16, Cure53 and contributors, Apache-2.0 OR MPL-2.0: https://github.com/cure53/DOMPurify
   - License files are preserved in `node_modules/dompurify`.
 
+- CodeMirror 6, Marijn Haverbeke and contributors, MIT: https://codemirror.net/
+  - Files: `public/vendor/codemirror.mjs` and `public/vendor/codemirror-LICENSE.txt`. Pinned component versions are in `public/vendor/latex-vendor.json`.
+- PDF.js 5.7.284, Mozilla and contributors, Apache-2.0: https://github.com/mozilla/pdf.js
+  - Files and license: `public/vendor/pdfjs/`.
+
 Harness runtimes remain separate programs under their own terms; this app does not redistribute provider credentials.

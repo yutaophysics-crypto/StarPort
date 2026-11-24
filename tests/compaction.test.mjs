@@ -116,7 +116,7 @@ test('a long conversation is compacted once, switches reuse the summary, and del
 
   const defaults = await call('/context/settings');
   assert.equal(defaults.enabled, true);
-  assert.equal(defaults.budgets.antigravity, 60);
+  assert.equal(defaults.budgets.antigravity, 100);
   await assert.rejects(call('/context/settings', 'PUT', { budgets: { deepseek: 2 } }), /8–1000/);
   await call('/context/settings', 'PUT', { budgets: { deepseek: 8 }, summarizers: [{ provider: 'claude', model: '' }, { provider: 'deepseek', model: '' }] });
 

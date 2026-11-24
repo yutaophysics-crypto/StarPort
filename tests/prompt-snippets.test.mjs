@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/storage.mjs';
-import { PromptSnippets, DEFAULT_SNIPPETS } from '../src/prompt-snippets.mjs';
+import { PromptSnippets, DEFAULT_SNIPPETS } from '../src/plugins/prompt-snippets.mjs';
 
-const call=(snippets,method,body)=>snippets.handle(method,'/api/prompt-snippets',async()=>body);
+const call=(snippets,method,body)=>snippets.handle(method,async()=>body);
 
 test('prompt snippets start with the deepen example, save in order and keep an emptied list empty',async()=>{
   const snippets=new PromptSnippets(new Store(':memory:'));
@@ -15,7 +15,7 @@ test('prompt snippets start with the deepen example, save in order and keep an e
   assert.deepEqual((await call(snippets,'GET')).data.snippets,saved.data.snippets);
   await call(snippets,'PUT',{snippets:[]});
   assert.deepEqual((await call(snippets,'GET')).data.snippets,[]);
-  assert.equal(await snippets.handle('GET','/api/other',async()=>({})),null);
+  await assert.rejects(call(snippets,'DELETE'),error=>error.status===405);
 });
 
 test('prompt snippets reject missing names or content and replace unusable ids',async()=>{

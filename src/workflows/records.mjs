@@ -6,14 +6,14 @@ import { fail, text, slug, newId } from './common.mjs';
 // declined automatically. A companion picks its tool's own 工作方式; these presets
 // are the older three-level setting, kept for older companions and the planner.
 export const ACCESS={
-  readonly:{claude:{permissionMode:'dontAsk'},codex:{mode:'chat',permissionMode:'read-only'},antigravity:{mode:'auto',permissionMode:'configured',sandbox:true},deepseek:{}},
-  workspace:{claude:{permissionMode:'acceptEdits'},codex:{mode:'chat',permissionMode:'ask'},antigravity:{mode:'accept-edits',permissionMode:'configured',sandbox:true},deepseek:{}},
-  full:{claude:{permissionMode:'bypassPermissions'},codex:{mode:'chat',permissionMode:'full-access'},antigravity:{mode:'accept-edits',permissionMode:'allow-all',sandbox:false},deepseek:{}}
+  readonly:{claude:{permissionMode:'dontAsk'},codex:{mode:'chat',permissionMode:'read-only'},antigravity:{mode:'auto',permissionMode:'configured',sandbox:true},deepseek:{},ollama:{}},
+  workspace:{claude:{permissionMode:'acceptEdits'},codex:{mode:'chat',permissionMode:'ask'},antigravity:{mode:'accept-edits',permissionMode:'configured',sandbox:true},deepseek:{},ollama:{}},
+  full:{claude:{permissionMode:'bypassPermissions'},codex:{mode:'chat',permissionMode:'full-access'},antigravity:{mode:'accept-edits',permissionMode:'allow-all',sandbox:false},deepseek:{},ollama:{}}
 };
 // The choices come from each tool's own options; the descriptions say what happens at a
 // desk nobody is watching. Codex 目标模式 is left out: the assembled desk prompt
 // is a task rather than a goal to keep pursuing indefinitely.
-const DESK_KEYS={claude:['permissionMode'],codex:['mode','permissionMode'],antigravity:['mode','permissionMode','sandbox'],deepseek:[]};
+const DESK_KEYS={claude:['permissionMode'],codex:['mode','permissionMode'],antigravity:['mode','permissionMode','sandbox'],deepseek:[],ollama:[]};
 const UNATTENDED={
   claude:{default:'需要审批的操作会被自动拒绝。',plan:'只读分析，不修改文件、不运行命令。',dontAsk:'只做原工具规则已允许的操作，其余直接拒绝。',
     acceptEdits:'可编辑工作目录里的文件；运行命令（如 Python）仍需审批，会被自动拒绝。'},

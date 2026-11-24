@@ -12,11 +12,11 @@ async function finish(runner,id){for(let i=0;i<200;i++){if(!runner.active.has(id
 
 test('no profile or keyword match injects memory bodies automatically; models receive index pointers only',()=>{
   const s=new Store(':memory:');try{
-    const row=add(s,'preference','园艺设备','园艺设备选择兼顾节水与AI自动控制，关注维修成本。');
-    add(s,'fact','Sample profile','The sample user restores antique bicycles.');
-    add(s,'preference','展示偏好','示例用户希望图表采用高对比度配色。');
+    const row=add(s,'preference','投资筛选','投资筛选兼顾价值与AI成长，关注科技公司的估值。');
+    add(s,'fact','Imported profile','The user researches theoretical physics.');
+    add(s,'preference','交流语言','用户希望使用中文交流。');
     const recall=s.memory.recall('开发一个AI游戏');
-    assert.deepEqual(recall.items,[]);assert.doesNotMatch(recall.text,/关注维修成本|restores antique bicycles|高对比度配色/);
+    assert.deepEqual(recall.items,[]);assert.doesNotMatch(recall.text,/关注科技公司的估值|researches theoretical physics|用户希望使用中文交流/);
     const found=s.memory.search({query:'AI'});assert.ok(found.items.some(item=>item.id===row.id)); // A candidate, not a selected instruction.
     assert.equal(s.memory.list().total,3);
   }finally{s.close();}

@@ -22,6 +22,17 @@ test('language preference survives a new page and falls back safely',()=>{
   next.setLanguage('invalid');assert.equal(next.language,'en');
 });
 
+test("Claude Code's output-cap error explains what happened instead of naming an env var",()=>{
+  const saved=new Map(),error="API Error: Claude's response exceeded the 128000 output token maximum. To configure this behavior, set the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable.";
+  const english=load(saved).notice(error);
+  // Research runs at max effort on purpose, so the note offers staged thinking rather than a lower effort.
+  assert.match(english,/128000-token output limit/);assert.match(english,/cannot be raised/);assert.match(english,/in stages/);
+  assert.doesNotMatch(english,/CLAUDE_CODE_MAX_OUTPUT_TOKENS|[Ll]ower the thinking effort/);
+  load(saved).setLanguage('zh');const chinese=load(saved).notice(error);
+  assert.match(chinese,/128000 token 的输出上限/);assert.match(chinese,/调不高/);assert.match(chinese,/分阶段/);
+  assert.doesNotMatch(chinese,/CLAUDE_CODE_MAX_OUTPUT_TOKENS|调低/);
+});
+
 test('a fresh page uses English when storage is absent, unsupported or unavailable',()=>{
   for(const localStorage of [undefined,{getItem:()=>null},{getItem:()=> 'fr'},
     {getItem(){throw Error('Storage blocked');},setItem(){throw Error('Storage blocked');}}]){

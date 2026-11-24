@@ -74,6 +74,22 @@ test('sync is off by default; shares confirmed memories, candidates and saved pr
   }finally{await d.close();}
 });
 
+test('a saved sync connection continues working with the retired access setting',async()=>{
+  const d=await devices();
+  try{
+    await d.pair();
+    const saved=d.x.config();
+    d.a.setSetting('memory.sync',{...saved,blockAgentReads:true});
+    const memory=d.a.memory.create(input,{confirmed:true});
+    await d.settle();
+    assert.equal(d.b.memory.get(memory.id).content,input.content);
+    assert.equal(d.x.status().error,'');
+    assert.equal('blockAgentReads' in d.x.status(),false);
+    await d.x.configure({enabled:false});
+    assert.deepEqual(d.a.setting('memory.sync'),{...saved,enabled:false});
+  }finally{await d.close();}
+});
+
 test('candidate approval, edit and deletion propagate; an offline stale device never resurrects deleted memory',async()=>{
   const d=await devices();try{
     const row=d.a.memory.create(input);await d.pair();const approved=d.b.memory.update(row.id,{revision:d.b.memory.get(row.id).revision,confirm:true});
@@ -136,10 +152,26 @@ test('late parent files and interrupted JSON are retried; changed space marker c
     const row=d.a.memory.create(input,{confirmed:true});await d.x.configure({enabled:true,folder:d.folder});
     const changes=join(d.folder,'StarportMemory','changes'),files=await readdir(changes),parent=files[0],saved=await readFile(join(changes,parent),'utf8');
     d.a.memory.update(row.id,{revision:row.revision,content:'第二版中文偏好'});await d.x.sync();await rm(join(changes,parent));
-    await d.y.configure({enabled:true,folder:d.folder});assert.ok(d.y.status().waiting>0);assert.throws(()=>d.b.memory.get(row.id));
+    // One item waits for its parent, counted once although a pass can look at it twice.
+    await d.y.configure({enabled:true,folder:d.folder});assert.equal(d.y.status().waiting,1);assert.throws(()=>d.b.memory.get(row.id));
     await writeFile(join(changes,parent),saved);await d.y.sync();assert.equal(d.b.memory.get(row.id).content,'第二版中文偏好');
     await writeFile(join(changes,'00000000-0000-0000-0000-000000000000.json'),'{');await d.y.sync();assert.ok(d.y.status().waiting>0);
     await writeFile(join(d.folder,'StarportMemory','space.json'),'{}');await d.y.sync();assert.match(d.y.status().error,/标识/);assert.equal(d.b.memory.get(row.id).content,'第二版中文偏好');
+  }finally{await d.close();}
+});
+
+test('a pass with nothing new writes nothing and skips the comparison; a change from either side is still taken',async()=>{
+  const d=await devices();try{
+    for(let i=0;i<5;i++)d.a.memory.create({...input,content:'偏好第 '+i+' 条'},{confirmed:true});
+    d.a.instructions.update(null,{revision:0,content:'使用简短段落。'});
+    await d.pair();await d.settle();assert.equal(d.b.memory.list({view:'confirmed'}).items.length,5);
+    let looks=0;const reconcile=d.y.reconcile.bind(d.y);d.y.reconcile=()=>{looks++;return reconcile();};
+    const writes=()=>d.b.db.prepare('SELECT total_changes() AS n').get().n,before=writes();
+    await d.y.sync();assert.equal(looks,0);assert.equal(writes(),before);assert.equal(d.y.status().error,'');
+    const [row]=d.a.memory.list({view:'confirmed',limit:1}).items;d.a.memory.update(row.id,{revision:row.revision,content:'对方电脑改过的偏好'});
+    await d.x.sync();await d.y.sync();assert.ok(looks>0);assert.equal(d.b.memory.get(row.id).content,'对方电脑改过的偏好');
+    looks=0;const local=d.b.memory.get(row.id);d.b.memory.update(row.id,{revision:local.revision,content:'这台电脑改过的偏好'});
+    await d.y.sync();assert.ok(looks>0);await d.x.sync();assert.equal(d.a.memory.get(row.id).content,'这台电脑改过的偏好');
   }finally{await d.close();}
 });
 

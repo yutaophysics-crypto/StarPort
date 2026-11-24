@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="hub-token" content="__HUB_TOKEN__">
+  <meta name="color-scheme" content="dark">
+  <meta name="darkreader-lock">
+  <title>LaTeX · Starport</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <script src="/theme.js"></script>
+  <script defer src="/i18n.js?v=0.2.52"></script>
+  <link rel="stylesheet" href="/vendor/katex.min.css">
+  <script defer src="/vendor/katex.min.js"></script>
+  <link rel="stylesheet" href="/vendor/pdfjs/pdf_viewer.min.css">
+  <link rel="stylesheet" href="/latex/editor.css?v=0.2.4">
+  <script type="module" src="/latex/main.js?v=0.2.9"></script>
+</head>
+<body>
+  <header class="bar" id="bar">
+    <div id="editor-owner" class="editor-owner" hidden>
+      <span data-i18n="对话">对话</span>
+      <strong id="editor-owner-title"></strong>
+    </div>
+    <div class="bar-group grow">
+      <button id="tree-toggle" type="button" class="file-button" aria-controls="tree-pane" aria-expanded="false" title="显示或收起文件列表" data-i18n-title="显示或收起文件列表" disabled>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+        <span id="file-label" class="file-label"></span>
+      </button>
+      <span id="save-state" class="save-state" role="status"></span>
+    </div>
+    <div class="bar-group">
+      <button id="compile" type="button" class="action" title="编译 · Ctrl S" data-i18n-title="编译 · Ctrl S" disabled>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+        <span data-i18n="编译">编译</span>
+      </button>
+      <span id="build-state" class="build-state" role="status"></span>
+      <label class="toggle" title="公式、图、标题直接显示成排好的样子，光标移进去就显示源码" data-i18n-title="公式、图、标题直接显示成排好的样子，光标移进去就显示源码">
+        <input id="visual-mode" type="checkbox"><span data-i18n="可视">可视</span>
+      </label>
+      <label class="toggle" title="保存后自动编译；工作目录里的源码被改动时也会重新编译" data-i18n-title="保存后自动编译；工作目录里的源码被改动时也会重新编译">
+        <input id="auto-compile" type="checkbox" checked><span data-i18n="自动">自动</span>
+      </label>
+    </div>
+    <div class="bar-group">
+      <div class="segmented" role="group" aria-label="显示" data-i18n-aria-label="显示">
+        <button type="button" data-view="source" title="只看源码" data-i18n-title="只看源码" data-i18n="源码">源码</button>
+        <button type="button" data-view="split" title="源码和 PDF 并排" data-i18n-title="源码和 PDF 并排" data-i18n="并排">并排</button>
+        <button type="button" data-view="pdf" title="只看 PDF" data-i18n-title="只看 PDF">PDF</button>
+      </div>
+      <div class="segmented dock-only" role="group" aria-label="位置" data-i18n-aria-label="位置">
+        <button type="button" data-place="left" class="icon" title="停在对话左边" data-i18n-title="停在对话左边" aria-label="停在对话左边" data-i18n-aria-label="停在对话左边">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16" /><path d="M4 5h5.5v14H4z" fill="currentColor" stroke="none" opacity=".45"/></svg>
+        </button>
+        <button type="button" data-place="right" class="icon" title="停在对话右边" data-i18n-title="停在对话右边" aria-label="停在对话右边" data-i18n-aria-label="停在对话右边">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16"/><path d="M14.5 5H20v14h-5.5z" fill="currentColor" stroke="none" opacity=".45"/></svg>
+        </button>
+        <button type="button" data-place="window" class="icon" title="单独窗口" data-i18n-title="单独窗口" aria-label="单独窗口" data-i18n-aria-label="单独窗口">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>
+        </button>
+      </div>
+      <button id="close-editor" type="button" class="icon-button" title="关闭编辑器" data-i18n-title="关闭编辑器" aria-label="关闭编辑器" data-i18n-aria-label="关闭编辑器">×</button>
+    </div>
+  </header>
+
+  <section id="setup" class="setup" hidden></section>
+
+  <div id="banner" class="banner" role="alert" hidden></div>
+
+  <main id="work" class="work" data-view="split" hidden>
+    <section class="pane source-pane" aria-label="源码" data-i18n-aria-label="源码">
+      <nav id="tree-pane" class="tree-pane" aria-label="文件" data-i18n-aria-label="文件" hidden>
+        <div class="tree-head">
+          <span id="tree-title" class="tree-title"></span>
+          <button id="tree-refresh" type="button" class="icon-button small" title="重新读取文件列表" data-i18n-title="重新读取文件列表" aria-label="重新读取文件列表" data-i18n-aria-label="重新读取文件列表">↻</button>
+          <button id="tree-collapse" type="button" class="icon-button small" title="收起文件树" data-i18n-title="收起文件树" aria-label="收起文件树" data-i18n-aria-label="收起文件树" aria-controls="tree-pane">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+          </button>
+        </div>
+        <div id="tree" class="tree"></div>
+        <button id="lua-revoke" type="button" class="tree-foot" data-i18n="取消 LuaLaTeX 授权" hidden>取消 LuaLaTeX 授权</button>
+        <button id="change-root" type="button" class="tree-foot" data-i18n="更换主文件…">更换主文件…</button>
+      </nav>
+      <div id="tree-resize" class="tree-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-controls="tree-pane"
+        aria-label="调整文件树宽度" data-i18n-aria-label="调整文件树宽度" title="拖动调整宽度 · 双击还原" data-i18n-title="拖动调整宽度 · 双击还原"></div>
+      <div id="source" class="source"></div>
+    </section>
+    <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" tabindex="0" title="拖动调节比例 · 双击还原" data-i18n-title="拖动调节比例 · 双击还原"></div>
+    <section class="pane pdf-pane" data-pdf-theme="light" aria-label="PDF">
+      <div class="pdf-bar">
+        <button id="to-pdf" type="button" class="action subtle" title="在 PDF 中找到光标所在的位置 · Ctrl Alt →" data-i18n-title="在 PDF 中找到光标所在的位置 · Ctrl Alt →">
+          <span data-i18n="定位到 PDF">定位到 PDF</span>
+        </button>
+        <button id="pdf-snip" type="button" class="icon-button snip-button" aria-pressed="false" disabled
+          title="框选一块 PDF，作为图片附到输入框 · 也可以按住 Alt 直接拖动" data-i18n-title="框选一块 PDF，作为图片附到输入框 · 也可以按住 Alt 直接拖动"
+          aria-label="框选截图" data-i18n-aria-label="框选截图">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+        </button>
+        <span class="pdf-hint" data-i18n="双击跳到源码 · Alt 拖动截图">双击跳到源码 · Alt 拖动截图</span>
+        <span class="grow"></span>
+        <select id="pdf-theme" aria-label="PDF 主题" data-i18n-aria-label="PDF 主题" title="PDF 主题" data-i18n-title="PDF 主题">
+          <option value="light" data-i18n="浅色">浅色</option>
+          <option value="dark" data-i18n="深色">深色</option>
+        </select>
+        <button id="zoom-out" type="button" class="icon-button" aria-label="缩小" data-i18n-aria-label="缩小" title="缩小" data-i18n-title="缩小">−</button>
+        <button id="zoom-fit" type="button" class="zoom-label" title="适合宽度" data-i18n-title="适合宽度">100%</button>
+        <button id="zoom-in" type="button" class="icon-button" aria-label="放大" data-i18n-aria-label="放大" title="放大" data-i18n-title="放大">＋</button>
+        <a id="pdf-download" class="icon-button" href="/api/latex/pdf" download title="下载 PDF" data-i18n-title="下载 PDF" aria-label="下载 PDF" data-i18n-aria-label="下载 PDF" hidden>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        </a>
+      </div>
+      <div class="pdf-frame">
+        <div id="pdf-container" class="pdf-container" tabindex="0">
+          <div id="pdf-viewer" class="pdfViewer"></div>
+        </div>
+        <p id="pdf-empty" class="pdf-empty"></p>
+      </div>
+    </section>
+  </main>
+
+  <footer id="problems" class="problems" hidden>
+    <button id="problems-toggle" type="button" class="problems-toggle" aria-expanded="false" aria-controls="problem-list"></button>
+    <ol id="problem-list" class="problem-list" hidden></ol>
+  </footer>
+</body>
+</html>

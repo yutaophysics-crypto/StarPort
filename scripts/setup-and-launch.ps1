@@ -32,7 +32,10 @@ try {
         if (-not $StarportReady) {
             $StarportNpm = (Get-Command npm.cmd -ErrorAction Stop).Source
             Write-Output 'Installing the pinned StarPort dependencies...'
-            & $StarportNpm ci --no-audit --no-fund
+            # npm ci empties node_modules first, pulling files out from under a StarPort server that is still
+            # running and the agents it started; an existing installation is updated in place from the lockfile.
+            $StarportInstall = if (Test-Path -LiteralPath (Join-Path $StarportRoot 'node_modules')) { 'install' } else { 'ci' }
+            & $StarportNpm $StarportInstall --no-audit --no-fund
             if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed. Check the network connection and retry.' }
             [System.IO.Directory]::CreateDirectory((Split-Path -Parent $StarportStamp)) | Out-Null
             [System.IO.File]::WriteAllText($StarportStamp, $StarportLockHash)

@@ -36,7 +36,7 @@ globalThis.StarportContext = (() => {
 
   function current() {
     const data = state.chat && state.context?.binding === binding() ? state.context : {
-      status: ['codex', 'claude'].includes(currentId()) ? 'waiting' : 'unavailable'
+      status: ['codex', 'claude', 'ollama'].includes(currentId()) ? 'waiting' : 'unavailable'
     };
     // Also handles the previous server while it waits for busy agents to finish.
     // Never reuse its projected denominator or percentage as native capacity.

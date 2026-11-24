@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import { validateOptions } from './providers.mjs';
 import { redact } from './process.mjs';
 import { settleActivity } from './activity.mjs';
+import { PROVIDER_IDS } from './provider-ids.mjs';
 
 export const MAX_TRANSFER_BYTES = 120 * 1024 * 1024;
-const providers = new Set(['codex', 'claude', 'antigravity', 'deepseek']);
+const providers = new Set(PROVIDER_IDS);
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const string = (value, max, empty = false) => typeof value === 'string' && value.length <= max && (empty || value.trim().length > 0) && !value.includes('\0');
 const date = value => string(value, 40) && Number.isFinite(Date.parse(value));

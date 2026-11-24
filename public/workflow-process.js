@@ -75,6 +75,7 @@
       chatId: step.deskChatId,
       answer: step.status === 'running',
       autoOpen: false,
+      collapseButton: true,
       pending: (!turn.message || !!turn.message.deferredTrace) && !turn.error,
       lead: () => lead(step, turn),
       onOpen: () => load(key)
@@ -123,10 +124,21 @@
   }
 
   // live.js passes on packets for chats other than the open one; a desk's turn is one of them.
-  function deskMessage(chatId, message) {
-    const key = chatId + ':' + message?.id;
+  // A running turn comes as what changed since the last push; a turn not read yet, or missing an earlier
+  // push, is read again.
+  function deskMessage(chatId, message, change) {
+    const key = chatId + ':' + (message || change)?.id;
     const turn = turns.get(key);
     if (!turn) return;
+    if (!message) {
+      message = StarportLive.applyPatch(turn.message, change);
+      if (message === turn.message) return;
+      if (!message) {
+        turn.stale = true;
+        if (turn.loaded) load(key);
+        return;
+      }
+    }
     turn.message = turn.message ? StarportLive.preferMessage(turn.message, message) : message;
     // The finished turn is sent without its process log, which is read again when shown open.
     if (turn.message.deferredTrace) turn.loaded = false;

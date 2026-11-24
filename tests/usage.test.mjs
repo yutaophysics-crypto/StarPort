@@ -63,7 +63,7 @@ test('Claude quota retries an eligible empty report once while preserving native
 
 test('native Claude usage child sees preserved proxy settings and restricted/no-tools/no-prompt arguments',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'starport-usage-native-')),file=join(directory,'settings.json');await writeFile(file,JSON.stringify({env:{HTTPS_PROXY:'http://127.0.0.1:3217'},permissions:{blockReadsOutsideWorkingDirectories:true},disableAllHooks:true}));
-  const result=await readClaudeUsage({command:process.execPath,prefixArgs:[resolve('tests/fixtures/claude-usage-control.mjs'),'--restricted','--settings',file]},directory);assert.equal(result.status,'ok');assert.equal(result.windows[0].remainingPercent,85);
+  const result=await readClaudeUsage({command:process.execPath,prefixArgs:[resolve('tests/fixtures/claude-usage-control.mjs'),'--restricted','--mcp-config',join(directory,'missing-mcp.json'),'--settings',file]},directory);assert.equal(result.status,'ok');assert.equal(result.windows[0].remainingPercent,85);
 });
 test('usage reader coalesces only in-flight requests and never returns a previous account snapshot on failure',async()=>{
   let calls=0,fail=false;const reader=new UsageReader('',async()=>{calls++;await new Promise(r=>setTimeout(r,10));if(fail)throw new Error('offline');return{status:'ok',windows:[]};});

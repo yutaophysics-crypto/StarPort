@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { windowsAppCommand } from './window-launcher.mjs';
-import { chimeWav } from './notifications.mjs';
+import { chimeWav, QUESTION_CHIME } from './notifications.mjs';
 
 // Drives scripts/notifier.ps1, a small WPF helper that owns the popup, the
 // chime and the taskbar flash. It starts on the first notification and exits
@@ -19,9 +19,9 @@ export class WindowsNotifier{
     this.available=platform==='win32'&&existsSync(this.script);
     this.child=null;this.idle=null;this.onOpen=null;
   }
-  chime(){
-    const file=join(this.dataDir,'notify-chime.wav');
-    if(!existsSync(file)){mkdirSync(this.dataDir,{recursive:true});writeFileSync(file,chimeWav());}
+  chime(tone='complete'){
+    const question=tone==='question',file=join(this.dataDir,question?'notify-question.wav':'notify-chime.wav');
+    if(!existsSync(file)){mkdirSync(this.dataDir,{recursive:true});writeFileSync(file,question?chimeWav(44100,QUESTION_CHIME):chimeWav());}
     return file;
   }
   icon(){return join(this.root,'public','assets','starport-desktop-azure.ico');}
@@ -45,7 +45,7 @@ export class WindowsNotifier{
   show(item){
     let launch=null;
     try{launch=windowsAppCommand(this.url());}catch{}
-    this.send({type:'show',...item,titles:WINDOW_TITLES,chime:item.sound?this.chime():'',icon:this.icon(),launch});
+    this.send({type:'show',...item,titles:WINDOW_TITLES,chime:item.sound?this.chime(item.tone):'',icon:this.icon(),launch});
   }
   dismiss(){if(this.child)this.send({type:'dismiss'});}
   stop(){

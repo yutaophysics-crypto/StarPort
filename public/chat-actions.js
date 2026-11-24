@@ -60,6 +60,8 @@ globalThis.StarportChatActions=(()=>{
       item('移动到分组…',()=>showMove(chat)),
       item('导出对话',()=>globalThis.StarportTransfer.openExport(chat)),
       item('更改工作目录…',()=>changeWorkspace(chat),{idle:true,busy}),
+      chat.group_id&&folderKey(room(chat.group_id)?.workspace)!==folderKey(chat.workspace)?item('设为房间默认工作目录',()=>saveRoomWorkspace(chat.group_id,chat.workspace,'已设为房间默认工作目录')):null,
+      item('知识库…',()=>globalThis.StarportKnowledge?.open('chat',chat.id,chat.title)),
       separator(),
       item('在资源管理器中打开工作目录',()=>api('/folders/open','POST',{path:chat.workspace}).catch(e=>toast(e.message))),
       item('复制工作目录路径',()=>navigator.clipboard.writeText(chat.workspace).then(()=>toast('已复制')).catch(()=>toast(chat.workspace))),
@@ -76,6 +78,9 @@ globalThis.StarportChatActions=(()=>{
       item('在此房间新建对话',()=>newChatIn(group.id)),
       ...group.id?[
         item('伙伴进出…',()=>globalThis.StarportAgentsRoom?.openRosterManager(group.id)),
+        item('知识库…',()=>globalThis.StarportKnowledge?.open('room',group.id,group.name)),
+        item('默认工作目录…',()=>chooseRoomWorkspace(group)),
+        ...room(group.id)?.workspace?[item('不再使用默认工作目录',()=>saveRoomWorkspace(group.id,null,'这个房间的新对话不再使用默认工作目录'))]:[],
         item('工作流库…',()=>globalThis.StarportWorkflows?.openLibrary()),
         item('工作流设置…',()=>globalThis.StarportWorkflows?.openSettings()),
         separator(),
@@ -146,6 +151,17 @@ globalThis.StarportChatActions=(()=>{
     });
     const update=()=>{name.hidden=group.value!=='__new__';submit.disabled=group.value==='__new__'?!name.value.trim():group.value===(chat.group_id||'');};
     group.onchange=()=>{update();if(!name.hidden)name.focus();};name.oninput=update;update();group.focus();
+  }
+  // A room's default working folder: where new conversations started in it begin.
+  const room=id=>state.groups.find(g=>g.id===id);
+  async function saveRoomWorkspace(groupId,workspace,message){
+    try{await api('/groups/'+groupId+'/workspace','PUT',{workspace});await refresh();toast(message);}
+    catch(e){toast(notice(e.message));}
+  }
+  function chooseRoomWorkspace(group){
+    const current=room(group.id)?.workspace;
+    openFolderPicker(current||state.chat?.workspace||state.workspace,path=>saveRoomWorkspace(group.id,path,'已设为房间默认工作目录'),
+      t('选择「{name}」的默认工作目录',{name:group.name}));
   }
   function changeWorkspace(chat){
     openFolderPicker(chat.workspace,async path=>{

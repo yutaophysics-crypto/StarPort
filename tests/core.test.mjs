@@ -43,6 +43,17 @@ test('Claude stream normalizer separates nested agents and surfaces failed resul
   assert.ok(!child.some(e=>e.type==='delta'));assert.equal(child.find(e=>e.type==='activity').item.scope,'child');
   const result=parseEvent('claude',{type:'result',is_error:true,errors:['account disabled'],session_id:'s'},state);assert.ok(result.some(e=>e.type==='error'&&e.message==='account disabled'));
 });
+test('a Claude API error is reported once and does not replace the reply or its model sample',()=>{
+  const state={},error="API Error: Claude's response exceeded the 128000 output token maximum. To configure this behavior, set the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable.";
+  parseEvent('claude',{type:'system',subtype:'init',model:'claude-opus-5-5',session_id:'s'},state);
+  parseEvent('claude',{type:'assistant',message:{id:'m1',model:'claude-opus-5-5',content:[{type:'text',text:'先读一下代码。'}]}},state);
+  // The CLI reports the error as a made-up assistant message before the failed result.
+  const synthetic=parseEvent('claude',{type:'assistant',error:'max_output_tokens',message:{id:'m2',model:'<synthetic>',usage:{input_tokens:0,output_tokens:0},content:[{type:'text',text:error}]}},state);
+  assert.deepEqual(synthetic,[]);assert.equal(state.model,'claude-opus-5-5');
+  const result=parseEvent('claude',{type:'result',subtype:'success',is_error:true,result:error,session_id:'s'},state);
+  assert.ok(!result.some(e=>['delta','replace','final-answer'].includes(e.type)));
+  assert.equal(result.find(e=>e.type==='error').message,error);
+});
 test('Antigravity result uses nested protocol envelope and errors do not become success',()=>{
   const state={};const out=parseEvent('antigravity',{event:'result',result:{status:'ERROR',error:'login required',conversation_id:'a',response:''}},state);
   assert.equal(state.terminal,true);assert.ok(out.some(e=>e.type==='error'));assert.equal(out[0].id,'a');
@@ -79,7 +90,7 @@ test('stopped native goals keep the paused session and resume without replaying 
   await r.start(chat.id,'one');await r.active.get(chat.id).done;
   assert.equal(s.session(chat.id,'codex').native_id,'preserved-goal');
   await r.start(chat.id,'continue');await r.active.get(chat.id).done;
-  assert.equal(captured[1].session,'preserved-goal');assert.match(captured[1].prompt,/\ncontinue$/);assert.doesNotMatch(captured[1].prompt,/--- 用户 ---/);assert.equal(captured[1].goalObjective,'continue');s.close();
+  assert.equal(captured[1].session,'preserved-goal');assert.equal(captured[1].prompt,'continue');assert.doesNotMatch(captured[1].prompt,/--- 用户 ---/);assert.equal(captured[1].goalObjective,'continue');s.close();
 });
 test('HTTP blocks cross-site calls and unauthorized reads; groups roundtrip',async t=>{
   const hub=createHub({port:0,dataDir:mkdtempSync(join(tmpdir(),'hub-http-')),registry:fakeRegistry});const port=await hub.listen();t.after(()=>hub.close());const base='http://127.0.0.1:'+port;

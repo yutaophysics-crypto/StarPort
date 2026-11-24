@@ -1,10 +1,28 @@
 'use strict';
 globalThis.StarportTransfer = (() => {
+  const THEMES = [
+    { id: 'sea', label: () => t('蔚蓝'), desc: () => t('海面与星空') },
+    { id: 'port', label: () => t('星港'), desc: () => t('未来星际飞船港') },
+    { id: 'deep-space', label: () => t('深空'), desc: () => t('星际飞船航站') }
+  ];
   const dialog = el('dialog', { id: 'chat-transfer-dialog', class: 'chat-transfer-dialog', 'aria-labelledby': 'chat-transfer-title' });
   document.body.append(dialog);
   let busy = false, generation = 0, returnFocus;
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   dialog.addEventListener('close', () => { generation++; returnFocus?.focus(); });
+  function defaultExportTheme() {
+    const active = globalThis.StarportTheme?.theme;
+    return THEMES.some(item => item.id === active) ? active : 'sea';
+  }
+  function safeName(title) {
+    return (String(title || '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim().slice(0, 80) || 'conversation');
+  }
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = el('a', { href: url, download: filename });
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
   function shell(title, content, buttons) {
     returnFocus = document.activeElement;
     const close = el('button', { type: 'button', class: 'icon-button', text: '×', 'aria-label': t('关闭') });
@@ -19,29 +37,151 @@ globalThis.StarportTransfer = (() => {
   }
   function openExport(chat = state.chat) {
     if (!chat) return;
-    const file = el('button', { type: 'button', id: 'export-conversation-file', class: 'primary-button', text: t('导出会话文件') });
-    const markdown = el('button', { type: 'button', class: 'secondary-button', text: t('导出 Markdown') });
-    const error = el('p', { class: 'error-note', role: 'alert' }); error.hidden = true;
-    const close = shell('导出对话', [
-      el('h3', { text: chat.title }),
+    let mode = 'html';
+    let selectedTheme = defaultExportTheme();
+
+    const htmlTab = el('button', { type: 'button', role: 'tab', class: 'export-mode-tab', text: 'HTML', 'aria-selected': 'true' });
+    const mdTab = el('button', { type: 'button', role: 'tab', class: 'export-mode-tab', text: 'Markdown', 'aria-selected': 'false' });
+    const fileTab = el('button', { type: 'button', role: 'tab', class: 'export-mode-tab', text: t('会话文件'), 'aria-selected': 'false' });
+    const tabs = el('div', { class: 'export-mode-tabs', role: 'tablist' }, [htmlTab, mdTab, fileTab]);
+
+    const themeCards = THEMES.map(spec => {
+      const card = el(
+        'button',
+        {
+          type: 'button',
+          class: 'export-theme-card',
+          'data-export-theme': spec.id,
+          'aria-pressed': String(spec.id === selectedTheme)
+        },
+        [
+          el('span', { class: 'export-theme-swatch', 'aria-hidden': 'true' }),
+          el('b', { text: spec.label() }),
+          el('small', { text: spec.desc() })
+        ]
+      );
+      card.onclick = () => { if (!busy) selectTheme(spec.id); };
+      return { id: spec.id, card };
+    });
+
+    const htmlPane = el('div', { class: 'export-pane' }, [
+      el('p', { class: 'muted', text: t('独立网页文件，适合阅读与分享，完整保留公式、代码与排版；打开后也可随时切换主题。') }),
+      el('div', { class: 'export-theme-grid', role: 'group', 'aria-label': t('界面主题') }, themeCards.map(c => c.card))
+    ]);
+
+    const mdPane = el('div', { class: 'export-pane', hidden: true }, [
+      el('p', { class: 'muted', text: t('导出朴素的纯文本 Markdown，无额外排版装饰，适合交给 AI 阅读。') })
+    ]);
+
+    const filePane = el('div', { class: 'export-pane', hidden: true }, [
       el('p', { text: t('会话文件可在另一台电脑的星港中导入，继续这段对话。') }),
       el('p', { class: 'muted', text: t('包含消息、时间、已保存的执行过程和上传附件。工作目录中的文件需另行搬迁；文件夹引用需在新电脑重新添加。') }),
-      el('p', { class: 'muted', text: t('长期记忆使用单独的记忆同步；账号登录、任务队列和权限设置不随会话迁移。') }),
+      el('p', { class: 'muted', text: t('长期记忆使用单独的记忆同步；账号登录、任务队列和权限设置不随会话迁移。') })
+    ]);
+
+    const cancelBtn = el('button', { type: 'button', class: 'secondary-button', text: t('取消') });
+    const htmlBtn = el('button', { type: 'button', id: 'export-html-file', class: 'primary-button', text: t('导出 HTML') });
+    const copyMdBtn = el('button', { type: 'button', class: 'secondary-button', text: t('复制'), hidden: true });
+    const markdownBtn = el('button', { type: 'button', id: 'export-markdown-file', class: 'primary-button', text: t('导出 Markdown'), hidden: true });
+    const fileBtn = el('button', { type: 'button', id: 'export-conversation-file', class: 'primary-button', text: t('导出会话文件'), hidden: true });
+    const error = el('p', { class: 'error-note', role: 'alert' }); error.hidden = true;
+
+    const close = shell('导出对话', [
+      el('h3', { text: chat.title }),
+      tabs,
+      htmlPane,
+      mdPane,
+      filePane,
       error
-    ], [markdown, file]);
-    markdown.onclick = () => { window.open('/api/chats/' + chat.id + '/export', '_blank', 'noopener'); dialog.close(); };
-    file.onclick = async () => {
-      if (busy) return; busy = true; error.hidden = true;
-      file.disabled = markdown.disabled = close.disabled = true; file.textContent = t('正在导出…');
+    ], [cancelBtn, copyMdBtn, htmlBtn, markdownBtn, fileBtn]);
+
+    function selectTheme(id) {
+      selectedTheme = id;
+      for (const item of themeCards) item.card.setAttribute('aria-pressed', String(item.id === id));
+    }
+
+    function syncMode(nextMode) {
+      mode = nextMode;
+      error.hidden = true;
+      htmlTab.setAttribute('aria-selected', String(mode === 'html'));
+      mdTab.setAttribute('aria-selected', String(mode === 'markdown'));
+      fileTab.setAttribute('aria-selected', String(mode === 'starport'));
+      htmlPane.hidden = mode !== 'html';
+      mdPane.hidden = mode !== 'markdown';
+      filePane.hidden = mode !== 'starport';
+      htmlBtn.hidden = mode !== 'html';
+      copyMdBtn.hidden = markdownBtn.hidden = mode !== 'markdown';
+      fileBtn.hidden = mode !== 'starport';
+      cancelBtn.hidden = mode === 'markdown';
+    }
+
+    function setControlsDisabled(disabled) {
+      [htmlTab, mdTab, fileTab, cancelBtn, copyMdBtn, htmlBtn, markdownBtn, fileBtn, close, ...themeCards.map(c => c.card)].forEach(node => {
+        node.disabled = disabled;
+      });
+    }
+
+    async function fetchTextExport(query, expectedType) {
+      const response = await fetch(`/api/chats/${encodeURIComponent(chat.id)}/export?${query}`, { headers: { 'X-Hub-Token': token } });
+      if (!response.ok) {
+        let msg = response.statusText;
+        try { msg = (await response.json()).error || msg; } catch {}
+        throw new Error(msg);
+      }
+      if (expectedType && !(response.headers.get("content-type") || '').toLowerCase().includes(expectedType)) {
+        throw new Error(t('后台仍是旧版本，尚未加载最新导出功能。请等待当前任务结束、星港重启后再试。'));
+      }
+      return response.text();
+    }
+
+    syncMode('html');
+    htmlTab.onclick = () => { if (!busy) syncMode('html'); };
+    mdTab.onclick = () => { if (!busy) syncMode('markdown'); };
+    fileTab.onclick = () => { if (!busy) syncMode('starport'); };
+    cancelBtn.onclick = () => { if (!busy) dialog.close(); };
+
+    htmlBtn.onclick = async () => {
+      if (busy) return; busy = true; error.hidden = true; setControlsDisabled(true);
+      htmlBtn.textContent = t('正在导出…');
       try {
-        const response = await fetch('/api/chats/' + chat.id + '/export?format=starport', { headers: { 'X-Hub-Token': token } });
+        const html = await fetchTextExport(`format=html&theme=${encodeURIComponent(selectedTheme)}&lang=${encodeURIComponent(i18n.language)}`, 'text/html');
+        downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), safeName(chat.title) + '.html');
+        dialog.close(); toast('HTML 已导出');
+      } catch (e) { error.textContent = notice(e.message); error.hidden = false; }
+      finally { busy = false; setControlsDisabled(false); htmlBtn.textContent = t('导出 HTML'); }
+    };
+
+    copyMdBtn.onclick = async () => {
+      if (busy) return; busy = true; error.hidden = true; setControlsDisabled(true);
+      try {
+        const md = await fetchTextExport(`format=markdown&lang=${encodeURIComponent(i18n.language)}`);
+        await navigator.clipboard.writeText(md);
+        toast('已复制 Markdown');
+      } catch (e) { error.textContent = notice(e.message || '复制失败'); error.hidden = false; }
+      finally { busy = false; setControlsDisabled(false); }
+    };
+
+    markdownBtn.onclick = async () => {
+      if (busy) return; busy = true; error.hidden = true; setControlsDisabled(true);
+      markdownBtn.textContent = t('正在导出…');
+      try {
+        const md = await fetchTextExport(`format=markdown&lang=${encodeURIComponent(i18n.language)}`);
+        downloadBlob(new Blob([md], { type: 'text/markdown;charset=utf-8' }), safeName(chat.title) + '.md');
+        dialog.close(); toast('Markdown 已导出');
+      } catch (e) { error.textContent = notice(e.message); error.hidden = false; }
+      finally { busy = false; setControlsDisabled(false); markdownBtn.textContent = t('导出 Markdown'); }
+    };
+
+    fileBtn.onclick = async () => {
+      if (busy) return; busy = true; error.hidden = true; setControlsDisabled(true);
+      fileBtn.textContent = t('正在导出…');
+      try {
+        const response = await fetch('/api/chats/' + encodeURIComponent(chat.id) + '/export?format=starport', { headers: { 'X-Hub-Token': token } });
         if (!response.ok) throw new Error((await response.json()).error);
-        const blob = await response.blob(), url = URL.createObjectURL(blob);
-        const link = el('a', { href: url, download: (chat.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'conversation') + '.starport.json' });
-        document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+        downloadBlob(await response.blob(), safeName(chat.title) + '.starport.json');
         dialog.close(); toast('会话文件已导出');
       } catch (e) { error.textContent = notice(e.message); error.hidden = false; }
-      finally { busy = false; file.disabled = markdown.disabled = close.disabled = false; file.textContent = t('导出会话文件'); }
+      finally { busy = false; setControlsDisabled(false); fileBtn.textContent = t('导出会话文件'); }
     };
   }
   function openImport() {

@@ -13,7 +13,7 @@ import { MAX_INPUT_CHARS, validateInput } from './interactions.mjs';
 
 // Thousand estimated history tokens a fresh session receives, per tool. These are Starport
 // budgets, separate from model windows and the conservative Antigravity transport byte guard.
-export const DEFAULT_BUDGETS = { codex: 100, claude: 100, antigravity: 60, deepseek: 60 };
+export const DEFAULT_BUDGETS = { codex: 100, claude: 100, antigravity: 100, deepseek: 60, ollama: 60 };
 export const DEFAULT_SUMMARIZERS = DEFAULT_PLANNERS.map(p => ({ ...p }));
 // After compaction the verbatim tail is at most this share of the budget, leaving room for
 // many turns (and model switches) before the next compaction.

@@ -36,12 +36,15 @@ export function claudeContext(usage,windowTokens,model) {
   const input=count(usage?.input_tokens),read=count(usage?.cache_read_input_tokens??0),write=count(usage?.cache_creation_input_tokens??0);
   return contextSample({usedTokens:input!==null&&read!==null&&write!==null?input+read+write:null,windowTokens,model,basis:'claude-input'});
 }
-export function sessionFingerprint(runtime,chat,options,memoryEpoch=0,instructionFingerprint='') {
+export function sessionFingerprint(runtime,chat,options) {
+  return createHash('sha256').update(JSON.stringify({runtime,workspace:chat.workspace,worktree:options.worktree||false,memoryPolicy:MEMORY_RECALL_POLICY,historyPolicy:HISTORY_CONTEXT_POLICY})).digest('hex');
+}
+export function legacySessionFingerprint(runtime,chat,options,memoryEpoch=0,instructionFingerprint='') {
   return createHash('sha256').update(JSON.stringify({runtime,workspace:chat.workspace,worktree:options.worktree||false,memoryPolicy:MEMORY_RECALL_POLICY,historyPolicy:HISTORY_CONTEXT_POLICY,...memoryEpoch?{memoryEpoch}:{},...instructionFingerprint?{projectId:chat.project_id||null,instructionFingerprint}:{}})).digest('hex');
 }
 export function contextBinding(chat,options) {
   return JSON.stringify([chat.provider,chat.workspace,options.worktree||false,options.model||'',options.provider||'']);
 }
 export function emptyContext(provider) {
-  return {status:['codex','claude'].includes(provider)?'waiting':'unavailable',usedTokens:null,windowTokens:null,percent:null};
+  return {status:['codex','claude','ollama'].includes(provider)?'waiting':'unavailable',usedTokens:null,windowTokens:null,percent:null};
 }

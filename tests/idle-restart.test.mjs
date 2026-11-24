@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canRestart,waitForIdle,readHubSnapshot } from '../scripts/restart-when-idle.mjs';
+import { mkdtemp, writeFile, utimes, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { canRestart,waitForIdle,readHubSnapshot,acquireRestartLock } from '../scripts/restart-when-idle.mjs';
 const root=process.cwd(),sample=active=>({health:{app:'harness-hub',root},state:{active}});
 test('idle updater waits through busy runs and API failures; validates the server root',async()=>{
   assert.equal(canRestart(sample(['running']),root),false);assert.equal(canRestart(sample([]),root),true);
@@ -30,4 +33,17 @@ test('idle snapshot includes every account worker and refuses to restart when it
   const snapshot=await readHubSnapshot('http://127.0.0.1:9999',root);
   assert.equal(canRestart(snapshot,root),false);
   unavailable=true;await assert.rejects(readHubSnapshot('http://127.0.0.1:9999',root),/Cannot confirm account worker state/);
+});
+
+test('restart lock respects a fresh empty lock but reclaims a stale empty lock left by an interrupted watcher',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'starport-lock-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const lockFile=join(dir,'idle-restart.lock');
+  await writeFile(lockFile,'');
+  assert.equal(await acquireRestartLock(dir),null);
+  const old=new Date(Date.now()-15000);
+  await utimes(lockFile,old,old);
+  const release=await acquireRestartLock(dir);
+  assert.equal(typeof release,'function');
+  await release();
 });

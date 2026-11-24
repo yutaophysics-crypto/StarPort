@@ -18,13 +18,13 @@ function fixture(t){
   db.close();
   function meta(id=child,owner=parent,state='SUBAGENT_STATE_ALIVE'){
     const folder=join(brain,owner,'.system_generated','subagents');mkdirSync(folder,{recursive:true});
-    writeFileSync(join(folder,id+'.json'),JSON.stringify({conversationId:id,subagentDescriptor:{role:'Import format researcher',typeName:'research'},state,spawnStepIndex:29}));
+    writeFileSync(join(folder,id+'.json'),JSON.stringify({conversationId:id,subagentDescriptor:{role:'Chamon researcher',typeName:'research'},state,spawnStepIndex:29}));
   }
   function transcript(id=child,at=start){
     const folder=join(brain,id,'.system_generated','logs');mkdirSync(folder,{recursive:true});
     const file=join(folder,'transcript.jsonl');
-    writeFileSync(file,[{step_index:0,type:'SYSTEM_MESSAGE',created_at:new Date(at).toISOString(),content:'<SYSTEM_MESSAGE>\n[Message] timestamp=now sender='+parent+' priority=MESSAGE_PRIORITY_HIGH content=查找 CSV 导入字段\n</SYSTEM_MESSAGE>'},
-      {step_index:1,type:'PLANNER_RESPONSE',created_at:new Date(at+1000).toISOString(),thinking:'PRIVATE_REASONING',tool_calls:[{name:'view_file',args:{toolAction:'"Reading import definitions"'}}]}].map(row=>JSON.stringify(row)+'\n').join(''));
+    writeFileSync(file,[{step_index:0,type:'SYSTEM_MESSAGE',created_at:new Date(at).toISOString(),content:'<SYSTEM_MESSAGE>\n[Message] timestamp=now sender='+parent+' priority=MESSAGE_PRIORITY_HIGH content=查找 45° transport operators\n</SYSTEM_MESSAGE>'},
+      {step_index:1,type:'PLANNER_RESPONSE',created_at:new Date(at+1000).toISOString(),thinking:'PRIVATE_REASONING',tool_calls:[{name:'view_file',args:{toolAction:'"Reading transport definitions"'}}]}].map(row=>JSON.stringify(row)+'\n').join(''));
     return file;
   }
   function summary(id=child,owner=parent,status='CASCADE_RUN_STATUS_RUNNING',idle=1,killed=0,count=2,at=start+1000){
@@ -38,7 +38,7 @@ test('real agy metadata + assignment + native summary expose task and nested cou
   const f=fixture(t);f.meta(nested,child);f.transcript(nested,start+2000);f.summary(nested,child);
   const rows=await f.reader.snapshot(parent,{since:start-1000});
   assert.equal(rows.length,2);assert.equal(rows[1].depth,1);assert.equal(rows[1].parentId,child);
-  assert.equal(rows[0].task,'查找 CSV 导入字段');assert.equal(rows[0].activity,'Reading import definitions');
+  assert.equal(rows[0].task,'查找 45° transport operators');assert.equal(rows[0].activity,'Reading transport definitions');
   assert.equal(rows[0].status,'running');assert.equal(rows[0].startedAt,start);
   assert.ok(!JSON.stringify(rows).includes('PRIVATE_REASONING'));
 });
@@ -55,7 +55,7 @@ test('old children, unrelated sessions, malformed metadata and incomplete JSONL 
   assert.equal((await f.reader.snapshot(parent,{since:start})).length,1);
   assert.deepEqual(await f.reader.snapshot('../../outside'),[]);
   const file=f.transcript();const update=JSON.stringify({step_index:2,type:'PLANNER_RESPONSE',created_at:new Date(start+5000).toISOString(),tool_calls:[{name:'run_command',args:{toolAction:'"Checking results"'}}]});
-  appendFileSync(file,update.slice(0,40));assert.equal((await f.reader.snapshot(parent,{since:start}))[0].activity,'Reading import definitions');
+  appendFileSync(file,update.slice(0,40));assert.equal((await f.reader.snapshot(parent,{since:start}))[0].activity,'Reading transport definitions');
   appendFileSync(file,update.slice(40)+'\n');assert.equal((await f.reader.snapshot(parent,{since:start}))[0].activity,'Checking results');
 });
 test('duplicate events preserve clocks; only confirmed completions count as completed',()=>{
@@ -86,7 +86,7 @@ test('history recovery is bounded by the next turn and persists completed native
   store.db.prepare('UPDATE messages SET created=? WHERE id=?').run(new Date(start-1000).toISOString(),message.id);
   const runner=new Runner(store,{},()=>{});runner.subagentReader=f.reader;
   const recovered=(await runner.messages(chat.id))[0];assert.equal(recovered.details.subagents[0].status,'complete');
-  assert.equal(store.messages(chat.id)[0].details.subagents[0].task,'查找 CSV 导入字段');store.close();
+  assert.equal(store.messages(chat.id)[0].details.subagents[0].task,'查找 45° transport operators');store.close();
 });
 
 test('runner polls native children during a quiet parent turn and does not manufacture activity on reread',async t=>{

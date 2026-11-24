@@ -9,8 +9,10 @@ import { deepseekDesktopRuntime } from './deepseek-desktop.mjs';
 import { ContextLimits } from './context-limits.mjs';
 import { ExternalTools } from './external-tools/grants.mjs';
 import {readClaudeNetworkPolicy,applyClaudeNetworkPolicy,requireClaudeNetworkProtection} from './claude-network.mjs';
+import { ollamaHost, ollamaRequest } from './adapters/ollama.mjs';
 
 const magi = JSON.parse(readFileSync(new URL('./magi-hosts.json', import.meta.url), 'utf8'));
+const RESOLVE_REUSE_MS = 10000;
 const select = (key, label, values, value = '') => ({ key, label, type: 'select', default: value,
   choices: values.map(v => Array.isArray(v) ? { value: v[0], label: v[1], ...(v[2]?{description:v[2]}:{}) } : { value: v, label: v || '跟随工具默认' }) });
 const model = { key: 'model', label: '模型', type: 'text', default: '', placeholder: '留空使用工具当前默认模型' };
@@ -42,11 +44,16 @@ export const PROVIDERS = {
       {key:'agent',label:'Agent',type:'text',default:'',placeholder:'可选，使用已有 Agent 名称'},
       {key:'sandbox',label:'启用终端沙箱',type:'checkbox',default:true}],
     notes:'允许所有工具会自动批准命令执行和文件读写；终端沙箱独立控制。选择遵循原工具权限时，无法弹窗审批的操作会被拒绝。' },
-  deepseek:{id:'deepseek',name:'DeepSeek Harness',color:'#5b68b5',initials:'DS',transport:'Native SDK JSON-RPC',
+  deepseek:{id:'deepseek',name:'DeepSeek Harness',color:'#5b68b5',initials:'DS',transport:'Native SDK JSON-RPC',sessions:false,
     description:'原生 Harness 会话、工具过程和结果',source:'https://github.com/deepseek-ai/deepseek-harness',
     fields:[model,{key:'provider',label:'模型服务',type:'text',default:'',placeholder:'留空使用 Harness 默认服务'},
       effort],
-    notes:'通过官方 SDK 使用 Harness 的模型和工具。当前发布版每轮创建独立执行会话，由本地对话记录补充上下文；不把其他工具的内部状态伪装成原生会话。'}
+    notes:'通过官方 SDK 使用 Harness 的模型和工具。当前发布版每轮创建独立执行会话，由本地对话记录补充上下文；不把其他工具的内部状态伪装成原生会话。'},
+  // Plain text in, plain text out: no files, commands or Starport tools.
+  ollama:{id:'ollama',name:'Ollama',color:'#6f7378',initials:'OL',transport:'Ollama 本地 API',sessions:false,contextTools:false,
+    description:'在本机运行已下载的开源模型',source:'https://docs.ollama.com/api',
+    fields:[model,effort],
+    notes:'使用本机 Ollama 服务（默认 http://127.0.0.1:11434，可用 OLLAMA_HOST 修改）。只做文字问答，不读写文件、不运行命令，也不调用星港工具；每轮由星港附带对话记录。模型需要先在终端用 ollama pull 下载。'}
 };
 
 export function validateOptions(provider, raw = {}) {
@@ -93,7 +100,8 @@ export function discover(root, id, override = {}) {
   let command = onPath(id === 'antigravity' ? 'agy' : id === 'deepseek' ? 'dsh' : id);
   if (command) return { command, prefixArgs: [] };
   const candidates = id === 'claude' ? [join(home,'.local','bin','claude.exe')] : id === 'antigravity' ?
-    [join(local,'agy','bin','agy.exe'),join(root,'.runtime','antigravity','agy.exe')] : [];
+    [join(local,'agy','bin','agy.exe'),join(root,'.runtime','antigravity','agy.exe')] : id === 'ollama' ?
+    [join(local,'Programs','Ollama','ollama.exe'),'/Applications/Ollama.app/Contents/Resources/ollama'] : [];
   if (id === 'codex') {
     const dir = join(local,'OpenAI','Codex','bin');
     if (existsSync(dir)) for (const entry of readdirSync(dir).reverse()) candidates.push(join(dir,entry,'codex.exe'));
@@ -122,7 +130,7 @@ export function claudeCapabilities(version){
 }
 
 export class ProviderRegistry {
-  constructor(root, dataDir, store) { this.root=root; this.dataDir=dataDir; this.store=store; this.cache=new Map();this.modelCatalog=new ModelCatalog(root);this.usageReader=new UsageReader(root);this.contextLimitsReader=new ContextLimits();this.externalTools=new ExternalTools({root,dataDir}); }
+  constructor(root, dataDir, store) { this.root=root; this.dataDir=dataDir; this.store=store; this.cache=new Map();this.probing=new Map();this.resolved=new Map();this.modelCatalog=new ModelCatalog(root);this.usageReader=new UsageReader(root);this.contextLimitsReader=new ContextLimits();this.externalTools=new ExternalTools({root,dataDir}); }
   contextLimits(id,cwd,model,refresh=false){return this.contextLimitsReader.get(id,this.resolve(id),cwd,model,refresh);}
   cachedContextLimits(id,cwd,model){return this.contextLimitsReader.peek(id,this.resolve(id),cwd,model);}
   usage(id,cwd,options={}){return this.usageReader.get(id,this.resolve(id),cwd,options);}
@@ -138,16 +146,36 @@ export class ProviderRegistry {
     }
     return runtime;
   }
-  verification(id,runtime=this.resolve(id)) {
+  // For views. Resolving a Claude run reads the tool grants and rechecks each tool's path on disk
+  // (tens of milliseconds); the context meter is recomputed on every push of a running reply and
+  // every page's poll, so a view reuses a resolution for a few seconds. Launches resolve afresh.
+  cachedResolve(id,cwd) {
+    const key=id+'\0'+(cwd||''),hit=this.resolved.get(key),now=Date.now();
+    if(hit&&now-hit.at<RESOLVE_REUSE_MS)return hit.runtime;
+    const runtime=this.resolve(id,cwd);this.resolved.delete(key);this.resolved.set(key,{at:now,runtime});
+    if(this.resolved.size>64)this.resolved.delete(this.resolved.keys().next().value);
+    return runtime;
+  }
+  verification(id,runtime=this.cachedResolve(id)) {
     const saved=this.store.setting('verification',{})[id];
     if(saved&&runtime)try{if(runtimeFingerprint(JSON.parse(saved.fingerprint))===runtimeFingerprint(runtime))return saved;}catch{}
     return null;
   }
   // Read saved call outcomes for live updates without launching any CLI probes.
   verifications(){return Object.fromEntries(Object.keys(PROVIDERS).map(id=>[id,this.verification(id)]).filter(([,value])=>value));}
+  // A check starts the program once or twice (Claude: about seven seconds). Callers that ask while
+  // one is under way share it: the page's list, every turn's start and each open window.
   async probe(id, refresh = false) {
-    const found = this.resolve(id), cached = this.cache.get(id), fingerprint = runtimeFingerprint(found);
+    const fingerprint = runtimeFingerprint(this.resolve(id)), cached = this.cache.get(id);
     if (!refresh && cached?.fingerprint === fingerprint) return cached.value;
+    const pending = this.probing.get(id);
+    if (!refresh && pending?.fingerprint === fingerprint) return pending.promise;
+    const promise = this.check(id).finally(() => { if (this.probing.get(id)?.promise === promise) this.probing.delete(id); });
+    this.probing.set(id, { fingerprint, promise });
+    return promise;
+  }
+  async check(id) {
+    const found = this.resolve(id), fingerprint = runtimeFingerprint(found);
     let value = { ...PROVIDERS[id], installed:!!found, command:found?.command || '', prefixArgs:found?.prefixArgs || [],
       status:found ? 'installed' : 'missing', statusLabel:found ? '已安装 · 连接待验证' : '未找到程序', version:'', nativeGoal:false,nativeAutoReview:false,nativePlan:['claude','antigravity'].includes(id) };
     if (found) {
@@ -169,6 +197,10 @@ export class ProviderRegistry {
             try{if(JSON.parse(error.stdout).loggedIn===false){value.loggedIn=false;value.statusLabel='Claude Code 尚未登录';}}catch{}
           }
         }
+        if(id==='ollama'){
+          try{await ollamaRequest(ollamaHost(found.env),'/api/version',{timeout:4000});value.statusLabel='本机服务运行中';}
+          catch{value.statusLabel='已安装 · 本机服务未运行';}
+        }
         if (id === 'codex') {
           const dir = join(this.dataDir,'schema'); mkdirSync(dir,{recursive:true});
           await exec(found.command,[...found.prefixArgs,'app-server','generate-json-schema','--experimental','--out',dir],{timeout:15000,maxBuffer:200000,windowsHide:true});
@@ -188,11 +220,16 @@ export class ProviderRegistry {
   async list(refresh = false) { return Promise.all(Object.keys(PROVIDERS).map(id=>this.probe(id,refresh))); }
   record(id,ok,error='') {
     const all=this.store.setting('verification',{}); all[id]={ok,error,date:new Date().toISOString(),revision:(all[id]?.revision||0)+1,fingerprint:runtimeFingerprint(this.resolve(id))};
-    this.store.setSetting('verification',all); this.cache.delete(id);
+    this.store.setSetting('verification',all);
+    // A call that worked changes only its outcome. Checking the program again after every turn made
+    // the next turn and the page's list wait for it; a failed call may mean a logout, so it rechecks.
+    const cached=this.cache.get(id);
+    if(ok&&cached?.fingerprint===all[id].fingerprint)cached.value={...cached.value,verification:all[id]};
+    else this.cache.delete(id);
   }
   configure(id, config) {
     if (!PROVIDERS[id] || typeof config.command!=='string' || config.command.length>2000 || !Array.isArray(config.prefixArgs) || config.prefixArgs.some(x=>typeof x!=='string'||x.length>2000)) throw new Error('程序路径或前置参数无效');
     const all=this.store.setting('providers',{}); all[id]={command:config.command,prefixArgs:config.prefixArgs};
-    this.store.setSetting('providers',all);this.cache.delete(id);
+    this.store.setSetting('providers',all);this.cache.delete(id);this.resolved.clear();
   }
 }

@@ -25,16 +25,25 @@ let stoppingRun = null;
 // The first message of a new chat creates it, with the tool options chosen beforehand.
 async function createDraftChat() {
   const sourceDraft = draftKey();
-  const draftOptions = opts();
+  const activeOptions = opts();
+  // Submit explicit draft choices only. Untouched tools receive the server's
+  // latest defaults, including changes made in another Starport window.
+  const draftOptions = { ...state.options };
   const chat = await api('/chats', 'POST', {
     provider: state.selected,
     workspace: state.workspace,
-    group_id: state.draftGroup
+    group_id: state.draftGroup,
+    options: draftOptions
   });
   state.chat = chat;
   globalThis.StarportComposer?.moveDraft(sourceDraft, draftKey());
   localStorage.setItem(draftKey(), $('#prompt').value);
-  await queueSave({ options: draftOptions });
+  // A busy old backend is left running until its tasks finish. It still needs
+  // the legacy follow-up save because it does not accept options at creation.
+  if (!state.providerPreferencesReady) {
+    const saved = await queueSave({ options: activeOptions });
+    if (state.chat?.id === chat.id) state.chat.options = saved.options;
+  }
   localStorage.setItem('hub-chat', chat.id);
   localStorage.removeItem('hub-draft-new');
 }
@@ -53,13 +62,15 @@ async function sendMessage(text, metadata = {}) {
   let attachmentIds = metadata.replyTo ? [] : globalThis.StarportComposer?.ids() || [];
   const sourceDraft = draftKey();
   const originalInput = $('#prompt').value;
-  if (!text.trim() && !attachmentIds.length) return;
+  // A quote card from the LaTeX editor (latex-dock.js) can go out on its own, like an attachment.
+  const quoted = !metadata.replyTo && !!state.chat && !!globalThis.StarportLatexDock?.has(state.chat.id);
+  if (!text.trim() && !attachmentIds.length && !quoted) return;
   if (!metadata.replyTo && globalThis.StarportComposer?.busy) {
     toast('请等待附件添加完成');
     return;
   }
   if (globalThis.StarportPermissions?.busy) return refuse('正在保存权限，请稍候');
-  if (!text.trim()) text = t('请查看这些附件。');
+  if (!text.trim() && attachmentIds.length) text = t('请查看这些附件。');
   const p = currentProvider();
   if (!p.installed) return refuse('尚未找到 {name}，请在连接与数据中配置程序。', { name: p.name });
 
@@ -85,12 +96,13 @@ async function sendMessage(text, metadata = {}) {
     const sentDraft = draftKey();
     const runRef = metadata.replyTo ? null : globalThis.StarportWorkflows?.replyRef(chatId) || null;
     const accepted = await api('/chats/' + chatId + '/messages', 'POST', {
-      text,
+      text: metadata.replyTo ? text : globalThis.StarportLatexDock?.withQuote(chatId, text) ?? text,
       attachments: attachmentIds,
       ...(metadata.replyTo ? { replyTo: metadata.replyTo } : {}),
       ...(runRef ? { runRef } : {})
     });
     if (runRef) StarportWorkflows.clearReply();
+    if (!metadata.replyTo) globalThis.StarportLatexDock?.sent(chatId);
     if (!metadata.replyTo) {
       if (globalThis.StarportComposer?.consume) StarportComposer.consume(attachmentIds, sentDraft);
       else globalThis.StarportComposer?.clear(sentDraft);
@@ -131,7 +143,7 @@ async function sendGuidance(text, metadata = {}) {
   renderRun();
   try {
     const result = await api('/chats/' + chatId + (direct ? '/guidance' : '/queue'), 'POST', {
-      text,
+      text: metadata.replyTo ? text : globalThis.StarportLatexDock?.withQuote(chatId, text) ?? text,
       runId,
       clientId: crypto.randomUUID(),
       ...(attachmentIds.length ? { attachments: attachmentIds } : {}),
@@ -141,6 +153,7 @@ async function sendGuidance(text, metadata = {}) {
       throw new Error(result.user?.details?.error || t('未送达原工具'));
     }
     if (attachmentIds.length) globalThis.StarportComposer?.consume(attachmentIds, key);
+    if (!metadata.replyTo) globalThis.StarportLatexDock?.sent(chatId);
     if (!metadata.preserveDraft) clearSentDraft(key, originalInput);
     if (state.chat?.id === chatId) {
       liveSync?.receive({

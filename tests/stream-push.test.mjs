@@ -6,14 +6,14 @@ import {tmpdir} from 'node:os';
 import {Store} from '../src/storage.mjs';
 import {Runner} from '../src/runner.mjs';
 
-// Each push sends the whole message. Streaming event by event used to resend a long turn per
-// token, which kept the page too busy to tick its clocks; pushes are now coalesced.
+// Streaming event by event used to resend a long turn per token, which kept the page too busy to
+// tick its clocks. Pushes are coalesced, and after the first one carry only what changed.
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function setup(t,implementation){
   const directory=mkdtempSync(join(tmpdir(),'starport-stream-push-')),store=new Store(join(directory,'hub.sqlite'));
   const registry={resolve:()=>({command:process.execPath}),probe:async()=>({}),record:()=>{}};
   const pushes=[];
-  const broadcast=(event,data)=>{const size=JSON.stringify(data).length;if(event==='message'&&data.message?.role==='assistant')pushes.push({at:Date.now(),data:JSON.parse(JSON.stringify(data))});return size;};
+  const broadcast=(event,data)=>{const size=JSON.stringify(data).length;if(event==='message'&&(data.message?.role==='assistant'||data.patch))pushes.push({at:Date.now(),size,data:JSON.parse(JSON.stringify(data))});return size;};
   const runner=new Runner(store,registry,broadcast,{deepseek:implementation});
   t.after(async()=>{await runner.close();store.close();rmSync(directory,{recursive:true,force:true});});
   return {store,runner,pushes,chat:store.newChat({provider:'deepseek',workspace:process.cwd()})};
@@ -28,13 +28,15 @@ test('streamed text is pushed a few times a second, and the end at once with eve
   assert.equal(last.status,'complete');assert.equal(last.content,'字'.repeat(300));
 });
 
-test('a long turn is pushed less often than a short one',async t=>{
+test('a long turn is not sent again with each push',async t=>{
   const big='x'.repeat(1024*1024);
   const {runner,pushes,chat}=setup(t,async({emit})=>{emit({type:'replace',text:big});const end=Date.now()+700;while(Date.now()<end){emit({type:'delta',text:'y'});await sleep(5);}});
   await runner.start(chat.id,'hi');await runner.active.get(chat.id).done;
-  const streaming=pushes.filter(push=>push.data.message.status==='running'&&push.data.message.content.length>=big.length);
-  // About 1 MB per push: at most one every half second.
-  assert.ok(streaming.length<=3,`pushes while streaming: ${streaming.length}`);
+  const streaming=pushes.filter(push=>push.data.patch);
+  // The megabyte goes once; later pushes carry the added text.
+  assert.ok(streaming.length>=3,`pushes while streaming: ${streaming.length}`);
+  assert.equal(streaming.filter(push=>push.size>big.length).length,1);
+  assert.ok(streaming.filter(push=>push.size<=big.length).every(push=>push.size<4096));
   assert.equal(pushes.at(-1).data.message.status,'complete');
 });
 

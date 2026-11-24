@@ -19,11 +19,10 @@ export function findVideoReferences(text){
   for(const match of String(text).matchAll(/https?:\/\/[^\s<>"'，。；、）)\]]+/g)){
     spans.push([match.index,match.index+match[0].length]);
     if(!/bilibili\.com\/video\//.test(match[0]))continue;
-    // Ignore trailing prose punctuation, preserving query parameters.
-    rows.push(parseVideoReference(match[0].replace(/[.!?,;:]+$/,'')));
+    // Ignore trailing prose punctuation, preserving query parameters. A link that is not a readable
+    // video (av number, bad part) stays plain text instead of blocking the message.
+    try{rows.push(parseVideoReference(match[0].replace(/[.!?,;:]+$/,'')));}catch{}
   }
   for(const match of String(text).matchAll(/\bBV[0-9A-Za-z]{10}\b/g))if(!spans.some(([a,b])=>match.index>=a&&match.index<b))rows.push(parseVideoReference(match[0]));
-  const unique=[...new Map(rows.map(row=>[row.url,row])).values()];
-  if(unique.length>3)throw new Error('每条消息最多读取 3 个视频');
-  return unique;
+  return [...new Map(rows.map(row=>[row.url,row])).values()];
 }

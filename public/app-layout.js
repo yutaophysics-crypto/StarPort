@@ -29,6 +29,7 @@ function renderGroups() {
     const toggle = el('button', {
       class: 'group-toggle',
       text: `${state.collapsed.has(group.id) ? '›' : '⌄'}  ${group.name}`,
+      ...(group.workspace ? { title: t('新对话默认在：{path}', { path: group.workspace }) } : {}),
       'aria-expanded': String(!state.collapsed.has(group.id))
     });
     toggle.onclick = () => {
@@ -67,8 +68,11 @@ function renderGroups() {
       for (const chat of chats) {
         const active = state.chat?.id === chat.id;
         const running = state.active?.includes(chat.id) || companionsAt.has(chat.id);
-        const status = running ? 'running' : chat.unread ? 'unread' : '';
-        const label = status ? t(running ? '正在执行任务' : '回答完成，待查看') : '';
+        // A model that stopped to ask a question is still running, but waits on the user.
+        const asking = state.asking?.includes(chat.id);
+        const awaitingApproval = state.awaitingApproval?.includes(chat.id);
+        const status = awaitingApproval ? 'awaiting-approval' : asking ? 'asking' : running ? 'running' : chat.unread ? 'unread' : '';
+        const label = { 'awaiting-approval': t('等待批准'), asking: t('等你回答问题'), running: t('正在执行任务'), unread: t('回答完成，待查看') }[status] || '';
         const button = el(
           'button',
           {
@@ -131,7 +135,11 @@ function renderGroups() {
 function newChatIn(groupId) {
   newChat();
   state.draftGroup = groupId;
+  // A room with a default working folder starts its new conversations there.
+  const room = state.groups.find(g => g.id === groupId);
+  if (room?.workspace) state.workspace = room.workspace;
   renderHeader();
+  renderFeatures();
 }
 
 function renameGroup(group) {
@@ -154,6 +162,7 @@ function renderHeader() {
   $('#workspace-label').textContent = workspace.split(/[\\/]/).filter(Boolean).pop() || t('选择工作目录');
   $('#workspace-button').title = workspace || t('设置工作目录');
   globalThis.StarportExternalTools?.sync();
+  globalThis.StarportLatexDock?.sync();
   $('#export-chat').hidden = coverOpen || !state.chat;
   $('#chat-settings').hidden = coverOpen || !state.chat;
   $('#features-toggle').hidden = coverOpen;
@@ -214,6 +223,53 @@ function closeThemeCover(restore = true) {
       : $('#prompt');
   focus.focus({ preventScroll: true });
   markViewed();
+}
+
+// One button in the top bar, or Ctrl B, folds the sidebar away on a wide window and slides it in
+// as a drawer on a narrow one. The folded state is remembered; theme.js applies it before paint.
+function setupSidebarToggle() {
+  const button = $('#sidebar-toggle');
+  const sidebar = $('.sidebar');
+  if (!button || !sidebar) return;
+  const root = document.documentElement;
+  const narrow = matchMedia('(max-width: 650px)');
+  const shown = () => (narrow.matches ? sidebar.classList.contains('open') : root.dataset.sidebar !== 'collapsed');
+  const sync = () => {
+    const label = shown() ? '收起侧边栏' : '展开侧边栏';
+    button.setAttribute('aria-expanded', String(shown()));
+    // applyLanguage re-reads these when the language changes.
+    button.dataset.i18nAriaLabel = label;
+    button.dataset.i18nTitle = label + ' · Ctrl B';
+    button.setAttribute('aria-label', t(label));
+    button.title = t(label + ' · Ctrl B');
+  };
+  const toggle = () => {
+    if (narrow.matches) {
+      sidebar.classList.toggle('open');
+    } else {
+      const collapse = shown();
+      if (collapse) root.dataset.sidebar = 'collapsed';
+      else delete root.dataset.sidebar;
+      try {
+        if (collapse) localStorage.setItem('starport-sidebar-collapsed', '1');
+        else localStorage.removeItem('starport-sidebar-collapsed');
+      } catch {}
+      // A hidden sidebar can't keep the focus.
+      if (collapse && sidebar.contains(document.activeElement)) button.focus({ preventScroll: true });
+    }
+    sync();
+  };
+  button.onclick = toggle;
+  document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+    if (e.key.toLowerCase() !== 'b' || document.querySelector('dialog[open]')) return;
+    e.preventDefault();
+    toggle();
+  });
+  // The drawer also closes from elsewhere (opening a chat, the theme cover).
+  new MutationObserver(sync).observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+  narrow.addEventListener('change', sync);
+  sync();
 }
 
 function setupPanelResizers() {
@@ -321,4 +377,5 @@ function setupPanelResizers() {
   const visibility = new MutationObserver(fitPanels);
   visibility.observe(shell, { attributes: true, attributeFilter: ['class'] });
   visibility.observe($('#features'), { attributes: true, attributeFilter: ['class'] });
+  visibility.observe(document.documentElement, { attributes: true, attributeFilter: ['data-sidebar'] });
 }

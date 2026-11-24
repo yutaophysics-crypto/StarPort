@@ -106,7 +106,7 @@ test('live provider success invalidates an older full refresh without depending 
   const old={ok:false,date:'2026-10-11T10:00:00Z'},success={ok:true,date:'2026-10-11T11:00:00Z'},gate=deferred();
   const f=await clientFixture(async()=>({providerVerifications:{antigravity:success}}));f.state.providers=[{id:'antigravity',verification:old}];
   const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8'),code=refreshSource(app);
-  const context=vm.createContext({state:f.state,viewRevision:0,refreshSequence:0,saveChain:Promise.resolve(),liveSync:f.sync,api:async()=>gate.promise,renderView:()=>{}});
+  const context=vm.createContext({state:f.state,viewRevision:0,refreshSequence:0,saveChain:Promise.resolve(),preferenceChain:Promise.resolve(),liveSync:f.sync,api:async()=>gate.promise,renderView:()=>{}});
   try{
     vm.runInContext(code,context);const refreshing=context.refresh();await new Promise(resolve=>setImmediate(resolve));
     f.sync.receive({providerVerifications:{antigravity:success}});gate.resolve({groups:[],chats:[{id:'chat'}],providers:[{id:'antigravity',verification:old}],active:[]});await refreshing;
@@ -151,7 +151,7 @@ test('late live HTTP responses and full-page refreshes cannot overwrite newer ev
   f.sync.receive(finalPacket());gate.resolve({chatId:'chat',message:message(),run:{id:'run'},active:['chat']});await pending;assert.equal(f.state.run,null);assert.equal(f.state.messages[0].status,'complete');
   const changed=deferred(),other=await clientFixture(async()=>changed.promise),request=other.sync.reconcile();other.switchChat('different');changed.resolve(finalPacket());await request;assert.equal(other.state.chat.id,'different');assert.equal(other.state.messages.length,0);
   const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8'),code=refreshSource(app);
-  const slow=deferred(),state=clientState(),context=vm.createContext({state,viewRevision:0,refreshSequence:0,saveChain:Promise.resolve(),liveSync:{revision:0},api:async path=>path==='/state'?slow.promise:{messages:[message()],run:{id:'run'}},renderView:()=>{}});
+  const slow=deferred(),state=clientState(),context=vm.createContext({state,viewRevision:0,refreshSequence:0,saveChain:Promise.resolve(),preferenceChain:Promise.resolve(),liveSync:{revision:0},api:async path=>path==='/state'?slow.promise:{messages:[message()],run:{id:'run'}},renderView:()=>{}});
   vm.runInContext(code,context);const refreshing=context.refresh();await new Promise(resolve=>setImmediate(resolve));state.messages=[message('complete',2)];state.run=null;context.liveSync.revision++;
   slow.resolve({groups:[],chats:[{id:'chat'}],providers:[],active:['chat']});await refreshing;assert.equal(state.run,null);assert.equal(state.messages[0].status,'complete');f.sync.close();other.sync.close();
 });
@@ -200,7 +200,7 @@ test('failed live reconciliation is retried and concurrent requests share one re
 });
 test('a full refresh that returns late cannot overwrite a more recent full refresh',async()=>{
   const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8'),code=refreshSource(app);
-  const gates=[deferred(),deferred()];let calls=0;const state=clientState(),context=vm.createContext({state,viewRevision:0,refreshSequence:0,saveChain:Promise.resolve(),liveSync:{revision:0},api:async path=>path==='/state'?gates[calls++].promise:{messages:[message('complete',2)],run:null},renderView:()=>{}});
+  const gates=[deferred(),deferred()];let calls=0;const state=clientState(),context=vm.createContext({state,viewRevision:0,refreshSequence:0,saveChain:Promise.resolve(),preferenceChain:Promise.resolve(),liveSync:{revision:0},api:async path=>path==='/state'?gates[calls++].promise:{messages:[message('complete',2)],run:null},renderView:()=>{}});
   vm.runInContext(code,context);const old=context.refresh(),newer=context.refresh();await new Promise(resolve=>setImmediate(resolve));
   gates[1].resolve({groups:[],chats:[{id:'chat'}],providers:[],active:[]});await newer;gates[0].resolve({groups:[],chats:[{id:'chat'}],providers:[],active:['chat']});await old;
   assert.equal(state.run,null);assert.equal(state.messages[0].status,'complete');assert.deepEqual(state.active,[]);

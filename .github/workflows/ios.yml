@@ -1,0 +1,28 @@
+name: iOS build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the iOS simulator application
+        run: >
+          xcodebuild -project apps/mobile/ios/Starport.xcodeproj
+          -scheme Starport -configuration Debug -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "${RUNNER_TEMP}/starport-ios" CODE_SIGNING_ALLOWED=NO build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Starport-iOS-Simulator
+          path: ${{ runner.temp }}/starport-ios/Build/Products/Debug-iphonesimulator/Starport.app

@@ -3,7 +3,7 @@ import { resolve,join,basename,isAbsolute } from 'node:path';
 import { randomUUID,createHash } from 'node:crypto';
 import { Store } from '../storage.mjs';
 import { Runner } from '../runner.mjs';
-import { PROVIDERS,validateOptions } from '../providers.mjs';
+import { validateOptions } from '../providers.mjs';
 import { redact,restrictToCurrentUser } from '../process.mjs';
 import { collaborationUrl } from './server.mjs';
 
@@ -52,17 +52,20 @@ export function remoteAnswer(provider,request,action){
 }
 
 export class DesktopWorker {
-  constructor({link,registry,dataDir,implementations={},interval=2000,onStatus=()=>{},transport=request}){
+  constructor({link,registry,dataDir,implementations={},interval=2000,onStatus=()=>{},transport=request,mobileHandler=null}){
+    this.mobileHandler=mobileHandler;
+    this.mobileReceipts=new Map();
     this.request=transport;this.link=link;this.registry=registry;this.dataDir=dataDir;this.interval=interval;this.onStatus=onStatus;this.bootId=randomUUID();this.active=null;this.closed=false;this.polling=null;this.phase='connecting';this.error='';this.lastLeaseAt=0;
     mkdirSync(dataDir,{recursive:true});this.store=new Store(join(dataDir,'worker.sqlite'));
     this.store.memory.configure({enabled:false,capture:false,search:false});
     this.runner=new Runner(this.store,registry,(type,data)=>{if(type==='message'&&this.active?.chatId===data.chatId)this.schedule(this.snapshot());},implementations);
-    this.published={workspaces:link.workspaces.map(({id,name})=>({id,name})),providers:[]};
+    this.published={workspaces:link.workspaces.map(({id,name})=>({id,name})),providers:[],...link.mobile===true&&mobileHandler?{mobile:true}:{}};
   }
   status(){return {phase:this.phase,error:this.error,jobId:this.active?.job.id||null};}
   setStatus(phase,error=''){this.phase=phase;this.error=redact(error).slice(0,1000);this.onStatus(this.status());}
   async publication(){
-    const rows=await Promise.all(Object.keys(PROVIDERS).map(async provider=>{
+    // Group chat offers the four account-backed tools; a local Ollama stays private to this computer.
+    const rows=await Promise.all(Object.keys(cloudNames).map(async provider=>{
       try{const probe=await this.registry.probe(provider),available=probe.installed!==false&&probe.status!=='missing'&&probe.status!=='incompatible'&&probe.loggedIn!==false&&!!this.registry.resolve(provider)&&!(provider==='deepseek'&&this.link.execution!=='edit');
         let models=[];if(available)try{models=(await this.registry.models(provider,this.link.workspaces[0].path)).models||[];}catch{}
         return {id:provider,name:cloudNames[provider],available,models:models.slice(0,100).map(m=>({id:m.id,name:m.label||m.id,...m.provider?{provider:m.provider}:{}}))};
@@ -74,7 +77,10 @@ export class DesktopWorker {
   async tick(){
     if(this.closed||this.disabled)return;if(this.polling)return this.polling;
     this.polling=(async()=>{try{
-      const result=await this.post('/api/device/poll',{bootId:this.bootId,published:this.published,claim:!this.active});
+      const result=await this.post('/api/device/poll',{bootId:this.bootId,published:this.published,claim:!this.active,mobileReady:!this.mobileRequest});
+      if(result.mobile&&this.published.mobile&&!this.mobileRequest){
+        this.mobileRequest=this.handleMobile(result.mobile).catch(()=>{}).finally(()=>{this.mobileRequest=null;});
+      }
       this.lastLeaseAt=Date.now();
       this.setStatus(this.active?'running':'online');
       if(this.active){const active=this.active,controls=result.controls.find(x=>x.jobId===active.job.id);if(!controls){active.lostLease=true;if(active.chatId)await this.runner.stop(active.chatId);}else{
@@ -87,6 +93,17 @@ export class DesktopWorker {
       if(result.job&&!this.active){const active={job:result.job,chatId:null,actions:new Set(),seq:0,pending:null,writer:null};this.active=active;active.execution=this.execute(active).catch(error=>this.setStatus('error',error.message)).finally(()=>{clearTimeout(active.flushTimer);if(this.active===active)this.active=null;if(!this.closed)this.setStatus('online',active.deliveryError?.message||'');});}
     }catch(error){this.setStatus('offline',error.message);if(error.status===401)this.disabled=true;if(this.active&&(this.disabled||Date.now()-this.lastLeaseAt>115000)){this.active.lostLease=true;if(this.active.chatId)await this.runner.stop(this.active.chatId);}}
     finally{this.polling=null;}})();return this.polling;
+  }
+  async handleMobile(request){
+    let receipt=this.mobileReceipts.get(request.id);
+    if(!receipt){
+      try{receipt={ok:true,data:await this.mobileHandler(this.link,request)};}
+      catch(error){receipt={ok:false,error:redact(error.message).slice(0,2000)};}
+      this.mobileReceipts.set(request.id,receipt);
+      if(this.mobileReceipts.size>8)this.mobileReceipts.delete(this.mobileReceipts.keys().next().value);
+    }
+    await this.post('/api/device/mobile/'+request.id,receipt);
+    this.mobileReceipts.delete(request.id);
   }
   snapshot(){const active=this.active;if(!active?.chatId)return null;const message=this.runner.active.get(active.chatId)?.message||this.store.lastAssistant(active.chatId),run=this.runner.state(active.chatId);if(!message)return null;
     return {status:message.status==='complete'?'complete':message.status==='error'?'error':message.status==='interrupted'?'interrupted':'running',content:redact(message.content),progress:(message.details.activity||[]).slice(-100).map(item=>({id:item.id,name:item.name||item.kind,status:item.status})),approvals:JSON.parse(redact(JSON.stringify(run?.approvals||[]))),notices:(message.details.notices||[]).slice(-10).map(redact),error:message.details.error||''};
@@ -122,13 +139,13 @@ export class DesktopWorker {
 }
 
 export class DesktopLink {
-  constructor({registry,dataDir,implementations={},onChange=()=>{},transport=request}){this.request=transport;this.registry=registry;this.dataDir=dataDir;this.implementations=implementations;this.onChange=onChange;this.file=join(dataDir,'collaboration-link.json');this.worker=null;this.link=null;this.links=new Map();this.workers=new Map();this.busy=false;this.lastError='';}
-  connection(server){const link=this.links.get(server);if(!link)return null;return {hubUrl:link.hubUrl,user:link.user,deviceId:link.deviceId,deviceName:link.name,workspaces:link.workspaces.map(({id,name,path})=>({id,name,path})),execution:link.execution,...this.workers.get(server)?.status()};}
+  constructor({registry,dataDir,implementations={},onChange=()=>{},transport=request,mobileHandler=null}){this.mobileHandler=mobileHandler;this.request=transport;this.registry=registry;this.dataDir=dataDir;this.implementations=implementations;this.onChange=onChange;this.file=join(dataDir,'collaboration-link.json');this.worker=null;this.link=null;this.links=new Map();this.workers=new Map();this.busy=false;this.lastError='';}
+  connection(server){const link=this.links.get(server);if(!link)return null;return {hubUrl:link.hubUrl,user:link.user,deviceId:link.deviceId,deviceName:link.name,workspaces:link.workspaces.map(({id,name,path})=>({id,name,path})),execution:link.execution,mobile:link.mobile===true,...this.workers.get(server)?.status()};}
   status(){const active=[...this.workers.values()].find(w=>w.active);return {connected:!!this.link,hubUrl:this.link?.hubUrl||'',defaultHubUrl:process.env.STARPORT_COLLAB_URL||'http://127.0.0.1:3218',deviceId:this.link?.deviceId||null,deviceName:this.link?.name||'',user:this.link?.user||null,workspaces:this.link?.workspaces.map(({id,name,path})=>({id,name,path}))||[],execution:this.link?.execution||'plan',connections:[...this.links.keys()].map(s=>this.connection(s)),...active?.status()||this.worker?.status()||{phase:this.lastError?'error':'disconnected',error:this.lastError}};}
   async save(){mkdirSync(this.dataDir,{recursive:true});if(this.link)await savePrivateJSON(this.file,{...this.link,connections:[...this.links.values()]});else if(existsSync(this.file))unlinkSync(this.file);}
   async resume(){if(!existsSync(this.file))return;try{const saved=JSON.parse(readFileSync(this.file,'utf8'));for(const link of saved.connections||[saved]){link.hubUrl=collaborationUrl(link.hubUrl);link.workspaces=link.workspaces.map(workspace);if(!link.token||!link.user?.id||!link.deviceId)throw Error('电脑连接配置无效');this.links.set(link.hubUrl,link);this.link=link;await this.runWorker(link);}}catch(error){this.lastError=redact(error.message);this.onChange(this.status());}}
-  async runWorker(link=this.link){const partition=createHash('sha256').update(link.hubUrl+'|'+link.user.id+'|'+link.deviceId).digest('hex').slice(0,32),worker=new DesktopWorker({link,registry:this.registry,dataDir:join(this.dataDir,'collaboration-workers',partition),implementations:this.implementations,transport:this.request,onStatus:()=>this.onChange(this.status())});this.workers.set(link.hubUrl,worker);this.worker=worker;await worker.start();}
-  validate(input){const hubUrl=collaborationUrl(input.hubUrl),execution=input.execution||'plan';if(!['plan','edit'].includes(execution))throw Error('执行权限无效');if(!Array.isArray(input.workspaces)||!input.workspaces.length||input.workspaces.length>20)throw Error('至少选择一个工作目录，最多 20 个');const old=this.links.get(hubUrl);return {hubUrl,execution,workspaces:input.workspaces.map(row=>workspace({...row,id:old?.workspaces.find(w=>w.path===row.path)?.id||randomUUID()}))};}
+  async runWorker(link=this.link){const partition=createHash('sha256').update(link.hubUrl+'|'+link.user.id+'|'+link.deviceId).digest('hex').slice(0,32),worker=new DesktopWorker({link,registry:this.registry,dataDir:join(this.dataDir,'collaboration-workers',partition),implementations:this.implementations,transport:this.request,mobileHandler:this.mobileHandler,onStatus:()=>this.onChange(this.status())});this.workers.set(link.hubUrl,worker);this.worker=worker;await worker.start();}
+  validate(input){const hubUrl=collaborationUrl(input.hubUrl),execution=input.execution||'plan';if(!['plan','edit'].includes(execution))throw Error('执行权限无效');if(!Array.isArray(input.workspaces)||!input.workspaces.length||input.workspaces.length>20)throw Error('至少选择一个工作目录，最多 20 个');const old=this.links.get(hubUrl);return {hubUrl,execution,mobile:input.mobile===true,workspaces:input.workspaces.map(row=>workspace({...row,id:old?.workspaces.find(w=>w.path===row.path)?.id||randomUUID()}))};}
   async installLink(newLink,{replace=false}={}){if([...this.workers.values()].some(w=>w.active))throw Error('请等待当前群聊任务结束后再调整电脑连接');const old=this.links.get(newLink.hubUrl),previous=this.link;
     if(replace)await this.disconnectAll();this.links.set(newLink.hubUrl,newLink);this.link=newLink;try{await this.save();}catch(error){if(old)this.links.set(newLink.hubUrl,old);else this.links.delete(newLink.hubUrl);this.link=previous;throw error;}
     const worker=this.workers.get(newLink.hubUrl);if(worker)await worker.close();if(old&&old.deviceId!==newLink.deviceId)await this.request(old.hubUrl,'/api/device/disconnect',{token:old.token,body:{}}).catch(()=>{});this.lastError='';await this.runWorker(newLink);return this.status();}

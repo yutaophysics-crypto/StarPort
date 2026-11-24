@@ -28,18 +28,27 @@ async function controlSettings(runtime,cwd){
   }catch(error){await cleanup();throw error;}
 }
 
+function controlPrefixArgs(args=[]){
+  const out=[];
+  for(let i=0;i<args.length;i++){
+    if(args[i]==='--mcp-config'){while(i+1<args.length&&!String(args[i+1]).startsWith('-'))i++;}
+    else if(!String(args[i]).startsWith('--mcp-config='))out.push(args[i]);
+  }
+  return out;
+}
+
 // Metadata-only SDK session: never yield a user message or resume a transcript.
 export async function claudeControl(runtime,cwd,read,makeQuery=query,timeoutMs=25000,{model}={}){
   await requireClaudeNetworkProtection(runtime);
   let finish,session,child,timer,prepared;
-  const idle=new Promise(resolve=>finish=resolve),abortController=new AbortController();
+  const idle=new Promise(resolve=>finish=resolve),abortController=new AbortController(),prefixArgs=controlPrefixArgs(runtime.prefixArgs);
   async function* input(){await idle;}
   try{
     prepared=await controlSettings(runtime,cwd);
     session=makeQuery({prompt:input(),options:{pathToClaudeCodeExecutable:runtime.command,cwd,abortController,
       tools:[],mcpServers:{},strictMcpConfig:true,settings:prepared.settings,settingSources:['user','project','local'],
       persistSession:false,env:childEnvironment(runtime.env),...(model?{model}:{}),extraArgs:{'disable-slash-commands':null},
-      spawnClaudeCodeProcess:({args,cwd,env,signal})=>(child=startProcess(runtime.command,[...runtime.prefixArgs,...args],{cwd,env,signal}))}});
+      spawnClaudeCodeProcess:({args,cwd,env,signal})=>(child=startProcess(runtime.command,[...prefixArgs,...args],{cwd,env,signal}))}});
     return await Promise.race([read(session),new Promise((_,reject)=>{timer=setTimeout(()=>{reject(new Error('原生查询超时，请稍后重试'));abortController.abort();},timeoutMs);})]);
   }finally{clearTimeout(timer);finish();session?.close();try{if(child)await stopProcess(child);}finally{await prepared?.cleanup();}}
 }

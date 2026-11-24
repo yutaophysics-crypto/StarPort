@@ -96,8 +96,10 @@ test('Starport retains running task and rejects a second send until DeepSeek fin
   const directory=mkdtempSync(join(tmpdir(),'starport-deepseek-lifecycle-')),store=new Store(join(directory,'hub.sqlite'));
   const registry={resolve:()=>runtime,probe:async()=>({}),record:()=>{}};
   let reached;const preliminary=new Promise(resolve=>{reached=resolve;});
+  // A running reply after its first push goes as changes; the runner holds it whole.
   const runner=new Runner(store,registry,(type,data)=>{
-    if(type==='message'&&data.message.content.includes('I will return'))reached(data.message);
+    const message=data.message||(data.patch&&runner.active.get(data.chatId)?.message);
+    if(type==='message'&&message?.content.includes('I will return'))reached(structuredClone(message));
   },{deepseek:args=>runDeepseek({...args,options})});
   t.after(async()=>{await runner.close();store.close();rmSync(directory,{recursive:true,force:true});});
   const chat=store.newChat({provider:'deepseek',workspace:process.cwd()});

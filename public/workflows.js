@@ -178,8 +178,10 @@ globalThis.StarportWorkflows = (page => {
   const liveSince = (from, prefix = '') =>
     el('span', { class: 'live-elapsed', 'data-live-since': from, 'data-live-prefix': prefix, text: prefix + duration(from) });
   function tick() {
-    for (const node of document.querySelectorAll('[data-live-since]'))
-      node.textContent = node.getAttribute('data-live-prefix') + duration(node.getAttribute('data-live-since'));
+    for (const node of document.querySelectorAll('[data-live-since]')) {
+      const text = node.getAttribute('data-live-prefix') + duration(node.getAttribute('data-live-since'));
+      if (node.textContent !== text) node.textContent = text;
+    }
   }
 
   // --- conversations: workflows need a saved chat ------------------------------------------
@@ -229,7 +231,9 @@ globalThis.StarportWorkflows = (page => {
   async function dispatch(text, { isolated = false } = {}) {
     const original = $('#prompt').value;
     const chat = await ensureChat();
-    const result = await api('/chats/' + chat.id + '/dispatch', 'POST', isolated ? { text, isolated } : { text });
+    const sent = globalThis.StarportLatexDock?.withQuote(chat.id, text) ?? text;
+    const result = await api('/chats/' + chat.id + '/dispatch', 'POST', isolated ? { text: sent, isolated } : { text: sent });
+    globalThis.StarportLatexDock?.sent(chat.id);
     clearPrompt(chat.id, original);
     accept(chat.id, result);
     load();
@@ -241,7 +245,9 @@ globalThis.StarportWorkflows = (page => {
     const target = mount(mountId);
     if (!target) throw new Error('这个工作流已经卸下');
     const original = $('#prompt').value;
-    const result = await api('/mounts/' + mountId + '/run', 'POST', { text });
+    const sent = text ? globalThis.StarportLatexDock?.withQuote(target.chatId, text) ?? text : text;
+    const result = await api('/mounts/' + mountId + '/run', 'POST', { text: sent });
+    if (text) globalThis.StarportLatexDock?.sent(target.chatId);
     if (text) clearPrompt(target.chatId, original);
     accept(target.chatId, result);
     load();

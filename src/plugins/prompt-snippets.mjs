@@ -27,10 +27,17 @@ export class PromptSnippets{
   constructor(store){this.store=store;}
   list(){return this.store.setting(KEY,DEFAULT_SNIPPETS);}
   save(raw){const snippets=cleanSnippets(raw);this.store.setSetting(KEY,snippets);return snippets;}
-  async handle(method,path,read){
-    if(path!=='/api/prompt-snippets')return null;
+  async handle(method,read){
     if(method==='GET')return {data:{snippets:this.list()},status:200};
     if(method==='PUT')return {data:{snippets:this.save((await read()).snippets)},status:200};
     throw Object.assign(new Error('请求方法无效'),{status:405});
   }
+}
+
+// Loaded by src/plugins.mjs; the route goes away with the plugin, so an edited copy can replace it at runtime.
+export const name='prompt-snippets';
+export const inject=['store','routes'];
+export function apply(ctx){
+  const snippets=new PromptSnippets(ctx.store);
+  ctx.effect(()=>ctx.routes.add('/api/prompt-snippets',(method,read)=>snippets.handle(method,read)),'route /api/prompt-snippets');
 }

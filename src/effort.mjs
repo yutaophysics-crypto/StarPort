@@ -19,7 +19,8 @@ export function claudeEffort(model) {
   const wire=(model.resolvedModel||'').replace(/\[1m\]$/,'');
   const defaults={'claude-opus-5-5':'medium','claude-opus-4-7':'xhigh',
     'claude-opus-5':'high','claude-opus-4-8':'high','claude-opus-4-6':'high',
-    'claude-sonnet-5':'high','claude-sonnet-4-6':'high','claude-fable-5':'high','claude-fable-5-1':'high'};
+    'claude-sonnet-5-5':'high','claude-sonnet-5':'high','claude-sonnet-4-6':'high',
+    'claude-fable-5-2':'high','claude-fable-5-1':'high','claude-fable-5':'high'};
   return effortChoices(model.supportedEffortLevels.map(value=>({value,...value==='max'?{warning:'用量可能显著增加'}:{}})),
     {defaultLevel:defaults[wire],labels:{xhigh:'Extra'}});
 }

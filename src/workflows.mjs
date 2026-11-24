@@ -220,6 +220,7 @@ export class Workflows {
       }
       this.db.prepare('DELETE FROM companions WHERE id=?').run(id);
       this.db.prepare('DELETE FROM room_calls WHERE caller_id=?').run(id);
+      this.store.knowledge.removeOwner('companion',id);
       for(const desk of desks)this.db.prepare('DELETE FROM chats WHERE id=?').run(desk);
       this.db.exec('COMMIT');
     }catch(error){this.db.exec('ROLLBACK');throw error;}

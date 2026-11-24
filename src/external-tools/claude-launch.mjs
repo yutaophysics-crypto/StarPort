@@ -20,7 +20,7 @@ function splitArgs(args,flag,multiple=false){
   return {values,rest};
 }
 // Claude permission rules write an absolute Windows path as //c/dir.
-const editDenyRule=path=>'Edit(/'+path.replaceAll('\\','/').replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase())+'/**)';
+export const editDenyRule=path=>'Edit(/'+path.replaceAll('\\','/').replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase())+'/**)';
 
 // The sandbox comes from an owner-configured workspace terminal (legacy
 // --mcp-config entry) or else the registered native codex.exe.

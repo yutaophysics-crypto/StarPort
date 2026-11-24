@@ -11,13 +11,17 @@ import { Runner } from './runner.mjs';
 import { redact } from './process.mjs';
 import { browseFolders, createFolder, directoryPath } from './folders.mjs';
 import { ProjectFolders } from './projects.mjs';
+import { KNOWLEDGE_SCOPES } from './knowledge.mjs';
 import { Attachments } from './attachments.mjs';
 import { ChatTransfer } from './chat-transfer.mjs';
+import { formatChatMarkdown, markdownFilename } from './chat-markdown.mjs';
+import { formatChatHtml, htmlFilename, resolveHtmlTheme } from './chat-html.mjs';
 import { EdgeBridge } from './edge.mjs';
 import {parseVideoReference,videoAttachment} from './videos.mjs';
 import { HistoryImporter } from './history.mjs';
 import { FileActions } from './files.mjs';
 import { MemorySync } from './memory-sync.mjs';
+import { mobileDesktop } from './collaboration/mobile-desktop.mjs';
 import { DesktopLink } from './collaboration/desktop.mjs';
 import { DesktopAccount } from './accounts/desktop.mjs';
 import { defaultAccountCenter } from '../scripts/account-config.mjs';
@@ -27,7 +31,8 @@ import { GroupWindows } from './group-windows.mjs';
 import { StarportHosting } from './hosting.mjs';
 import { Workflows } from './workflows.mjs';
 import { Compactor } from './compaction.mjs';
-import { PromptSnippets } from './prompt-snippets.mjs';
+import { Explainer } from './explain.mjs';
+import { PluginHost, coreChangedSince } from './plugins.mjs';
 import { Notifications, chimeWav } from './notifications.mjs';
 import { WindowsNotifier } from './notifier-windows.mjs';
 import { ExternalTools } from './external-tools/grants.mjs';
@@ -65,18 +70,22 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
   const runner=new Runner(store,registry,broadcast,implementations,attachments,history);
   const workflows=new Workflows({store,runner,broadcast,dataDir,registry,defaultWorkspace:dirname(root),examRoot});
   const compactor=new Compactor({store,runner,broadcast});runner.compactor=compactor;
-  const snippets=new PromptSnippets(store);
+  const explainer=new Explainer({store,runner,broadcast});
+  const plugins=new PluginHost({services:{store,prompts:runner.prompts}});
+  plugins.queue.then(({failed})=>{if(failed.length)console.warn('部分插件未能加载：',failed);});
   // Native popups only for the real desktop server; tests and fixtures pass their own notifier or none.
   const notifier=customNotifier||(nativeNotifications?new WindowsNotifier({root,dataDir,url:()=>`http://127.0.0.1:${server.address()?.port||port}/`}):null);
   const notifications=new Notifications({store,notifier,broadcast});
   runner.onFinished=workflows.onFinished=info=>notifications.finished(info);
+  runner.onQuestion=info=>notifications.asked(info);
   let chime=null;
   let remoteVerification='';
-  const desktopLink=new DesktopLink({registry,dataDir,implementations,onChange:status=>{broadcast('collaboration',status);const verification=registry.verifications?.()||{},encoded=JSON.stringify(verification);if(encoded!==remoteVerification){remoteVerification=encoded;broadcast('message',{providerVerifications:verification});}}});
+  const mobileHandler=mobileDesktop({store,runner});
+  const desktopLink=new DesktopLink({registry,dataDir,implementations,mobileHandler,onChange:status=>{broadcast('collaboration',status);const verification=registry.verifications?.()||{},encoded=JSON.stringify(verification);if(encoded!==remoteVerification){remoteVerification=encoded;broadcast('message',{providerVerifications:verification});}}});
   const desktopAccount=new DesktopAccount({issuer:accountCenter,dataDir,desktopLink});
   const hosting=new StarportHosting({root,dataDir});
   desktopLink.request=(base,path,options)=>hosting.request(base,path,{method:'POST',...options});
-  const profiles=new DesktopProfiles({dataDir,registry,implementations,legacyLink:desktopLink,request:hosting.request.bind(hosting),onChange:status=>broadcast('collaboration',status)});
+  const profiles=new DesktopProfiles({dataDir,registry,implementations,legacyLink:desktopLink,mobileHandler,request:hosting.request.bind(hosting),onChange:status=>broadcast('collaboration',status)});
   const groupWindows=new GroupWindows({root,dataDir,profiles,defaultServer:()=>hosting.config.enabled?hosting.origin():''});
   const memorySync=new MemorySync(store,{dataDir,onChange:()=>broadcast('memory-sync',memorySync.status())});
   // Every conversation's exact working folder is its project, including existing records.
@@ -85,12 +94,21 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
   const archiveRepair=store.archives.reconcile();
   if(archiveRepair.errors.length)console.warn('部分历史存档等待迁移：',archiveRepair.errors);
   const isBusy=id=>runner.active.has(id)||workflows.busy(id);
+  store.knowledge.companionName=id=>workflows.companion(id)?.name??null;
   const externalRoutes={store,registry,isBusy,tools:registry.externalTools||new ExternalTools({root,dataDir}),applications:externalApplicationManager(dataDir),previews:previewManager(dataDir)};
   runner.localControl={
     status:chatId=>({app:'Starport',startedAt,activeTasks:runner.active.size,otherActiveTasks:[...runner.active.keys()].filter(id=>id!==chatId).length,
       runningWorkflows:workflows.runs.size,startingWorkflows:workflows.starting.size,
       companionSteps:[...workflows.runs.values()].filter(run=>run.chatId===chatId).flatMap(run=>(run.card?.details?.workflowRun?.steps||[]).map(step=>({companionId:step.companionId,status:step.status,queued:!!step.queued}))).slice(0,32)}),
-    reload:()=>{const address=server.address();if(!address||typeof address!=='object')throw Error('星港尚未启动');const watcherPid=scheduleIdleRestart(root,dataDir,address.port);return {scheduled:!!watcherPid,policy:'wait-for-all-tasks-and-workers-idle',notice:'本次及其他任务结束后才会加载更新，不会中断任务。'};}
+    // Edited plugins are swapped in at once. The restart, after every task and worker is idle, is still
+    // scheduled for any other change, and when no plugin changed at all.
+    reload:async()=>{
+      const address=server.address();if(!address||typeof address!=='object')throw Error('星港尚未启动');
+      const {reloaded,removed,failed}=await plugins.reload(),result={hotReloaded:reloaded,...removed.length?{unloaded:removed}:{},...failed.length?{failedPlugins:failed}:{}};
+      if((reloaded.length||removed.length||failed.length)&&!coreChangedSince(startedAt))return {...result,scheduled:false,policy:'hot-reload-plugins',notice:failed.length?'有插件未能更新（见 failedPlugins），它正在运行的版本保持不变；没有重启。':'插件已就地更新，没有重启，进行中的任务不受影响。'};
+      const watcherPid=scheduleIdleRestart(root,dataDir,address.port);
+      return {...result,scheduled:!!watcherPid,policy:'wait-for-all-tasks-and-workers-idle',notice:'本次及其他任务结束后才会加载更新，不会中断任务。'};
+    }
   };
   const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
   const server=createServer(async(req,res)=>{
@@ -128,7 +146,7 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           const timer=setInterval(()=>res.write(': ping\n\n'),15000),page=url.searchParams.get('client');notifications.connect(page);
           res.on('close',()=>{clearInterval(timer);clients.delete(res);notifications.disconnect(page);});return;
         }
-        if(path==='/api/state'&&req.method==='GET'){const providers=await registry.list();json(res,{...store.list(),providers,defaultWorkspace:dirname(root),active:[...runner.active.keys()],collaboration:desktopLink.status(),magi:{version:'2.8.0',commit:'e95f14a4a1601008cee9a00aa2b5e78c49842794',modules:['宿主注册表','Markdown 渲染','KaTeX 公式资源']}});return;}
+        if(path==='/api/state'&&req.method==='GET'){const providers=await registry.list();json(res,{...store.list(),providers,providerPermissions:runner.preferences.all(),defaultWorkspace:dirname(root),active:[...runner.active.keys()],asking:runner.asking(),awaitingApproval:runner.awaitingApproval(),collaboration:desktopLink.status(),magi:{version:'2.8.0',commit:'e95f14a4a1601008cee9a00aa2b5e78c49842794',modules:['宿主注册表','Markdown 渲染','KaTeX 公式资源']}});return;}
         if(path==='/api/notifications/chime.wav'&&req.method==='GET'){chime??=chimeWav();res.writeHead(200,{'Content-Type':'audio/wav','Cache-Control':'max-age=86400'});res.end(chime);return;}
         const notificationResult=await notifications.handle(req.method,path,()=>body(req,16384));
         if(notificationResult){json(res,notificationResult.data,notificationResult.status);return;}
@@ -136,8 +154,15 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
         if(workflowResult){json(res,workflowResult.data,workflowResult.status);return;}
         const contextResult=await compactor.handle(req.method,path,()=>body(req,16384));
         if(contextResult){json(res,contextResult.data,contextResult.status);return;}
-        const snippetResult=await snippets.handle(req.method,path,()=>body(req,4*1024*1024));
-        if(snippetResult){json(res,snippetResult.data,snippetResult.status);return;}
+        if(path.startsWith('/api/explain')){
+          // Closing the page or asking again cancels the explanation still running for it.
+          const gone=new AbortController();res.on('close',()=>{if(!res.writableFinished)gone.abort();});
+          const explainResult=await explainer.handle(req.method,path,()=>body(req,64000),gone.signal);
+          if(explainResult){json(res,explainResult.data,explainResult.status);return;}
+        }
+        const pluginResult=await plugins.handle(req.method,path,()=>body(req,4*1024*1024),{url});
+        if(pluginResult?.body!==undefined){res.writeHead(pluginResult.status||200,{'Cache-Control':'no-store',...pluginResult.headers});res.end(pluginResult.body);return;}
+        if(pluginResult){json(res,pluginResult.data,pluginResult.status);return;}
         if(path==='/api/collaboration/profiles'&&req.method==='GET'){json(res,{...profiles.status(),windowMode:windowLauncher.mode});return;}
         if(['/api/collaboration/profiles/login','/api/collaboration/profiles/register'].includes(path)&&req.method==='POST'){json(res,await profiles.login(await body(req,4096),path.endsWith('/register')));return;}
         if(path==='/api/collaboration/profiles/forget'&&req.method==='POST'){json(res,await profiles.forget((await body(req,4096)).profileId));return;}
@@ -167,7 +192,9 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           if(id&&(!/^[\w-]{1,100}$/.test(id)||!store.chat(id)))throw Object.assign(new Error('对话不存在'),{status:404});
           if(id)runner.refreshContext(id).catch(()=>{});
           const follow=id?(url.searchParams.get('follow')||'').split(',').filter(x=>/^[\w-]{1,100}$/.test(x)).slice(0,20):[];
-          json(res,{...runner.live(id,follow),chatStatuses:store.chatStatus.summaries()});return;
+          // have=<id>:<revision>: the page holds the running reply, so it gets only what changed.
+          const held=/^([\w-]{1,100}):(\d{1,15})$/.exec(url.searchParams.get('have')||''),have=held?{id:held[1],revision:Number(held[2])}:null;
+          json(res,{...runner.live(id,follow,have),chatStatuses:store.chatStatus.summaries()});return;
         }
         if(path==='/api/memory-sync'&&req.method==='GET'){json(res,memorySync.status());return;}
         if(path==='/api/memory-sync'&&req.method==='PATCH'){json(res,await memorySync.configure(await body(req,4096)));return;}
@@ -195,6 +222,10 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
         if(memoryRoute&&req.method==='PATCH'){json(res,store.memory.update(memoryRoute[1],await body(req,16384)));broadcast('refresh',{});return;}
         if(memoryRoute&&req.method==='DELETE'){json(res,store.memory.remove(memoryRoute[1],(await body(req,1024)).revision));broadcast('refresh',{});return;}
         if(path==='/api/providers/refresh'&&req.method==='POST'){json(res,await registry.list(true));return;}
+        const permissionPreference=path.match(/^\/api\/providers\/([\w-]+)\/permissions$/);
+        if(permissionPreference&&req.method==='PATCH'){
+          json(res,runner.preferences.remember(permissionPreference[1],await body(req,4096)));broadcast('refresh',{});return;
+        }
         if(path==='/api/edge/status'&&req.method==='GET'){json(res,{...edge.status(),extensionPath:join(root,'extensions','edge')});return;}
         if(path==='/api/edge/pair'&&req.method==='POST'){json(res,edge.createPair());return;}
         if(path==='/api/edge/tabs'&&req.method==='GET'){json(res,await edge.tabs());return;}
@@ -206,7 +237,7 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
         }
         if(path==='/api/attachments'&&req.method==='POST'){json(res,await attachments.upload(await body(req)),201);return;}
         if(path==='/api/attachments/folder'&&req.method==='POST'){json(res,await attachments.folder((await body(req)).path),201);return;}
-        const fileActionRoute=path.match(/^\/api\/files\/(resolve|open|reveal|open-with)$/);
+        const fileActionRoute=path.match(/^\/api\/files\/(resolve|open|run|reveal|open-with)$/);
         if(fileActionRoute&&req.method==='POST'){
           const data=await body(req,16384),chat=data.chatId?store.chat(data.chatId):null;
           if(data.chatId&&!chat)throw Object.assign(new Error('对话不存在'),{status:404});
@@ -234,18 +265,29 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           const data=await body(req,16384),result=projectRoute[2]==='unmark'?projectFolders.unmark(projectRoute[1]):await projectFolders.attach(projectRoute[1],data.workspace);
           json(res,result);broadcast('refresh',{});return;
         }
+        // Knowledge folders of a room, a conversation or a companion (knowledge.mjs). A conversation
+        // also shows its room's, which it reads too.
+        if(path==='/api/knowledge'&&req.method==='GET'){
+          const scope=url.searchParams.get('scope'),owner=url.searchParams.get('owner')||'';
+          if(!KNOWLEDGE_SCOPES.includes(scope)||store.knowledge.ownerName(scope,owner)===null)throw Object.assign(new Error('知识库位置不存在'),{status:404});
+          const room=scope==='chat'?store.chat(owner)?.group_id:null;
+          json(res,{folders:store.knowledge.list(scope,owner),inherited:room?{scope:'room',owner:room,name:store.knowledge.ownerName('room',room),folders:store.knowledge.list('room',room)}:null});return;
+        }
+        if(path==='/api/knowledge'&&req.method==='POST'){const data=await body(req,16384);json(res,store.knowledge.add(data.scope,data.owner,data.path),201);return;}
+        const knowledgeRoute=path.match(/^\/api\/knowledge\/([\w-]+)$/);
+        if(knowledgeRoute&&req.method==='DELETE'){store.knowledge.remove(knowledgeRoute[1]);json(res,{ok:true});return;}
         if(path==='/api/folders'&&req.method==='GET'){json(res,projectFolders.describe(await browseFolders(url.searchParams.get('path'),dirname(root))));return;}
         if(path==='/api/folders'&&req.method==='POST'){const data=await body(req,16384);json(res,await createFolder(data.parent,data.name),201);return;}
         // Renames the folder on disk together with every Starport reference to it.
         if(path==='/api/folders/rename'&&req.method==='POST'){const data=await body(req,16384);json(res,await projectFolders.renameFolder(data.path,data.name,{isBusy}));broadcast('refresh',{});return;}
         if(path==='/api/folders/open'&&req.method==='POST'){json(res,await fileActions.openFolder(await directoryPath((await body(req,16384)).path)));return;}
-        const modelsRoute=path.match(/^\/api\/providers\/(codex|claude|antigravity|deepseek)\/models$/);
+        const modelsRoute=path.match(/^\/api\/providers\/(codex|claude|antigravity|deepseek|ollama)\/models$/);
         if(modelsRoute&&req.method==='GET'){
           const cwd=await directoryPath(url.searchParams.get('workspace')||dirname(root));
           json(res,await registry.models(modelsRoute[1],cwd,url.searchParams.get('refresh')==='1'));return;
         }
-        const providerRoute=path.match(/^\/api\/providers\/(codex|claude|antigravity|deepseek)$/);
-        const usageRoute=path.match(/^\/api\/providers\/(codex|claude|antigravity|deepseek)\/usage$/);
+        const providerRoute=path.match(/^\/api\/providers\/(codex|claude|antigravity|deepseek|ollama)$/);
+        const usageRoute=path.match(/^\/api\/providers\/(codex|claude|antigravity|deepseek|ollama)\/usage$/);
         if(usageRoute&&req.method==='GET'){
           const cwd=await directoryPath(url.searchParams.get('workspace')||dirname(root)),service=url.searchParams.get('service')||'';
           if(service.length>500)throw new Error('模型服务名称过长');
@@ -255,6 +297,12 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
         if(path==='/api/groups'&&req.method==='POST'){const data=await body(req);if(typeof data.name!=='string'||!data.name.trim()||data.name.length>120)throw new Error('分组名称应为 1–120 字符');json(res,store.group(data.name.trim()),201);broadcast('refresh',{});return;}
         const groupMove=path.match(/^\/api\/groups\/([\w-]+)\/move$/);
         if(groupMove&&req.method==='POST'){const data=await body(req,4096);store.moveGroup(groupMove[1],data.before??null);json(res,{ok:true});broadcast('refresh',{order:true});return;}
+        // The folder new conversations in this room start in; null stops using one.
+        const groupWorkspace=path.match(/^\/api\/groups\/([\w-]+)\/workspace$/);
+        if(groupWorkspace&&req.method==='PUT'){
+          const data=await body(req,16384),workspace=data.workspace==null||data.workspace===''?null:await directoryPath(data.workspace);
+          store.setRoomWorkspace(groupWorkspace[1],workspace);json(res,{ok:true,workspace});broadcast('refresh',{});return;
+        }
         const groupRoute=path.match(/^\/api\/groups\/([\w-]+)(?:\/(delete))?$/);
         if(groupRoute&&!groupRoute[2]&&req.method==='PATCH'){const data=await body(req);if(typeof data.name!=='string'||!data.name.trim()||data.name.length>120)throw new Error('分组名称无效');store.renameGroup(groupRoute[1],data.name.trim());json(res,{ok:true});broadcast('refresh',{});return;}
         if(groupRoute&&(req.method==='DELETE'||(groupRoute[2]==='delete'&&req.method==='POST'))){
@@ -270,11 +318,14 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
             const roomExportDir=join(baseDir,`${safeGroup}_导出_${new Date().toISOString().slice(0,10)}`);
             mkdirSync(roomExportDir,{recursive:true});
             exportedPath=roomExportDir;
+            const exportTheme=resolveHtmlTheme(data.theme);
+            const exportLang=data.lang==='en'?'en':'zh';
             for(const c of groupChats){
               if(c.title.startsWith('[工位]'))continue;
               const safeTitle=(c.title.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g,'_').trim().slice(0,70)||'conversation')+'_'+c.id.slice(0,6);
-              const md=`# ${c.title}\n\n`+store.messages(c.id).map(m=>`## ${m.role==='user'?'用户':m.provider||'助手'} · ${m.created}\n\n${m.content}\n${m.details.error?'\n> '+m.details.error+'\n':''}`).join('\n');
-              writeFileSync(join(roomExportDir,`${safeTitle}.md`),md,'utf8');
+              const rows=store.messages(c.id,{trace:true});
+              writeFileSync(join(roomExportDir,`${safeTitle}.html`),formatChatHtml(c,rows,{theme:exportTheme,lang:exportLang,groupName:groupObj?.name||''}),'utf8');
+              writeFileSync(join(roomExportDir,`${safeTitle}.md`),formatChatMarkdown(c,rows,{lang:exportLang}),'utf8');
               try{writeFileSync(join(roomExportDir,`${safeTitle}.starport.json`),JSON.stringify(chatTransfer.export(c.id),null,2),'utf8');}catch{}
               exportedCount++;
             }
@@ -286,7 +337,8 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
           const data=await body(req);if(!PROVIDERS[data.provider||'codex'])throw new Error('未知工具');
           const project=data.project_id?store.project(data.project_id):null;if(data.project_id&&!project)throw new Error('项目不存在');
           const workspace=await directoryPath(typeof data.workspace==='string'?data.workspace:project?.workspace||dirname(root));
-          const created=store.newChat({group_id:data.group_id||null,provider:data.provider||'codex',workspace});
+          const options=runner.preferences.newChatOptions(data.options);
+          const created=store.newChat({group_id:data.group_id||null,provider:data.provider||'codex',workspace,options});
           projectFolders.sync([created.id]);const chat=store.chat(created.id);
           json(res,chat,201);broadcast('refresh',{chatId:chat.id});return;
         }
@@ -304,7 +356,7 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
         }
         const traceRoute=path.match(/^\/api\/chats\/([\w-]+)\/messages\/([\w-]+)\/trace$/);
         if(traceRoute&&req.method==='GET'){const trace=store.trace(traceRoute[1],traceRoute[2]);if(!trace)throw Object.assign(new Error('这条回复不存在'),{status:404});json(res,trace);return;}
-        const route=path.match(/^\/api\/chats\/([\w-]+)(?:\/(messages|guidance|stop|approval|goal|export|reset-session|read|question-skip|branch|context|move))?$/);
+        const route=path.match(/^\/api\/chats\/([\w-]+)(?:\/(messages|guidance|stop|approval|goal|export|reset-session|recover-session|read|question-skip|branch|context|move))?$/);
         if(route){
           const[,id,action]=route,chat=store.chat(id);if(!chat)throw Object.assign(new Error('对话不存在'),{status:404});
           if(action==='move'&&req.method==='POST'){const data=await body(req,4096);store.moveChat(id,data.before??null);json(res,{ok:true});broadcast('refresh',{order:true});return;}
@@ -325,27 +377,41 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
             if('workspace' in patch&&(typeof patch.workspace!=='string'||patch.workspace.length>2000))throw new Error('工作目录无效');
             if('workspace' in patch){if(workflows.busy(id))throw Object.assign(new Error('这个对话的工作流正在运行，请等它结束后更换文件夹'),{status:409});patch.workspace=await directoryPath(patch.workspace);}
             if('provider' in patch&&!PROVIDERS[patch.provider])throw new Error('未知工具');
-            if(raw.options){const provider=patch.provider||chat.provider;patch.options={...chat.options,[provider]:validateOptions(provider,raw.options)};}
+            const provider=patch.provider||chat.provider;
+            if(raw.options){validateOptions(provider,raw.options);patch.options={...chat.options,[provider]:validateOptions(provider,{...chat.options[provider],...raw.options})};}
+            else if(patch.provider&&!Object.hasOwn(chat.options,provider))patch.options={...chat.options,[provider]:validateOptions(provider,runner.preferences.all()[provider])};
             store.updateChat(id,patch);projectFolders.sync([id]);if('group_id' in patch)workflows.chatMoved(id);
+            if(raw.options&&!chat.options?.desk)runner.preferences.remember(provider,patch.options[provider]);
             const updated=store.chat(id);json(res,updated);broadcast('refresh',{chatId:id});return;
           }
           if(action==='messages'&&req.method==='POST'){const data=await body(req);json(res,await runner.start(id,data.text,data.attachments||[],{replyTo:data.replyTo,disableContextTools:data.disableContextTools===true,...data.runRef!=null?{runRef:data.runRef}:{}}),202);return;}
+          if(action==='recover-session'&&req.method==='POST'){const data=await body(req,4096);json(res,await runner.recoverNativeSession(id,data),202);return;}
           if(action==='guidance'&&req.method==='POST'){const data=await body(req);json(res,await runner.guidance(id,data),202);return;}
           if(action==='stop'&&req.method==='POST'){await runner.stop(id);json(res,{ok:true});return;}
           if(action==='approval'&&req.method==='POST'){const data=await body(req);await runner.answer(id,data.id,data);json(res,{ok:true});return;}
-          if(action==='read'&&req.method==='POST'){const data=await body(req,1024);json(res,store.chatStatus.read(id,data.messageId));broadcast('message',runner.live(id));return;}
+          if(action==='read'&&req.method==='POST'){const data=await body(req,1024);json(res,store.chatStatus.read(id,data.messageId));broadcast('message',runner.packet(id));return;}
           if(action==='branch'&&req.method==='POST'){const data=await body(req,4096);const branch=store.branchChat(id,data.messageId);json(res,branch,201);broadcast('refresh',{chatId:branch.id});return;}
           if(action==='question-skip'&&req.method==='POST'){const data=await body(req,4096);json(res,runner.skipQuestions(id,data.replyTo));return;}
           if(action==='goal'&&req.method==='POST'){await runner.goal(id,(await body(req)).action);json(res,{ok:true});return;}
           if(action==='reset-session'&&req.method==='POST'){if(runner.active.has(id))throw new Error('请先停止当前任务');store.clearSession(id,chat.provider);json(res,{ok:true});broadcast('refresh',{chatId:id});return;}
           if(action==='export'&&req.method==='GET'){
-            if(url.searchParams.get('format')==='starport'){
+            const format=url.searchParams.get('format')||'markdown';
+            if(format==='starport'){
               const filename=(chat.title.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g,'_').slice(0,80)||'conversation')+'.starport.json';
               res.setHeader('Content-Disposition',`attachment; filename="conversation.starport.json"; filename*=UTF-8''${encodeURIComponent(filename)}`);
               json(res,chatTransfer.export(id));return;
             }
-            const md=`# ${chat.title}\n\n`+store.messages(id).map(m=>`## ${m.role==='user'?'用户':m.provider||'助手'} · ${m.created}\n\n${m.content}\n${m.details.error?'\n> '+m.details.error+'\n':''}`).join('\n');
-            res.writeHead(200,{'Content-Type':'text/markdown; charset=utf-8','Content-Disposition':`attachment; filename="conversation.md"`});res.end(md);return;
+            const lang=url.searchParams.get('lang')==='en'?'en':'zh';
+            const groupName=chat.group_id?store.list().groups.find(g=>g.id===chat.group_id)?.name||'':'';
+            if(format==='html'){
+              const theme=resolveHtmlTheme(url.searchParams.get('theme'));
+              const html=formatChatHtml(chat,store.messages(id,{trace:true}),{theme,lang,groupName});
+              const filename=htmlFilename(chat.title);
+              res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Disposition':`attachment; filename="conversation.html"; filename*=UTF-8''${encodeURIComponent(filename)}`});res.end(html);return;
+            }
+            const md=formatChatMarkdown(chat,store.messages(id),{lang});
+            const filename=markdownFilename(chat.title);
+            res.writeHead(200,{'Content-Type':'text/markdown; charset=utf-8','Content-Disposition':`attachment; filename="conversation.md"; filename*=UTF-8''${encodeURIComponent(filename)}`});res.end(md);return;
           }
         }
         if(path==='/api/export'&&req.method==='GET'){res.setHeader('Content-Disposition','attachment; filename="harness-hub-backup.json"');json(res,store.export());return;}
@@ -373,11 +439,17 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
         res.setHeader('Set-Cookie',`hub=${token}; HttpOnly; SameSite=Strict; Path=/`);
         res.writeHead(200,{'Content-Type':mime['.html'],'Cache-Control':'no-store'});res.end(html);return;
       }
+      // The LaTeX editor page, shown on its own or framed by Starport's own page beside a conversation.
+      if(path==='/latex/'||path==='/latex/index.html'){
+        const html=(await readFile(join(root,'public','latex','index.html'),'utf8')).replace('__HUB_TOKEN__',token);
+        res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'");
+        res.writeHead(200,{'Content-Type':mime['.html'],'Cache-Control':'no-store'});res.end(html);return;
+      }
       const vendor='/vendor/';
       if(path==='/vendor/purify.min.js')file=join(root,'node_modules','dompurify','dist','purify.min.js');
       else if(path.startsWith(vendor)){
         const name=decodeURIComponent(path.slice(vendor.length));
-        if(!/^(marked\.min\.js|katex\.min\.(js|css)|katex-LICENSE\.txt|katex-fonts\/[\w.-]+|fonts\/[\w.-]+)$/.test(name))throw Object.assign(new Error('资源不存在'),{status:404});
+        if(!/^(marked\.min\.js|katex\.min\.(js|css)|katex-LICENSE\.txt|katex-fonts\/[\w.-]+|fonts\/[\w.-]+|codemirror\.mjs|codemirror-LICENSE\.txt|pdfjs\/[\w.-]+)$/.test(name))throw Object.assign(new Error('资源不存在'),{status:404});
         file=join(root,'public','vendor',name);
       }else{
         const publicRoot=join(root,'public');file=resolve(publicRoot,'.'+decodeURIComponent(path));
@@ -389,7 +461,17 @@ export function createHub({root=ROOT,dataDir=process.env.HARNESS_HUB_DATA || joi
   });
   return {server,store,registry,runner,workflows,notifications,attachments,edge,token,memorySync,desktopLink,profiles,groupWindows,hosting,
     async listen(){await new Promise((ok,fail)=>{server.once('error',fail);server.listen(port,'127.0.0.1',ok);});memorySync.start();workflows.start();await hosting.resume();await desktopLink.resume();await profiles.resume();return server.address().port;},
-    async close(){notifications.close();edge.close();await profiles.close();await desktopLink.close();await hosting.close();await workflows.close();await runner.close();await memorySync.close();await history.close();for(const c of clients)c.end();server.closeAllConnections();await new Promise(ok=>server.close(ok));store.close();}
+    // One-off desks now run ephemeral. Archive, once, the desk threads earlier versions left in
+    // Codex's list; a failed or partial pass is tried again on the next start.
+    async archiveCodexDesks(){
+      if(store.setting('codexDeskArchive')?.done||!registry.resolve('codex'))return null;
+      let result;
+      try{result=await history.archiveCodexDesks({before:Math.floor(startedAt/1000),keep:store.resumableSessionIds('codex')});result={...result,done:!result.failed};}
+      catch(error){result={done:false,error:redact(error.message).slice(0,500)};}
+      try{store.setSetting('codexDeskArchive',{...result,at:new Date().toISOString()});}catch{}
+      return result;
+    },
+    async close(){notifications.close();edge.close();await profiles.close();await desktopLink.close();await hosting.close();await workflows.close();await runner.close();await plugins.close();await memorySync.close();await history.close();for(const c of clients)c.end();server.closeAllConnections();await new Promise(ok=>server.close(ok));store.close();}
   };
 }
 

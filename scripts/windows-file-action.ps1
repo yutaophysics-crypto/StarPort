@@ -1,10 +1,29 @@
 # The request is base64 UTF-8 JSON on stdin, not executable PowerShell text.
 $ErrorActionPreference = 'Stop'
 $request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd())) | ConvertFrom-Json
-if ($request.action -notin @('open', 'reveal', 'open-with', 'probe', 'open-folder')) { throw 'Unsupported file action' }
+if ($request.action -notin @('open', 'run', 'reveal', 'open-with', 'probe', 'open-folder')) { throw 'Unsupported file action' }
 if ($request.action -eq 'open-folder') {
     if (-not [IO.Directory]::Exists($request.path)) { throw 'The folder no longer exists' }
 } elseif (-not [IO.File]::Exists($request.path)) { throw 'The file no longer exists' }
+
+if ($request.action -eq 'run') {
+    $extension = [IO.Path]::GetExtension($request.path).ToLowerInvariant()
+    if ($extension -notin @('.exe', '.bat', '.cmd')) { throw 'Unsupported executable type' }
+    $start = New-Object System.Diagnostics.ProcessStartInfo
+    $start.UseShellExecute = $false
+    $start.WorkingDirectory = [IO.Path]::GetDirectoryName($request.path)
+    $start.FileName = $request.path
+    if ($extension -ne '.exe') {
+        $start.FileName = [IO.Path]::Combine([Environment]::SystemDirectory, 'cmd.exe')
+        $start.EnvironmentVariables['STARPORT_FILE_TO_RUN'] = $request.path
+        # Expand the quoted path once, without AutoRun, delayed expansion, or CALL reparsing it.
+        $start.Arguments = '/d /s /v:off /c ""%STARPORT_FILE_TO_RUN%""'
+    }
+    $process = [Diagnostics.Process]::Start($start)
+    $process.Dispose()
+    @{ ok = $true; canceled = $false } | ConvertTo-Json -Compress
+    exit
+}
 
 Add-Type -TypeDefinition @'
 using System;

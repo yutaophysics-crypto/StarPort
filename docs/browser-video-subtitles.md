@@ -17,7 +17,7 @@ Choose **+ → Read video subtitles**, enter a video URL or BV identifier and se
 
 You can also put a video URL or BV identifier directly in a message. StarPort reads the subtitles first, then sends the message and attachment to the chosen tool. For multipart videos, include the part number, for example `https://www.bilibili.com/video/BV1XLbr65EZ4/?p=2`.
 
-Missing subtitles, authentication failures, network errors and excessive length leave the draft intact and explain what happened. A video description is not substituted for subtitles. Platform subtitles can omit visual information or contain transcription errors. This feature neither downloads the video nor transcribes its audio.
+StarPort processes multiple videos in order until the message reaches its 16-attachment limit or subtitle budget. Missing or overlong subtitles produce a notice, so you can check which videos were attached. A video description is not substituted for subtitles. Platform subtitles can omit visual information or contain transcription errors. This feature neither downloads the video nor transcribes its audio.
 
 ## Data boundaries
 

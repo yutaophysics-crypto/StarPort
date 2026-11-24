@@ -69,16 +69,61 @@ test('backups preserve records as review candidates and malformed memory imports
   }finally{original.close();restored.close();}
 });
 
-for(const provider of ['codex','claude','antigravity','deepseek'])test(provider+' receives only confirmed shared memories, captures candidates and refreshes native sessions after edits',async()=>{
+for(const provider of ['codex','claude','antigravity','deepseek'])test(provider+' receives only confirmed shared memories, captures candidates and preserves native sessions across edits',async()=>{
   const s=new Store(':memory:'),calls=[];const runner=new Runner(s,registry,()=>{},{[provider]:async args=>{calls.push(args);const found=await args.contextTools.call('starport_memory_search',{kind:'preference'});args.memoryRead=found.items.length?await args.contextTools.call('starport_memory_read',{ids:[found.items[0].id],reason:'根据用户明确的语言偏好选择回答语言。'}):{items:[]};args.emit({type:'session',id:'native'});args.emit({type:'replace',text:'回答完成。'+trailer([{kind:'goal',title:'学习方向',content:'用户想长期学习数学。',evidence:'我想长期学习数学'}])});}});
+  const expectedSession=provider==='deepseek'?undefined:'native';
   try{
     const chat=s.newChat({provider,workspace:process.cwd()}),pending=s.memory.create({...input,content:'do not send this pending memory'});const saved=s.memory.create(input,{confirmed:true});
     await runner.start(chat.id,'我想长期学习数学');await until(()=>!runner.active.has(chat.id));assert.match(calls[0].memoryRead.items[0].content,/用户希望使用中文交流/);assert.doesNotMatch(calls[0].prompt,/用户希望使用中文交流|do not send/);
     assert.equal(s.lastAssistant(chat.id).content,'回答完成。');assert.equal(s.memory.list({view:'candidate'}).total,2);assert.equal(s.lastAssistant(chat.id).details.memory.ids[0],saved.id);
-    await runner.start(chat.id,'继续');await until(()=>!runner.active.has(chat.id));assert.equal(calls[1].session,provider==='deepseek'?undefined:'native');
+    await runner.start(chat.id,'继续');await until(()=>!runner.active.has(chat.id));assert.equal(calls[1].session,expectedSession);
     s.memory.update(saved.id,{revision:saved.revision,content:'用户现在希望使用英文。'});
-    await runner.start(chat.id,'新的请求');await until(()=>!runner.active.has(chat.id));assert.equal(calls[2].session,undefined);assert.match(calls[2].memoryRead.items[0].content,/用户现在希望使用英文/);assert.doesNotMatch(calls[2].prompt,/用户希望使用中文交流/);assert.doesNotMatch(calls[2].prompt,/```starport-memory\n/);
-    s.memory.remove(saved.id,s.memory.get(saved.id).revision);await runner.start(chat.id,'删除后');await until(()=>!runner.active.has(chat.id));assert.equal(calls[3].session,undefined);assert.doesNotMatch(calls[3].prompt,/用户现在希望使用英文/);assert.ok(s.memory.get(pending.id));
+    await runner.start(chat.id,'新的请求');await until(()=>!runner.active.has(chat.id));assert.equal(calls[2].session,expectedSession);assert.match(calls[2].memoryRead.items[0].content,/用户现在希望使用英文/);assert.doesNotMatch(calls[2].prompt,/用户希望使用中文交流|用户现在希望使用英文/);assert.doesNotMatch(calls[2].prompt,/```starport-memory\n/);
+    if(expectedSession)assert.match(calls[2].prompt,/星港共同记忆变更提示[\s\S]*"status":"updated"/);
+    s.memory.remove(saved.id,s.memory.get(saved.id).revision);await runner.start(chat.id,'删除后');await until(()=>!runner.active.has(chat.id));assert.equal(calls[3].session,expectedSession);assert.doesNotMatch(calls[3].prompt,/用户现在希望使用英文/);assert.ok(s.memory.get(pending.id));
+    if(expectedSession)assert.match(calls[3].prompt,/星港共同记忆变更提示[\s\S]*"status":"removed"/);
+  }finally{await runner.close();s.close();}
+});
+
+test('confirming candidates keeps Antigravity native sessions without compaction, slims resumed preamble, and upgrades legacy fingerprints',async()=>{
+  const s=new Store(':memory:'),calls=[];let compacted=0;
+  const runner=new Runner(s,registry,()=>{},{
+    antigravity:async args=>{calls.push(args);args.emit({type:'session',id:'agy-session-1'});args.emit({type:'replace',text:'答复'+"长".repeat(3500)});},
+    deepseek:async({emit})=>{compacted++;emit({type:'replace',text:'摘要'});emit({type:'final-answer',text:'摘要'});}
+  });
+  const {Compactor}=await import('../src/compaction.mjs');
+  const {legacySessionFingerprint}=await import('../src/context.mjs');
+  runner.compactor=new Compactor({store:s,runner});
+  runner.compactor.saveSettings({enabled:true,budgets:{antigravity:8},summarizers:[{provider:'deepseek',model:''}]});
+  try{
+    s.instructions.update(null,{revision:0,content:'全局固定偏好：直接给结论'});
+    const chat=s.newChat({provider:'antigravity',workspace:process.cwd()});
+    await runner.start(chat.id,'第一问：分析物理模型');await until(()=>!runner.active.has(chat.id));
+    assert.equal(calls[0].session,undefined);
+    assert.match(calls[0].prompt,/星港候选记忆约定/);
+    assert.match(calls[0].prompt,/全局固定偏好：直接给结论/);
+    assert.match(calls[0].prompt,/PowerShell 示例/);
+
+    // Simulate a pre-upgrade saved session fingerprint, then confirm a candidate memory after reload.
+    const runtime=registry.resolve('antigravity',chat.workspace);
+    const legacyFp=legacySessionFingerprint(runtime,chat,{},s.memory.epoch,s.instructions.fingerprint(null));
+    s.saveSession(chat.id,'antigravity','agy-session-1',s.lastAssistant(chat.id).id,legacyFp);
+    const candidate=s.memory.create({kind:'preference',title:'推导风格',content:'推导简洁直指物理本质。'});
+    s.memory.update(candidate.id,{revision:candidate.revision,confirm:true});
+
+    // Build history above the 8k budget while staying on the same native session; confirming another memory must not trigger compaction.
+    await runner.start(chat.id,'第二问');await until(()=>!runner.active.has(chat.id));
+    assert.equal(calls[1].session,'agy-session-1','legacy fingerprint survives memory confirmation and upgrades');
+    assert.doesNotMatch(calls[1].prompt,/星港候选记忆约定/,'resumed turn omits repeated capture boilerplate');
+    assert.doesNotMatch(calls[1].prompt,/全局固定偏好：直接给结论/,'resumed turn omits unchanged global preferences');
+    assert.doesNotMatch(calls[1].prompt,/PowerShell 示例/,'resumed turn omits multi-line CLI examples');
+    assert.match(calls[1].prompt,/context-tool\.mjs/,'resumed Antigravity turn keeps 1-line CLI tool reminder');
+
+    const secondCandidate=s.memory.create({kind:'fact',title:'引擎环境',content:'项目使用 Unity 制作游戏。'});
+    s.memory.update(secondCandidate.id,{revision:secondCandidate.revision,confirm:true});
+    await runner.start(chat.id,'第三问');await until(()=>!runner.active.has(chat.id));
+    assert.equal(calls[2].session,'agy-session-1','confirming candidate memory never resets the native session');
+    assert.equal(compacted,0,'confirming candidate memory never triggers fresh-session compaction');
   }finally{await runner.close();s.close();}
 });
 

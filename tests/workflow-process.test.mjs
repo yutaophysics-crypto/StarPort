@@ -102,9 +102,16 @@ function cards(api = async () => ({}), workflowState = () => ({})) {
     Date, URLSearchParams, setTimeout, clearTimeout, CSS: { escape: value => value }, localStorage: { getItem: () => 'zh', setItem() {} },
     toast() {}, renderMessages() {}, api: async (path, ...rest) => { calls.push(path); return path === '/workflows/state' ? { companions: [], rooms: {}, workflows: [], mounts: [], settings: {}, defaults: {}, ...workflowState() } : api(path, ...rest); } });
   context.globalThis = context;
-  for (const file of ['i18n.js', 'ui-kit.js', 'live.js', 'activity-model.js', 'activity.js', 'workflows.js', 'workflow-cards.js', 'workflow-process.js'])
+  for (const file of ['i18n.js', 'ui-kit.js', 'live.js', 'activity-model.js', 'activity.js'])
     vm.runInContext(source(file), context);
   context.StarportI18n.setLanguage('zh');
+  // The conversation's helper sets attributes; unlike ui-kit.el it does not bind event functions.
+  // Use that actual helper so an inline process is exercised as it is on the conversation page.
+  const appSource = source('app.js'), helperStart = appSource.indexOf('const el = (tag,');
+  vm.runInContext(appSource.slice(helperStart, appSource.indexOf('\n};', helperStart) + 3), context);
+  context.t = (...args) => context.StarportI18n.t(...args);
+  context.markdown = text => context.StarportUI.el('div', { text });
+  for (const file of ['workflows.js', 'workflow-cards.js', 'workflow-process.js']) vm.runInContext(source(file), context);
   const W = context.StarportWorkflows;
   const draw = run => { const card = W.renderCard({ id: 'm', details: { workflowRun: run } }); body.replaceChildren(card); return card; };
   return { W, draw, all, words, calls, body };
@@ -126,6 +133,61 @@ test('a companion step shows its process inline, closed, the way the main model 
   assert.equal(f.all(card).some(node => node.textContent === '过程'), false, 'no separate desk button');
   // No desk yet (waiting for its turn): no block.
   assert.equal(f.all(f.draw(run(step('running', { deskChatId: null })))).some(node => node.className === 'wf-step-process'), false);
+});
+
+test('a companion card shows only current status notices even with old notes saved', () => {
+  const f = cards();
+  const idle = '连续 5 分钟未收到新活动，任务仍在运行；满 30 分钟仍无活动将停止，并以失败交回。';
+  const resumed = '已收到新的活动，伙伴继续工作。';
+  const error = '连续 30 分钟没有任何活动，已停止；进度和执行记录已保留。';
+  const s = step('running', { runtime: { stalled: true }, notes: [idle, resumed, idle, '需要审批的操作已自动拒绝：示例'] });
+  const draw = () => f.words(f.draw(run(s)));
+  assert.equal(draw().split(idle).length - 1, 1);
+  assert.match(draw(), /Opus · 未收到新活动/);
+  assert.doesNotMatch(draw(), /Opus 工作中/);
+  s.runtime.stalled = false;
+  s.notes.push(resumed);
+  assert.match(draw(), /Opus 工作中/);
+  assert.doesNotMatch(draw(), /未收到新活动|伙伴继续工作/);
+  assert.match(draw(), /需要审批的操作已自动拒绝/);
+  s.runtime.stalled = true;
+  s.notes.push(idle);
+  assert.equal(draw().split(idle).length - 1, 1);
+  s.status = 'failed';
+  s.error = error;
+  assert.match(draw(), /连续 30 分钟没有任何活动，已停止/);
+  assert.doesNotMatch(draw(), /未收到新活动|伙伴继续工作/);
+});
+
+test('the buttons below a companion process and card collapse their own section across redraws', async () => {
+  const f = cards(async () => ({ prompt: 'p', message: liveTurn('running') }));
+  const running = run(step('running'));
+  const details = () => f.all(f.body).find(node => node.className === 'native-workflow');
+  f.draw(running);
+  details().open = true;
+  details().ontoggle();
+  await new Promise(resolve => setImmediate(resolve));
+  const body = f.all(details()).find(node => node.className === 'workflow-body');
+  const collapse = body.children.at(-1);
+  assert.equal(collapse.textContent, '收起');
+  assert.equal(typeof collapse.onclick, 'function', 'the conversation helper receives a bound event handler');
+  collapse.onclick();
+  assert.equal(details().open, false);
+  f.W.deskMessage('desk', liveTurn('running', { activity: [{ id: 'new-tool', kind: 'tool', name: 'Read', status: 'running', input: 'example.md' }] }));
+  await new Promise(resolve => setTimeout(resolve, 280));
+  assert.equal(details().open, false, 'new companion activity respects the collapsed process');
+  const card = f.draw(running);
+  assert.equal(details().open, false, 'remains closed when the live card redraws');
+  const cardBody = f.all(card).find(node => node.className === 'wf-card-body');
+  const head = f.all(card).find(node => node.className === 'wf-card-head');
+  cardBody.children.at(-1).onclick();
+  assert.equal(cardBody.hidden, true);
+  assert.equal(head.getAttribute('aria-expanded'), 'false');
+  const redrawn = f.draw(running);
+  assert.equal(f.all(redrawn).find(node => node.className === 'wf-card-body').hidden, true, 'the collapsed card stays closed across redraws');
+  head.onclick();
+  assert.equal(cardBody.hidden, false);
+  assert.equal(head.getAttribute('aria-expanded'), 'true');
 });
 
 test('live desk packets fill the block; the answer streams there only while the step runs', () => {
@@ -237,6 +299,55 @@ test('the conversation redraws only rows whose message or surroundings changed',
   assert.ok(all(root).length > 1);
 });
 
+test('a reply drawn without the Markdown scripts keeps its line breaks and is redrawn once they load', async () => {
+  const { document } = dom();
+  const root = document.createElement('div');
+  const head = document.createElement('head');
+  document.head = head;
+  const fetched = [];
+  // The first fetch of DOMPurify fails again, the way it does while npm is still writing it.
+  let failures = 1;
+  head.append = script => {
+    fetched.push(script.src);
+    setImmediate(() => {
+      if (script.src === '/vendor/purify.min.js') {
+        if (failures-- > 0) return script.onerror();
+        context.DOMPurify = { sanitize: html => html };
+      }
+      script.onload();
+    });
+  };
+  const drawn = [];
+  const context = vm.createContext({ document, window: { addEventListener() {} }, setTimeout: fn => setImmediate(fn),
+    $: selector => selector === '#messages' ? root : { scrollHeight: 0, scrollTop: 0, clientHeight: 0, scrollTo() {} },
+    state: { chat: { id: 'chat', title: 'T', options: {} }, chats: [], messages: [] },
+    StarportLive: { orderedMessages: messages => messages },
+    StarportActivity: { render: (msg, { markdown }) => { const body = markdown(msg.content); drawn.push(body); return body; }, remember() {}, restoreFocus() {} },
+    marked: {}, katex: {}, StarportMarkdown: { render: text => '<h3>' + text + '</h3>' },
+    provider: () => ({ name: 'Claude' }), mark: () => null, t: value => value, notice: value => value, i18n: { language: 'zh', locale: 'zh-CN' },
+    renderRun() {}, markViewed() {} });
+  context.globalThis = context;
+  vm.runInContext(source('ui-kit.js'), context);
+  context.el = context.StarportUI.el;
+  vm.runInContext(source('app-messages.js'), context);
+  Object.assign(context, { renderRun() {}, markViewed() {} });
+  context.state.messages = [{ id: 'r', role: 'assistant', provider: 'claude', status: 'complete', content: '### 标题\n\n1. **一**', created: '2026-11-04T03:29:45Z', details: {} }];
+  context.renderMessages();
+  const plain = drawn.at(-1);
+  assert.equal(plain.textContent, '### 标题\n\n1. **一**');
+  assert.ok(plain.classList.contains('plain-text'), 'the fallback keeps line breaks');
+  // Only the missing script is fetched, again after a failed try; then the row is redrawn rendered.
+  for (let i = 0; i < 10 && drawn.length < 2; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(fetched, ['/vendor/purify.min.js', '/vendor/purify.min.js']);
+  assert.equal(drawn.length, 2);
+  assert.equal(drawn.at(-1).innerHTML, '<h3>### 标题\n\n1. **一**</h3>');
+  assert.ok(!drawn.at(-1).classList.contains('plain-text'));
+  assert.ok(root.children[0].children.includes(drawn.at(-1)), 'the redrawn row replaces the plain one');
+  // With everything loaded, redrawing fetches nothing more.
+  context.renderMessages();
+  assert.equal(fetched.length, 2);
+});
+
 test('opening a finished reply reads its process log once, and a failed read offers a retry', async () => {
   const { document } = dom();
   const root = document.createElement('div');
@@ -261,6 +372,7 @@ test('opening a finished reply reads its process log once, and a failed read off
     deferredTrace: true, details: { liveRevision: revision, activity: [{ id: 'c', kind: 'tool' }] } });
   context.state.messages = [reply('r', 2)];
   context.renderMessages();
+  assert.equal(seen.at(-1).options.collapseButton, true, 'main replies enable the shared bottom collapse control');
   assert.equal(seen.at(-1).options.pending, true);
   seen.at(-1).options.onOpen();
   seen.at(-1).options.onOpen();
