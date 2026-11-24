@@ -8,9 +8,11 @@ import { ContextInstructions } from './instructions.mjs';
 import { ChatSearch } from './chat-search.mjs';
 import { ChatStatus } from './chat-status.mjs';
 import { HistoryArchives, historyArchivePath } from './history-archives.mjs';
+import { KnowledgeFolders } from './knowledge.mjs';
 export { historyArchivePath } from './history-archives.mjs';
 import { historyRows, compatibleHistorySummary } from './history-context.mjs';
 import { splitTrace, isOutline, withTrace, unfinishedReply } from './message-trace.mjs';
+import { isProviderId } from './provider-ids.mjs';
 
 // Message rows with a flag for a saved process log, and with the log itself (message-trace.mjs).
 const MESSAGE = 'SELECT m.*, t.message_id IS NOT NULL AS traced FROM messages m LEFT JOIN message_traces t ON t.message_id=m.id';
@@ -49,6 +51,7 @@ export class Store {
     this.search=new ChatSearch(this);
     this.chatStatus=new ChatStatus(this);
     this.archives=new HistoryArchives(this);
+    this.knowledge=new KnowledgeFolders(this,{dataDir:file===':memory:'?null:dirname(file)});
   }
   close() {
     this.db.close();
@@ -101,9 +104,19 @@ export class Store {
   // Rooms in the order they were dragged into; rooms never placed follow, oldest first.
   rooms() {
     const placed = new Map(this.setting('sidebar.roomOrder', []).map((id, index) => [id, index]));
-    const rank = row => placed.get(row.id) ?? Infinity;
+    const rank = row => placed.get(row.id) ?? Infinity, workspaces = this.roomWorkspaces();
     return this.db.prepare("SELECT * FROM groups WHERE name != '__DELETED_ROOM__' ORDER BY created").all()
-      .sort((a, b) => (rank(a) === rank(b) ? 0 : rank(a) - rank(b)));
+      .sort((a, b) => (rank(a) === rank(b) ? 0 : rank(a) - rank(b)))
+      .map(row => ({ ...row, workspace: workspaces[row.id] || null }));
+  }
+  // The folder new conversations in a room start in. Kept in settings like the room order, so the
+  // groups table keeps the columns older builds insert by position.
+  roomWorkspaces() { return this.setting('rooms.workspaces', {}) || {}; }
+  setRoomWorkspace(id, workspace) {
+    if (!this.db.prepare('SELECT id FROM groups WHERE id=?').get(id)) throw Object.assign(new Error('房间/分组不存在'), { status: 404 });
+    const all = { ...this.roomWorkspaces() };
+    if (workspace) all[id] = workspace; else delete all[id];
+    this.setSetting('rooms.workspaces', all);
   }
   // A room's conversations as the sidebar lists them. Until they are first rearranged, the most
   // recently active comes first; afterwards they keep their place and new ones join at the top.
@@ -174,6 +187,8 @@ export class Store {
         this.db.prepare('DELETE FROM chats WHERE group_id=?').run(id);
       }
       this.db.prepare('DELETE FROM groups WHERE id=?').run(id);
+      const workspaces = this.roomWorkspaces();
+      if (workspaces[id]) { delete workspaces[id]; this.setSetting('rooms.workspaces', workspaces); }
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -256,6 +271,14 @@ export class Store {
     if (typeof trace === 'function') for (const row of rows) if (row.deferredTrace && trace(row)) this.attachTrace(row);
     return rows;
   }
+  mobileMessages(chatId,before){
+    const condition=before?" AND m.rowid<(SELECT rowid FROM messages WHERE chat_id=? AND id=?)":"";
+    return this.db.prepare(MESSAGE+" WHERE m.chat_id=?"+condition+" ORDER BY m.rowid DESC LIMIT 41")
+      .all(chatId,...before?[chatId,before]:[]).reverse().map(row=>this.decode(row));
+  }
+  mobileSubmission(chatId,key){
+    return this.db.prepare("SELECT content FROM messages WHERE chat_id=? AND role='user' AND json_extract(details,'$.mobileSubmission')=?").get(chatId,key);
+  }
   messageById(chatId,id,{trace=false}={}){const row=this.db.prepare((trace?MESSAGE_WITH_TRACE:MESSAGE)+' WHERE m.chat_id=? AND m.id=?').get(chatId,id);return row?this.decode(row):null;}
   // The user message that opened an assistant turn: the last one written before it.
   promptBefore(chatId,messageId){const row=this.db.prepare(MESSAGE+" WHERE m.chat_id=? AND m.role='user' AND m.rowid<(SELECT rowid FROM messages WHERE chat_id=? AND id=?) ORDER BY m.rowid DESC LIMIT 1").get(chatId,chatId,messageId);return row?this.decode(row):null;}
@@ -283,7 +306,9 @@ export class Store {
   }
   interactionMessages(chatId,runId){
     if(!runId)return [];
-    return this.db.prepare(MESSAGE+" WHERE m.chat_id=? AND (json_extract(m.details,'$.guidance.runId')=? OR json_extract(m.details,'$.nativeQuestionReply.runId')=?) ORDER BY m.rowid LIMIT 128").all(chatId,runId,runId).map(row=>this.decode(row));
+    // Every page asks for these every few seconds while anything runs. The plain text search skips
+    // parsing each message's details, which in a long conversation run to megabytes.
+    return this.db.prepare(MESSAGE+" WHERE m.chat_id=? AND instr(m.details,?)>0 AND (json_extract(m.details,'$.guidance.runId')=? OR json_extract(m.details,'$.nativeQuestionReply.runId')=?) ORDER BY m.rowid LIMIT 128").all(chatId,runId,runId,runId).map(row=>this.decode(row));
   }
   session(chat, provider) { return this.db.prepare('SELECT * FROM sessions WHERE chat_id=? AND provider=?').get(chat, provider); }
   saveSession(chat, provider, nativeId, cursor, fingerprint) {
@@ -300,6 +325,10 @@ export class Store {
     const rows=this.db.prepare("SELECT DISTINCT json_extract(details,'$.sessionId') AS id FROM messages WHERE provider=? AND json_extract(details,'$.sessionId') IS NOT NULL").all(provider);
     return new Set([...rows.map(r=>r.id),...this.db.prepare('SELECT native_id FROM sessions WHERE provider=?').all(provider).map(r=>r.native_id)]);
   }
+  // Native sessions a later turn may still resume: every saved session except a one-off desk's.
+  resumableSessionIds(provider) {
+    return new Set(this.db.prepare("SELECT s.native_id FROM sessions s JOIN chats c ON c.id=s.chat_id WHERE s.provider=? AND (json_extract(c.options,'$.desk') IS NULL OR json_extract(c.options,'$.desk.persistent')=1)").all(provider).map(r=>r.native_id));
+  }
   historyImport(provider, id) { return this.db.prepare('SELECT * FROM history_imports WHERE provider=? AND source_id=?').get(provider,id); }
   importHistory(provider, source, groupId=null) {
     if(groupId&&!this.db.prepare('SELECT id FROM groups WHERE id=?').get(groupId))throw new Error('目标分组不存在，请重新选择');
@@ -311,7 +340,7 @@ export class Store {
       const chat=this.newChat({group_id:groupId,title:source.title,provider,workspace:source.workspace,
         options:provider==='codex'?{codex:{permissionMode:'ask',sandbox:'workspace-write',mode:'chat'}}:{}});
       // A reply from another model, unpacked from a Starport prompt, keeps its own label.
-      for(const m of source.messages)this.insertMessage({id:randomUUID(),chat_id:chat.id,role:m.role,provider:m.role==='assistant'&&['codex','claude','antigravity','deepseek'].includes(m.provider)?m.provider:provider,content:m.content,status:m.status,details:m.details,created:m.created});
+      for(const m of source.messages)this.insertMessage({id:randomUUID(),chat_id:chat.id,role:m.role,provider:m.role==='assistant'&&isProviderId(m.provider)?m.provider:provider,content:m.content,status:m.status,details:m.details,created:m.created});
       this.db.prepare('UPDATE chats SET created=?,updated=? WHERE id=?').run(source.created,source.updated,chat.id);
       this.db.prepare('INSERT INTO history_imports VALUES(?,?,?,?)').run(provider,source.id,chat.id,new Date().toISOString());
       this.db.exec('COMMIT');
@@ -342,7 +371,7 @@ export class Store {
         names.set(g.id, this.group(g.name).id);
       }
       for (const c of data.chats) {
-        if (!['codex','claude','antigravity','deepseek'].includes(c.provider) || typeof c.title !== 'string' || c.title.length > 300 || typeof c.workspace !== 'string') throw new Error('对话格式无效');
+        if (!isProviderId(c.provider) || typeof c.title !== 'string' || c.title.length > 300 || typeof c.workspace !== 'string') throw new Error('对话格式无效');
         if(c.project_id&&!projects.has(c.project_id))throw new Error('对话项目来源无效');
         chats.set(c.id, this.newChat({ group_id: names.get(c.group_id) || null, title: c.title, provider: c.provider,
           workspace: c.workspace, options: {},project_id:projects.get(c.project_id)||null }).id);
@@ -356,12 +385,12 @@ export class Store {
       }
       if(data.historyImports!==undefined&&!Array.isArray(data.historyImports))throw new Error('导入来源格式无效');
       for(const row of data.historyImports||[]){
-        if(!['codex','claude','antigravity','deepseek'].includes(row.provider)||typeof row.source_id!=='string'||!row.source_id||row.source_id.length>200||!chats.has(row.chat_id))throw new Error('导入来源格式无效');
+        if(!isProviderId(row.provider)||typeof row.source_id!=='string'||!row.source_id||row.source_id.length>200||!chats.has(row.chat_id))throw new Error('导入来源格式无效');
         this.db.prepare('INSERT OR IGNORE INTO history_imports VALUES(?,?,?,?)').run(row.provider,row.source_id,chats.get(row.chat_id),new Date().toISOString());
       }
       if(data.queuedMessages!==undefined&&!Array.isArray(data.queuedMessages))throw new Error('排队消息格式无效');
       for(const row of data.queuedMessages||[]){
-        if(!chats.has(row.chat_id)||!['codex','claude','antigravity','deepseek'].includes(row.provider))throw new Error('排队消息格式无效');
+        if(!chats.has(row.chat_id)||!isProviderId(row.provider))throw new Error('排队消息格式无效');
         const chatId=chats.get(row.chat_id),queued=this.queue.add(chatId,{text:row.content,clientId:randomUUID()});
         this.db.prepare('UPDATE queued_messages SET provider=? WHERE id=?').run(row.provider,queued.id);
         this.queue.change(queued,'held',{error:'已从备份恢复，请确认后继续发送。'});

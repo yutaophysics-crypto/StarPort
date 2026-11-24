@@ -139,7 +139,7 @@ globalThis.StarportPermissions = (() => {
     form.append(
       el('div', { class: 'dialog-heading' }, [el('h2', { id: 'permissions-title', text: t('Codex 权限') }), close]),
       el('div', { class: 'dialog-body' }, [
-        el('p', { class: 'muted', text: t('仅影响当前星港对话，下一条消息生效。') }),
+        el('p', { class: 'muted', text: t('当前对话从下一条消息生效；新对话默认沿用此工具最近使用的权限。') }),
         ...(legacyReadonly
           ? [el('p', { class: 'permission-legacy', text: t('此对话保留原有只读范围。应用新的权限选项后，工作目录将允许编辑。') })]
           : []),
@@ -166,6 +166,7 @@ globalThis.StarportPermissions = (() => {
           if (state.chat?.id === chatId) state.chat.options = saved.options;
         } else {
           state.options.codex = updated;
+          await rememberDraftPermissions('codex', updated);
         }
         dialog.close();
         renderFeatures();

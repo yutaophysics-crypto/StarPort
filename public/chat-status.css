@@ -31,14 +31,50 @@
   box-shadow: 0 0 5px rgba(100, 182, 246, 0.28);
 }
 
+/* Waiting for the user's answer: an amber question mark that breathes, apart from
+   the blue spinner (working) and the blue dot (done, unread). */
+.chat-status.asking::before {
+  content: '?';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f2c879;
+  color: #1b1406;
+  font: 700 9px/12px var(--sans, 'Segoe UI', sans-serif);
+  text-align: center;
+  animation: chat-status-ask 1.8s ease-out infinite;
+}
+
+.chat-status.awaiting-approval::before {
+  content: '!';
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: #f5a268;
+  color: #1b1406;
+  font: 700 9px/12px var(--sans, 'Segoe UI', sans-serif);
+  text-align: center;
+}
+
 @keyframes chat-status-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
+@keyframes chat-status-ask {
+  0% {
+    box-shadow: 0 0 0 0 rgba(242, 200, 121, 0.5);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 5px rgba(242, 200, 121, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .chat-status.running::before {
+  .chat-status.running::before,
+  .chat-status.asking::before {
     animation: none;
   }
 }

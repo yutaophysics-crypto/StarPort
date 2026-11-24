@@ -1,6 +1,6 @@
 'use strict';
 globalThis.StarportFiles=(()=>{
-  const extensions='md|mdx|txt|pdf|docx?|odt|rtf|xlsx?|ods|csv|pptx?|odp|png|jpe?g|gif|webp|bmp|svg|ico|mp3|wav|mp4|mov|mkv|html?|json|ya?ml|toml|tex|ipynb|py|m?js|tsx?|jsx|css|rs|go|cpp|c|h|sql|log|zip|cmd|bat|ps1|sh';
+  const extensions='md|mdx|txt|pdf|docx?|odt|rtf|xlsx?|ods|csv|pptx?|odp|png|jpe?g|gif|webp|bmp|svg|ico|mp3|wav|mp4|mov|mkv|html?|json|ya?ml|toml|tex|ipynb|py|m?js|tsx?|jsx|css|rs|go|cpp|c|h|sql|log|zip|exe|cmd|bat|ps1|sh';
   const suffix=new RegExp('\\.(?:'+extensions+')(?:#L?\\d+(?:[-:]L?\\d+)*|:\\d+(?::\\d+)?)?$','i');
   function isReference(value){
     if(typeof value!=='string'||!value.trim()||value.length>8192||/[\x00-\x1f]/.test(value))return false;
@@ -18,6 +18,16 @@ globalThis.StarportFiles=(()=>{
       matches.push({index:match.index,text:match[0],reference:match[0]});
     }
     return matches;
+  }
+  function primaryAction(reference){
+    let path=reference.trim();
+    if(/^file:\/\/\//i.test(path)){
+      try{path=new URL(path).pathname;}catch{return 'open';}
+    }else{
+      path=path.replace(/#L?\d+(?:[-:]L?\d+)*$/i,'').replace(/:\d+(?::\d+)?$/,'');
+    }
+    try{path=decodeURIComponent(path);}catch{}
+    return /\.(?:exe|bat|cmd)$/i.test(path)?'run':'open';
   }
   let menu=null,anchor=null;
   const pending=new Set();
@@ -76,7 +86,8 @@ globalThis.StarportFiles=(()=>{
     let display=reference;
     if(/^file:\/\/\//i.test(display))try{display=decodeURIComponent(new URL(display).pathname).replace(/^\/([a-z]:)/i,'$1').replaceAll('/','\\');}catch{}
     const name=display.split(/[\\/]/).pop(),caption=el('div',{class:'file-menu-path',title:display},[el('strong',{text:name}),display!==name?el('small',{text:display}):null]);
-    menu.replaceChildren(caption,...[['open','打开文件'],['reveal','在资源管理器中查看'],['open-with','打开方式']].map(([action,label])=>{
+    const primary=primaryAction(reference);
+    menu.replaceChildren(caption,...[[primary,primary==='run'?'运行文件':'打开文件'],['reveal','在资源管理器中查看'],['open-with','打开方式']].map(([action,label])=>{
       const button=el('button',{type:'button',role:'menuitem',text:t(label)});
       button.onclick=()=>{closeMenu(true);perform(reference,context,action);};return button;
     }));
@@ -96,10 +107,11 @@ globalThis.StarportFiles=(()=>{
   function bind(node,reference,context={}){
     node.removeAttribute('target');node.removeAttribute('rel');node.setAttribute('href','#');node.setAttribute('role','button');
     node.classList.add('local-file-link');node.dataset.fileReference=reference;
-    node.title=reference+'\n'+t('点击打开，右键查看更多操作');
-    node.setAttribute('aria-label',t('打开文件 {name}',{name:node.textContent||reference}));
-    node.onclick=event=>{event.preventDefault();perform(reference,context,'open');};
-    node.addEventListener('keydown',event=>{if(event.key===' '){event.preventDefault();perform(reference,context,'open');}});
+    const action=primaryAction(reference),run=action==='run';
+    node.title=reference+'\n'+t(run?'点击运行，右键查看更多操作':'点击打开，右键查看更多操作');
+    node.setAttribute('aria-label',t(run?'运行文件 {name}':'打开文件 {name}',{name:node.textContent||reference}));
+    node.onclick=event=>{event.preventDefault();perform(reference,context,action);};
+    node.addEventListener('keydown',event=>{if(event.key===' '){event.preventDefault();perform(reference,context,action);}});
     return bindMenu(node,reference,context);
   }
   function decorate(root,context={}){

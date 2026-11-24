@@ -4,7 +4,7 @@ import {z} from 'zod';
 import { childEnvironment, startProcess, stopProcess, redact } from '../process.mjs';
 import { parseEvent } from './cli.mjs';
 import { isPreviousSessionTaskNotice } from './claude-events.mjs';
-import { prepareExternalClaude } from '../external-tools/claude-launch.mjs';
+import { prepareExternalClaude, editDenyRule } from '../external-tools/claude-launch.mjs';
 import { externalToolServers } from '../external-tools/claude-tools.mjs';
 import {requireClaudeNetworkProtection} from '../claude-network.mjs';
 
@@ -13,7 +13,25 @@ import {requireClaudeNetworkProtection} from '../claude-network.mjs';
 // Background shells end with the process there too, so they never hold a turn.
 const HOLDING_TASKS=new Set(['local_agent','local_workflow']);
 
-export async function runClaude({runtime,options,session,initialContext,prompt,contextTools,contextEnv={},images=[],cwd,signal,emit,setControl,makeQuery=query,sdkOptions={},backgroundSettleMs=30000}) {
+// Every current Claude model stops one response, thinking included, at 128k
+// output tokens, and Claude Code drops reasoning cut off there rather than
+// resuming it. Thinking before a tool call stays in context and the next
+// response gets a fresh limit, so a no-op checkpoint lets deep reasoning run
+// on in stages instead of being shortened.
+export const CHECKPOINT_TOOL='mcp__starport_thinking__checkpoint';
+export const LONG_REASONING_PROMPT=['# Long reasoning',
+  'One response, thinking included, stops at 128,000 output tokens. If your thinking reaches that before the response produces text or a tool call, the whole stretch is discarded and cannot be resumed.',
+  'Thinking that comes before a tool call stays in context, and the next response starts with a fresh limit.',
+  `So split long derivations and analyses instead of shortening them: once one stretch of thinking has run for roughly 40,000 tokens and you are not about to write the answer, call ${CHECKPOINT_TOOL} with what you have established, what is still open and what you will do next, then continue reasoning.`,
+  'Any other tool call you need anyway (reading a file, running a calculation, writing notes) works the same way.',
+  'Keep the depth the task needs; checkpoints only make long reasoning survive.'].join('\n');
+const thinkingServer=()=>createSdkMcpServer({name:'starport_thinking',version:'1.0.0',alwaysLoad:true,tools:[
+  tool('checkpoint','Record progress partway through a long stretch of reasoning, so it is not lost to the per-response output limit. Does nothing else; continue reasoning once it returns.',
+    {progress:z.string().min(1).max(20000).describe('What is established so far, what is still open, and the next step.')},
+    async()=>({content:[{type:'text',text:'Checkpoint recorded. Continue your reasoning from here.'}]}),
+    {annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}})]});
+
+export async function runClaude({runtime,options,session,initialContext,prompt,contextTools,contextEnv={},images=[],cwd,signal,emit,setControl,knowledgeDirs=[],makeQuery=query,sdkOptions={},backgroundSettleMs=30000}) {
   let stream,child,finishInput,wakeInput,externalCleanup,externalTools,canceled=false,accepting=true,failure='';
   const queued=[],inFlight=new Map();
   const abortController=new AbortController(),pending=new Map();
@@ -98,6 +116,8 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
     const id=randomUUID(),toolUseID=metadata.toolUseID;
     const deny=message=>({behavior:'deny',message,toolUseID,decisionClassification:'user_reject'});
     if(canceled||metadata.signal?.aborted){resolve(deny('用户已停止本次执行。'));return;}
+    // Read-only and touches nothing; asking would stall the reasoning it protects.
+    if(toolName===CHECKPOINT_TOOL){resolve({behavior:'allow',updatedInput:toolInput,toolUseID});return;}
     const questions=toolName==='AskUserQuestion'?(toolInput.questions||[]).map((q,index)=>({...q,id:String(index)})):null;
     const request={id,resolve,input:toolInput,questions,toolUseID,signal:metadata.signal,deny};
     request.abort=()=>resolveRequest(id,deny('该权限请求已由原工具取消。'));
@@ -148,16 +168,19 @@ export async function runClaude({runtime,options,session,initialContext,prompt,c
       return tool(def.name,def.description,shape,async args=>{try{return {content:[{type:'text',text:JSON.stringify(await contextTools.call(def.name,args))}]};}catch(error){return {isError:true,content:[{type:'text',text:error.message}]};}});
     })}):null;
     externalTools=externalToolServers({runtime,cwd,signal:abortController.signal,canUseTool,emit});
-    const hostServers={...sdkOptions.mcpServers,...contextMcp?{starport_context:contextMcp}:{},...externalTools.servers};
-    const hostAllowed=[...(sdkOptions.allowedTools||[]),...contextMcp?contextTools.definitions.map(def=>'mcp__starport_context__'+def.name):[],...externalTools.allowed];
+    const hostServers={...sdkOptions.mcpServers,...contextMcp?{starport_context:contextMcp}:{},...externalTools.servers,starport_thinking:thinkingServer()};
+    const hostAllowed=[...(sdkOptions.allowedTools||[]),...contextMcp?contextTools.definitions.map(def=>'mcp__starport_context__'+def.name):[],...externalTools.allowed,CHECKPOINT_TOOL];
     stream=makeQuery({prompt:input(),options:{pathToClaudeCodeExecutable:runtime.command,cwd,abortController,
-      settingSources:['user','project','local'],systemPrompt:{type:'preset',preset:'claude_code'},env:childEnvironment(),
+      settingSources:['user','project','local'],systemPrompt:{type:'preset',preset:'claude_code',append:LONG_REASONING_PROMPT},env:childEnvironment(),
       includePartialMessages:true,forwardSubagentText:true,permissionMode:options.permissionMode,permissionPrompts:'host',canUseTool,
       allowDangerouslySkipPermissions:options.permissionMode==='bypassPermissions',
       ...(options.model?{model:options.model}:{}),...(options.effort?{effort:options.effort}:{}),...(session?{resume:session}:{}),
       ...sdkOptions,env:childEnvironment({...runtime.env,...sdkOptions.env,...contextEnv}),
       extraArgs:{...(!session&&options.worktree?{worktree:null}:{}),...sdkOptions.extraArgs,'replay-user-messages':null},
-      ...(contextMcp||externalTools.allowed.length?{mcpServers:hostServers,allowedTools:hostAllowed}:{}),
+      mcpServers:hostServers,allowedTools:hostAllowed,
+      // Knowledge folders are readable working directories whose files no tool may edit.
+      ...knowledgeDirs.length?{additionalDirectories:[...sdkOptions.additionalDirectories||[],...knowledgeDirs],
+        disallowedTools:[...sdkOptions.disallowedTools||[],...knowledgeDirs.map(editDenyRule)]}:{},
       spawnClaudeCodeProcess:({args,cwd,env,signal})=>(child=sdkOptions.spawnClaudeCodeProcess?sdkOptions.spawnClaudeCodeProcess({args,cwd,env,signal}):startProcess(runtime.command,[...(runtime.prefixArgs||[]),...args],{cwd,env,signal}))}});
     try{for await(const message of stream){
       // Native echoes acknowledge delivery; a result identifies which inputs it

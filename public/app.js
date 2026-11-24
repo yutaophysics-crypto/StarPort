@@ -29,9 +29,14 @@ const state = {
   run: null,
   // Chats with a task running right now, from the server.
   active: [],
+  // Of those, the ones whose model is waiting for the user to answer a question.
+  asking: [],
+  awaitingApproval: [],
   selected: localStorage.getItem('hub-provider') || 'codex',
   workspace: '',
   options: {},
+  providerPermissions: {},
+  providerPreferencesReady: false,
   filter: '',
   collapsed: new Set(),
   selectedId: localStorage.getItem('hub-chat') || null
@@ -39,6 +44,7 @@ const state = {
 
 // Chat edits are saved one after another; a refresh waits for them first.
 let saveChain = Promise.resolve();
+let preferenceChain = Promise.resolve();
 // Bumped whenever the view moves to another chat or changes it, so late answers are dropped.
 let viewRevision = 0;
 let refreshSequence = 0;
@@ -133,10 +139,9 @@ function mark(p) {
 
 function opts() {
   const p = currentProvider();
-  const saved =
-    p?.id === 'codex' && state.chat
-      ? state.chat.options?.codex || {}
-      : state.chat?.options?.[p?.id] || state.options[p?.id] || {};
+  const saved = state.chat
+    ? state.chat.options?.[p?.id] || state.providerPermissions[p?.id] || {}
+    : state.options[p?.id] || state.providerPermissions[p?.id] || {};
   const values = Object.fromEntries((p?.fields || []).map(f => [f.key, saved[f.key] ?? f.default]));
   if (p?.id === 'codex') {
     const legacyReadonly =
@@ -167,10 +172,40 @@ function restoreDraft() {
 function queueSave(patch) {
   const id = state.chat?.id;
   if (!id) return Promise.resolve();
+  // Capture the tool now: a queued edit must not land on a subsequently selected tool.
+  patch = { ...patch, ...(patch.options && !patch.provider ? { provider: state.chat.provider } : {}) };
+  const previous = state.providerPermissions[patch.provider];
+  const pending = patch.options ? cachePermissions(patch.provider, patch.options) : null;
   viewRevision++;
   saveChain = saveChain.catch(() => {}).then(() => api('/chats/' + id, 'PATCH', patch));
-  saveChain.catch(e => toast(e.message));
+  saveChain.catch(e => {
+    if (pending && state.providerPermissions[patch.provider] === pending) state.providerPermissions[patch.provider] = previous;
+    toast(e.message);
+  });
   return saveChain;
+}
+
+function cachePermissions(id, values) {
+  const keys = id === 'codex' || id === 'antigravity' ? ['permissionMode', 'sandbox'] : id === 'claude' ? ['permissionMode'] : [];
+  if (!keys.length) return null;
+  const permissions = { ...state.providerPermissions[id],
+    ...Object.fromEntries(keys.filter(key => values[key] !== undefined).map(key => [key, values[key]])) };
+  state.providerPermissions[id] = permissions;
+  return permissions;
+}
+
+function rememberDraftPermissions(id, values) {
+  const previous = state.providerPermissions[id];
+  const permissions = cachePermissions(id, values);
+  if (!permissions) return Promise.resolve();
+  // During an idle-safe backend update, the page can be newer than the server.
+  if (!state.providerPreferencesReady) return Promise.resolve();
+  preferenceChain = preferenceChain.catch(() => {}).then(() => api('/providers/' + id + '/permissions', 'PATCH', permissions));
+  preferenceChain.catch(error => {
+    if (state.providerPermissions[id] === permissions) state.providerPermissions[id] = previous;
+    toast(error.message);
+  });
+  return preferenceChain;
 }
 
 // Draws everything that shows the current chat: the sidebar, the top bar, the tool panel and the messages.
@@ -185,6 +220,7 @@ async function refresh() {
   const revision = viewRevision;
   const request = ++refreshSequence;
   await saveChain.catch(() => {});
+  await preferenceChain.catch(() => {});
   const version = liveSync?.revision || 0;
   const valid = () => revision === viewRevision && request === refreshSequence && version === (liveSync?.revision || 0);
   const data = await api('/state');
@@ -211,7 +247,11 @@ function applyStateList(data) {
     chats: data.chats,
     projects: data.projects || [],
     providers: data.providers,
-    active: data.active
+    providerPermissions: data.providerPermissions || {},
+    providerPreferencesReady: Object.hasOwn(data, 'providerPermissions'),
+    active: data.active,
+    asking: data.asking || [],
+    awaitingApproval: data.awaitingApproval || []
   });
   // The open chat is a separate copy; keep its place in the list in step.
   const listed = state.chat && data.chats.find(c => c.id === state.chat.id);
@@ -277,6 +317,9 @@ function markViewed() {
 function newChat() {
   closeThemeCover(false);
   viewRevision++;
+  state.selected = currentId();
+  // Read defaults afresh; a previous chat's goal/model/worktree belongs to that chat.
+  state.options = {};
   state.chat = null;
   state.draftGroup = null;
   state.messages = [];
@@ -285,7 +328,6 @@ function newChat() {
   state.run = null;
   state.selectedId = null;
   approvalKey = '';
-  state.options.codex = { ...state.options.codex, permissionMode: 'ask', sandbox: 'workspace-write' };
   localStorage.removeItem('hub-chat');
   renderView();
   restoreDraft();

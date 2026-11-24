@@ -2,7 +2,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { claudeControl } from './claude-control.mjs';
 import { claudeEffort } from './effort.mjs';
 
-const aliases=[['sonnet','Claude Sonnet'],['opus','Claude Opus'],['haiku','Claude Haiku'],['sonnet[1m]','Claude Sonnet · 1M'],['opus[1m]','Claude Opus · 1M'],['opusplan','Opus → Sonnet · Plan']];
+const aliases=[['sonnet','Claude Sonnet'],['opus','Claude Opus'],['haiku','Claude Haiku'],['fable','Claude Fable'],['sonnet[1m]','Claude Sonnet · 1M'],['opus[1m]','Claude Opus · 1M'],['opusplan','Opus → Sonnet · Plan']];
 export const claudeAliases=()=>({source:'aliases',models:aliases.map(([id,label])=>({id,label}))});
 
 export function claudeModelLabel(model){
@@ -27,11 +27,17 @@ export function claudeModelCatalog(rows){
 }
 
 // Initialize the native model picker only: no user prompt, tools, hooks or saved session.
-export async function claudeModels(runtime,cwd,makeQuery=query,timeoutMs=15000){
+export async function claudeModels(runtime,cwd,makeQuery=query,timeoutMs=25000){
   if(!runtime)return claudeAliases();
-  try{
-    const rows=await claudeControl(runtime,cwd,session=>session.supportedModels(),makeQuery,timeoutMs);
-    if(!Array.isArray(rows)||!rows.length)throw new Error('No native models');
-    return claudeModelCatalog(rows);
-  }catch{return claudeAliases();}
+  const attempts=timeoutMs>=1000?2:1;
+  for(let attempt=0;attempt<attempts;attempt++){
+    try{
+      const rows=await claudeControl(runtime,cwd,session=>session.supportedModels(),makeQuery,timeoutMs);
+      if(!Array.isArray(rows)||!rows.length)throw new Error('No native models');
+      return claudeModelCatalog(rows);
+    }catch{
+      if(attempt+1>=attempts)return claudeAliases();
+    }
+  }
+  return claudeAliases();
 }

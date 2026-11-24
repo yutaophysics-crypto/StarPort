@@ -19,7 +19,7 @@ const registry={resolve:()=>({command:process.execPath,prefixArgs:[]}),probe:asy
     {value:'opus',resolvedModel:'claude-opus-5-5',supportedEffortLevels:['low','medium','high','xhigh','max']},
     {value:'older',resolvedModel:'claude-opus-4-6',supportedEffortLevels:['low','medium','high','max']},
     {value:'haiku',resolvedModel:'claude-haiku-4-5',supportsEffort:false}]):
-    {source:'native',models:[{id:id+'-test-model',label:'Test model',effort:effortChoices(id==='deepseek'?['off','low','high','max']:['low','high'],{defaultLevel:'high'}),...id==='deepseek'?{provider:'test-service'}:{}}],...id==='antigravity'?{effort:effortChoices(['low','medium','high'],{source:'cli'})}:{}},
+    {source:'native',models:[{id:id+'-test-model',label:'Test model',effort:effortChoices(id==='deepseek'?['off','low','high','max']:['low','high'],{defaultLevel:'high'}),...id==='deepseek'?{provider:'test-service'}:{}}],...id==='antigravity'?{effort:effortChoices(['low','medium','high','xhigh','max'],{source:'cli',labels:{xhigh:'Extra high'}})}:{}},
   list:async()=>Object.values(PROVIDERS).map(p=>({...p,installed:true,nativePlan:p.id!=='deepseek',nativeGoal:p.id==='codex',nativeAutoReview:p.id==='codex',statusLabel:'隔离测试环境'}))};
 const fake=async({provider,prompt,emit,signal,setControl})=>{
   let stop;const interrupted=new Promise(resolve=>stop=resolve);setControl({stop});

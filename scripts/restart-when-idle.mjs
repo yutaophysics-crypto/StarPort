@@ -1,4 +1,4 @@
-import { readFile, writeFile, open, unlink, rename } from 'node:fs/promises';
+import { readFile, writeFile, open, unlink, rename, stat } from 'node:fs/promises';
 import { openSync, closeSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
@@ -50,10 +50,17 @@ export async function acquireRestartLock(data,{alive=pid=>{try{process.kill(pid,
     try{handle=await open(file,'wx');await handle.writeFile(JSON.stringify(owner));await handle.close();
       return async()=>{try{const current=JSON.parse(await readFile(file,'utf8'));if(current.id===owner.id)await unlink(file);}catch{}};
     }catch(error){await handle?.close().catch(()=>{});if(error.code!=='EEXIST')throw error;
-      // A fresh empty lock may belong to a watcher that has not finished writing yet.
-      let current;try{current=JSON.parse(await readFile(file,'utf8'));}catch{return null;}
-      if(Number.isSafeInteger(current.pid)&&alive(current.pid))return null;
-      await unlink(file).catch(()=>{});
+      // A fresh empty lock may belong to a watcher that has not finished writing yet; a stale one was interrupted mid-start.
+      let current;
+      try { current = JSON.parse(await readFile(file, 'utf8')); }
+      catch {
+        const info = await stat(file).catch(() => null);
+        if (!info || Date.now() - info.mtimeMs < 5000) return null;
+        await unlink(file).catch(() => {});
+        continue;
+      }
+      if (Number.isSafeInteger(current.pid) && alive(current.pid)) return null;
+      await unlink(file).catch(() => {});
     }
   }
   return null;

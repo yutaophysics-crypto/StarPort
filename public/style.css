@@ -509,6 +509,7 @@ html[lang='en'] .sidebar-bottom {
 
 .breadcrumb {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -809,6 +810,13 @@ h1 > span {
   margin: 0 auto 30px;
 }
 
+/* Replies out of view are not laid out until scrolled near; a long conversation otherwise lays out
+   every reply on opening and on each streamed update. The browser keeps each reply's last size. */
+#messages > .message {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}
+
 .message-header {
   display: flex;
   align-items: center;
@@ -851,6 +859,11 @@ h1 > span {
   line-height: 1.9;
   font-size: 14px;
   overflow-wrap: anywhere;
+}
+
+/* Markdown that could not be rendered keeps its line breaks. */
+.message-body.plain-text {
+  white-space: pre-wrap;
 }
 
 .message-body p {
@@ -973,6 +986,10 @@ h1 > span {
   background: #f4ebe5;
   color: #956f5d;
 }
+
+.session-recovery { margin-top: 12px; }
+.session-recovery-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+.session-recovery small { color: var(--muted); line-height: 1.6; }
 
 /* Branching: a quiet text action under each finished reply, shown on hover. */
 .message-branch {
@@ -1233,6 +1250,21 @@ h1 > span {
 
 .app-shell.features-closed {
   grid-template-columns: var(--sidebar-width, var(--sidebar-default)) minmax(0, 1fr);
+}
+
+/* A collapsed sidebar keeps its grid column, at zero width, so the columns after it stay put.
+   !important outranks the width a drag saved inline; that width comes back when it reopens.
+   Narrow windows show the sidebar as a drawer instead, so this stops at their breakpoint. */
+@media (min-width: 651px) {
+  :root[data-sidebar='collapsed'] .app-shell {
+    --sidebar-width: 0px !important;
+  }
+  :root[data-sidebar='collapsed'] .sidebar {
+    visibility: hidden;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+  }
 }
 
 dialog {

@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application' version '8.10.0'
+}
+
+android {
+    namespace 'app.starport.mobile'
+    compileSdk 36
+    buildToolsVersion "36.0.0"
+
+    defaultConfig {
+        applicationId 'app.starport.mobile'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+    sourceSets.main.res.srcDir(layout.buildDirectory.dir('generated/brand'))
+    signingConfigs {
+        if (System.getenv("STARPORT_ANDROID_KEYSTORE")) {
+            release {
+                storeFile file(System.getenv("STARPORT_ANDROID_KEYSTORE"))
+                storePassword System.getenv("STARPORT_ANDROID_STORE_PASSWORD")
+                keyAlias System.getenv("STARPORT_ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("STARPORT_ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        debug { applicationIdSuffix ".debug" }
+        release {
+            if (signingConfigs.findByName("release") != null) signingConfig signingConfigs.release
+        }
+    }
+}
+
+tasks.register('copyBrand', Copy) {
+    from('../../../../public/mobile/icon-192.png')
+    into(layout.buildDirectory.dir('generated/brand/drawable-nodpi'))
+    rename { 'starport.png' }
+}
+tasks.named('preBuild') { dependsOn tasks.named('copyBrand') }

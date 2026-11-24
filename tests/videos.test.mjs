@@ -18,7 +18,9 @@ test('video references are canonical, part-aware, deduplicated and limited to Bi
   assert.deepEqual(findVideoReferences(`看看 ${url}?p=2 和 ${bvid}，${bvid}`),[parseVideoReference(url+'?p=2'),reference]);
   for(const bad of ['file:///C:/secret',url.replace('www.bilibili.com','evil.example'),url.replace('www.bilibili.com','www.bilibili.com.evil.example'),url.replace('www.bilibili.com','user:pass@www.bilibili.com'),url+'?p=0',url+'?p=1&p=2',url+'?p=1001','http://127.0.0.1:3210/api/state',bvid+'/../../'])assert.throws(()=>parseVideoReference(bad));
   assert.deepEqual(findVideoReferences('https://example.com/'+bvid),[]);
-  assert.throws(()=>findVideoReferences('BV0000000001 BV0000000002 BV0000000003 BV0000000004'));
+  // No count cap, and a link that is not a readable video never blocks the message.
+  assert.equal(findVideoReferences(Array.from({length:12},(_,i)=>'BV'+String(i).padStart(10,'0')).join(' ')).length,12);
+  assert.deepEqual(findVideoReferences(`https://www.bilibili.com/video/av170001 ${url}?p=0 ${url}?spm_id_from=333.1387.favlist.content.click&vd_source=x`),[reference]);
 });
 test('browser captions are validated completely, timestamped and never silently truncated',()=>{
   const caption=videoAttachment(reference,result());assert.equal(caption.url,url);assert.match(caption.text,/00:00:04 – 00:00:09/);assert.match(caption.text,/自动生成/);assert.match(caption.text,/未转写音频/);

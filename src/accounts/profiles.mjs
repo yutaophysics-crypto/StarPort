@@ -7,14 +7,14 @@ import { collaborationUrl } from '../collaboration/server.mjs';
 import { fail } from '../collaboration/store.mjs';
 const read=file=>{try{return JSON.parse(readFileSync(file,'utf8'));}catch{return null;}};
 export class DesktopProfiles {
-  constructor({dataDir,registry,implementations,onChange=()=>{},legacyLink,request=serviceRequest}) {
-    Object.assign(this,{dataDir,registry,implementations,onChange,legacyLink,request});this.file=join(dataDir,'account-profiles.json');this.profiles=new Map();this.clients=new Map();this.busy=new Set();
+  constructor({dataDir,registry,implementations,onChange=()=>{},legacyLink,mobileHandler,request=serviceRequest}) {
+    Object.assign(this,{dataDir,registry,implementations,onChange,legacyLink,mobileHandler,request});this.file=join(dataDir,'account-profiles.json');this.profiles=new Map();this.clients=new Map();this.busy=new Set();
     const saved=read(this.file);this.lastProfile=saved?.lastProfile||null;
     for(const p of saved?.profiles||[]){try{if(!/^[a-f0-9]{32}$/.test(p.id)||!p.username)continue;p.server=collaborationUrl(p.server);this.profiles.set(p.id,p);}catch{}}
   }
   key(server,username){return createHash('sha256').update(server+'\0'+username).digest('hex').slice(0,32);}
   client(id){const p=this.profiles.get(id);if(!p)throw fail('这个服务器账号尚未登录',401);if(this.clients.has(id))return this.clients.get(id);
-    const directory=join(this.dataDir,'server-accounts',id);mkdirSync(directory,{recursive:true,mode:0o700});const bridge=p.legacy&&this.legacyLink?this.legacyLink:new DesktopLink({registry:this.registry,dataDir:directory,implementations:this.implementations,onChange:this.onChange,transport:(base,path,options)=>this.request(base,path,{method:'POST',...options})});
+    const directory=join(this.dataDir,'server-accounts',id);mkdirSync(directory,{recursive:true,mode:0o700});const bridge=p.legacy&&this.legacyLink?this.legacyLink:new DesktopLink({registry:this.registry,dataDir:directory,implementations:this.implementations,mobileHandler:this.mobileHandler,onChange:this.onChange,transport:(base,path,options)=>this.request(base,path,{method:'POST',...options})});
     const client=new DesktopAccount({issuer:p.server+'/account',dataDir:directory,desktopLink:bridge,request:this.request});this.clients.set(id,client);return client;
   }
   async save(){const value={lastProfile:this.lastProfile,profiles:[...this.profiles.values()].map(p=>({...p}))};this.saving=(this.saving||Promise.resolve()).catch(()=>{}).then(()=>savePrivateJSON(this.file,value));await this.saving;}

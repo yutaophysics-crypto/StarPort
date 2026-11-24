@@ -8,7 +8,11 @@ export function temporaryAntigravityStartup(message) {
   const serverError = /Eligibility check failed:[^\r\n]*(?:failed to fetch user info|failed to get profile picture|failed to make code assist backend request)/i.test(text)
     && /Eligibility check failed:[^\r\n]*\b(?:500|502|503|504)\b/i.test(text);
   const dropped = /Eligibility check failed:[^\r\n]*\/userinfo"?:\s*(?:EOF|connection reset|i\/o timeout|TLS handshake timeout)/i.test(text);
-  return (serverError || dropped)
+  // Avatar fetching is part of agy's pre-turn eligibility bootstrap as well.
+  // Limit transport retries to the known Google endpoint and explicit failure,
+  // never a generic EOF from model output or an already executing tool.
+  const droppedAvatar = /Eligibility check failed:\s*failed to get profile picture:\s*(?:Get|Head)\s+"https:\/\/(?:lh\d+\.)?googleusercontent\.com\/[^"\r\n]*":\s*(?:unexpected EOF|EOF|connection reset|i\/o timeout|TLS handshake timeout)\b/i.test(text);
+  return (serverError || dropped || droppedAvatar)
     && !/\b(?:401|403|429)\b|not eligible|not (?:currently )?available in|permission.denied|invalid.grant|account (?:suspended|disabled)/i.test(text);
 }
 

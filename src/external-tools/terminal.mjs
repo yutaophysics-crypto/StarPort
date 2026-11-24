@@ -15,7 +15,9 @@ const ISOLATION='Windows MXC; project writable; approved tool installations read
 export const quotePowerShell=value=>"'"+value.replaceAll("'","''")+"'";
 export function workspaceFilesystem(workspace,snapshot={workspace,tools:[]}){
   validateToolSnapshot(snapshot,workspace);
-  return Object.fromEntries([[":root","deny"],[":minimal","read"],[workspace,"write"],[dirname(process.execPath),"read"],...snapshot.tools.map(tool=>[tool.canonical,'read'])]);
+  // Knowledge folders (knowledge.mjs) are read-only reference material, like tool installations.
+  return Object.fromEntries([[":root","deny"],[":minimal","read"],[workspace,"write"],[dirname(process.execPath),"read"],...snapshot.tools.map(tool=>[tool.canonical,'read']),
+    ...(snapshot.knowledge||[]).map(path=>[path,'read'])]);
 }
 export async function runWorkspaceCommand({workspace,sandboxExecutable,runner,normalPolicy,snapshot={workspace,tools:[]},command,timeoutMs=120000,signal}){
   if(normalPolicy)return runNormalWorkspaceCommand({workspace,sandboxExecutable,command,timeoutMs,signal,normalPolicy,snapshot,filesystem:workspaceFilesystem(workspace,snapshot)});
@@ -25,7 +27,7 @@ export async function runWorkspaceCommand({workspace,sandboxExecutable,runner,no
     // Only owner configuration supplies the runner. Model input supplies command
     // data, never a binary, policy, environment, or shell argument string.
     const child=spawn(runner.command,runner.args,{cwd:workspace,env:{...externalEnvironment(),...runner.env},shell:false,windowsHide:true,stdio:['pipe','pipe','pipe']});
-    child.stdin.on('error',()=>{});child.stdin.end(JSON.stringify({workspace,command,timeoutMs,readonlyPaths:snapshot.tools.map(item=>item.canonical),toolPaths:snapshot.tools.filter(item=>item.scope==='global').map(item=>({command:item.command,executable:item.canonicalExecutable}))}));
+    child.stdin.on('error',()=>{});child.stdin.end(JSON.stringify({workspace,command,timeoutMs,readonlyPaths:[...snapshot.tools.map(item=>item.canonical),...snapshot.knowledge||[]],toolPaths:snapshot.tools.filter(item=>item.scope==='global').map(item=>({command:item.command,executable:item.canonicalExecutable}))}));
     const result=await collectOutput(child,{timeoutMs:timeoutMs+5000,signal});
     if(result.timedOut||result.canceled)return {workspace,...result,isolation:'Owner-configured isolated runner; no unrestricted fallback'};
     if(result.exitCode!==0||result.outputTruncated)throw Error('本机隔离运行器失败；不会放宽权限：'+result.stderr);

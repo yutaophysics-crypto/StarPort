@@ -19,6 +19,22 @@ for(const error of [eof,reset])test('completed agy answer supersedes its recover
   assert.equal(events.find(event=>event.type==='diagnostic').message,error);
 });
 
+// agy retries these within the turn itself; only an answer finished after them proves it recovered.
+const selfRetries={
+  'output limit':'Your previous response was cut off because it exceeded the output token limit\nPlease continue from where you left off, keeping your response shorter\nRetries remaining: 3',
+  'interrupted stream':'The stream was interrupted. Please continue the task you were working on.',
+  'closed connection':'API error (attempt 1): request failed: Post "https://example.invalid/v1internal:streamGenerateContent?alt=sse": write tcp 172.29.0.1:6908->172.29.0.59:443: use of closed network connection',
+};
+for(const [name,error] of Object.entries(selfRetries))test('agy that retried after '+name+' and finished its answer is complete',()=>{
+  // As in an exam seat: the cut-off, then more files written, then the whole answer.
+  const steps=[step(33,'error_message'),step(34,'agent_response','DONE',{text:''}),step(35,'tool','DONE',{tool_name:'write_file'}),step(36,'agent_response','DONE',{text:'# 答卷\n全部完成'})];
+  const events=parse([...steps,result(error,'# 答卷\n全部完成')]);
+  assert.equal(events.some(event=>event.type==='error'),false);
+  assert.equal(events.find(event=>event.type==='diagnostic').message,error);
+  // Stopping right after the retry message is still a failure.
+  assert.equal(parse([step(1,'agent_response','DONE',{text:'Started.'}),step(2,'error_message'),result(error,'Started.')]).find(event=>event.type==='error').message,error);
+});
+
 test('agy completion can be confirmed by finished streamed text without a full snapshot',()=>{
   const events=parse([step(1,'error_message'),step(2,'agent_response','RUNNING',{text_delta:'Fi'}),step(2,'agent_response','RUNNING',{text_delta:'nal'}),step(2,'agent_response'),result()]);
   assert.equal(events.some(event=>event.type==='error'),false);

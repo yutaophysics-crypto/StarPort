@@ -14,7 +14,7 @@ export async function connectCodex(runtime, cwd, handlers={}) {
 
 // `ephemeral` asks for a thread Codex keeps out of its saved history (and so out of the Codex
 // app), for one-off desks nobody resumes. A server without the option just saves it as usual.
-export async function runCodex({runtime,options,session,ephemeral=false,prompt,contextTools,contextEnv={},images=[],goalObjective,cwd,signal,emit,setControl,reconcileIntervalMs=15000,reconcileAfterMs=45000}) {
+export async function runCodex({runtime,options,session,threadName,ephemeral=false,prompt,contextTools,contextEnv={},images=[],goalObjective,cwd,signal,emit,setControl,reconcileIntervalMs=15000,reconcileAfterMs=45000}) {
   const permissions=codexPermissions(options,cwd);
   let rpc,threadId,turnId,canceled=false,pendingTurn=null,goal=null,paused=false,model=null;
   // Turns that already ended. Their late deltas must not append to the answer.
@@ -101,13 +101,29 @@ export async function runCodex({runtime,options,session,ephemeral=false,prompt,c
     const config={cwd,approvalPolicy:permissions.approvalPolicy,approvalsReviewer:permissions.approvalsReviewer,sandbox:permissions.sandbox};
     if(contextTools&&!session)config.dynamicTools=contextTools.definitions.map(def=>({type:'function',...def}));
     if(options.model)config.model=options.model;
-    const result=await rpc.request(session?'thread/resume':'thread/start',session?{...config,threadId:session}:{...config,experimentalRawEvents:false,...ephemeral?{ephemeral:true}:{}});
+    let result;
+    try {
+      result=await rpc.request(session?'thread/resume':'thread/start',session?{...config,threadId:session}:{...config,experimentalRawEvents:false,...ephemeral?{ephemeral:true}:{}});
+    } catch(error) {
+      // Only a refusal of this exact resume proves that no turn was sent.
+      // Never retry an uncertain turn/start, interrupt the owner, or remove its lock.
+      const writer=error.message.match(/^thread (\S+) already has an active writer[.!]?$/i);
+      if(session&&writer?.[1]===session&&!signal?.aborted)
+        throw Object.assign(new Error('Codex 底层会话正被另一个窗口或工具占用。本条消息未送达；释放占用后可重试连接，或在独立会话中继续。'),{codexWriterConflict:true});
+      throw error;
+    }
     threadId=result.thread.id;model=result.model;
     // Trust what the server made, not what was asked: only a thread it confirms as ephemeral
-    // is left unresumable and spared the status check (it cannot list its turns).
+    // is unnamed, left unresumable and spared the status check (it cannot list its turns).
     const unsaved=!session&&result.thread.ephemeral===true;
     if(unsaved)probeDisabled=true;
     emit({type:'session',id:threadId,model,...unsaved?{ephemeral:true}:{}});
+    // Name only the thread Starport is using, never the source of an import.
+    // Preserve a custom name set elsewhere; repair old unnamed Starport threads.
+    if(threadName&&!unsaved&&(!session||!result.thread.name||result.thread.name.startsWith('StarPort · '))) {
+      try {await rpc.request('thread/name/set',{threadId,name:threadName},5000);}
+      catch {emit({type:'notice',text:'未能设置 Codex 会话名称，连接仍可继续。'});}
+    }
     const reconcileTurn=()=>{
       if(checking||probeDisabled||rpc.ended||canceled||!pendingTurn||!turnId||approvals.size||Date.now()-lastNativeEventAt<reconcileAfterMs)return;
       const expectedTurnId=turnId;

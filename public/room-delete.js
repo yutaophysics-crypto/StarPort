@@ -7,7 +7,12 @@
   const { el, showDialog } = globalThis.StarportUI;
 
   async function executeRoomDeletion(group, mode, exportDir) {
-    const result = await api('/groups/' + encodeURIComponent(group.id) + '/delete', 'POST', { mode, exportDir });
+    const result = await api('/groups/' + encodeURIComponent(group.id) + '/delete', 'POST', {
+      mode,
+      exportDir,
+      theme: globalThis.StarportTheme?.theme || 'sea',
+      lang: i18n.language
+    });
     const exportedCount = result?.exportedCount || 0;
     const exportedPath = result?.exportedPath || '';
     if (mode === 'export' && exportedPath) api('/folders/open', 'POST', { path: exportedPath }).catch(() => {});
@@ -53,7 +58,7 @@
       el('div', { class: 'room-delete-folder-controls' }, [exportDirInput, browse]),
       el('span', {
         class: 'room-field-hint',
-        text: `会在其中新建「${group.name}_导出_${new Date().toISOString().slice(0, 10)}」，每个对话一份 .md`
+        text: `会在其中新建「${group.name}_导出_${new Date().toISOString().slice(0, 10)}」，每个对话导出 HTML 与 Markdown`
       })
     ]);
 

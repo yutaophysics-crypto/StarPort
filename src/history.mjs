@@ -5,6 +5,8 @@ import { DeepseekHistory } from './deepseek-history.mjs';
 import { parseCodexActivity } from './adapters/codex-events.mjs';
 import { mergeActivity, settleActivity } from './activity.mjs';
 
+// The names Starport gives its desk and exam-seat threads (see the runner's threadName).
+const DESK_THREAD=/^StarPort · \[(工位|考位)\]/;
 const iso=(value,fallback)=>Number.isFinite(value)&&value>0?new Date(value*1000).toISOString():fallback;
 export function historySummary(thread) {
   const created=iso(thread.createdAt,new Date().toISOString());
@@ -112,6 +114,28 @@ export class HistoryImporter {
     if(existing)return {status:'skipped',chatId:existing.chat_id};
     const source=await this.read(provider,id);
     return this.store.importHistory(provider,source,group_id);
+  }
+  // Desk threads earlier versions left in Codex's list, before one-off desks went ephemeral.
+  // Only threads Starport named as desks or exam seats, last updated before `before` (seconds,
+  // so nothing started since), and not a session a later turn resumes (`keep`). Archived, not
+  // deleted: Codex can restore them. Collected first, so archiving cannot shift the pages.
+  async archiveCodexDesks({before,keep=new Set()}){
+    return this.use('codex',async rpc=>{
+      const targets=[],seen=new Set();let cursor=null;
+      for(let page=0;page<1000;page++){
+        const result=await rpc.request('thread/list',{limit:100,cursor,archived:false,modelProviders:[],sortKey:'updated_at',useStateDbOnly:true});
+        for(const thread of result.data||[])if(DESK_THREAD.test(thread.name||'')&&!keep.has(thread.id)&&thread.updatedAt<before)targets.push(thread.id);
+        cursor=result.nextCursor;if(!cursor)break;
+        if(seen.has(cursor))throw new Error('Codex 历史分页重复，请稍后重试');
+        seen.add(cursor);
+      }
+      let archived=0,failed=0;
+      for(const threadId of new Set(targets)){
+        if(this.closing)break;
+        try{await rpc.request('thread/archive',{threadId});archived++;}catch{failed++;}
+      }
+      return {archived,failed};
+    });
   }
   async close(){this.closing=true;await Promise.allSettled([...this.connections].map(rpc=>rpc.close()));}
 }

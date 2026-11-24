@@ -15,6 +15,8 @@ globalThis.StarportTheme=(()=>{
   }
   function set(value){apply(value);try{localStorage.setItem('starport-theme',theme);}catch{}}
   apply(theme);
+  // A collapsed sidebar stays collapsed from the first paint too; app-layout.js toggles it.
+  try{if(localStorage.getItem('starport-sidebar-collapsed')==='1')document.documentElement.dataset.sidebar='collapsed';}catch{}
   document.addEventListener('DOMContentLoaded',()=>{
     for(const button of document.querySelectorAll('[data-theme-choice]'))button.addEventListener('click',()=>set(button.dataset.themeChoice));
     apply(theme);

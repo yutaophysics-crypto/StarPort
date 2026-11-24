@@ -3,12 +3,14 @@ import {connectCodex} from './adapters/codex.mjs';
 import {claudeControl} from './claude-control.mjs';
 import {deepseekBalance} from './deepseek-usage.mjs';
 import {startProcess,stopProcess,redact} from './process.mjs';
+import {ollamaHost,ollamaRequest} from './adapters/ollama.mjs';
 
 export const USAGE_SOURCES={
   codex:{label:'Codex · account/rateLimits/read',url:'https://learn.chatgpt.com/docs/app-server'},
   claude:{label:'Claude Code · /usage',url:'https://code.claude.com/docs/en/costs#using-the-usage-command'},
   antigravity:{label:'Antigravity · /usage + /credits',url:'https://antigravity.google/docs/cli/commands/usage/'},
-  deepseek:{label:'DeepSeek · /user/balance',url:'https://api-docs.deepseek.com/api/get-user-balance/'}
+  deepseek:{label:'DeepSeek · /user/balance',url:'https://api-docs.deepseek.com/api/get-user-balance/'},
+  ollama:{label:'Ollama · /api/ps',url:'https://docs.ollama.com/api/ps'}
 };
 const finite=value=>typeof value==='number'&&Number.isFinite(value);
 export function usageWindow(label,used,resetAt,extra={}){
@@ -84,6 +86,12 @@ export async function loadUsage(id,runtime,cwd,root,options={}){
   if(id==='deepseek'){
     try{return await deepseekBalance(runtime,cwd,root,options);}
     catch{throw new Error('DeepSeek 用量查询失败，请在原工具检查服务配置、凭据和网络');}
+  }
+  if(id==='ollama'){
+    // Local models have no account quota; show which ones are loaded in memory instead.
+    const {models=[]}=await ollamaRequest(ollamaHost(runtime.env),'/api/ps');
+    const text=models.map(row=>`${row.name}  ${(row.size_vram/2**30).toFixed(1)} GB 显存  上下文 ${row.context_length??'—'}`).join('\n')||'当前没有加载中的模型';
+    return {status:'ok',reason:'Ollama 在本机运行，没有账号配额。',reports:[{label:'已加载的模型',text}]};
   }
   if(id==='antigravity'){
     const reports=[{label:'模型配额',text:await nativeUsageText(runtime,cwd,'/usage')}],notes=[];

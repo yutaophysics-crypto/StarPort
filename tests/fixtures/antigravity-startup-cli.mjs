@@ -10,7 +10,12 @@ if (mode === 'recover' && previous.launches === 1 || ['exhaust', 'cancel'].inclu
   console.error(temporary); process.exit(1);
 }
 // Real agy in stream-json mode reports the failed check on stdout as a zero-turn result.
-const refusal = { event: 'result', result: { conversation_id: '', status: 'ERROR', response: '', error: temporary, duration_seconds: 0, num_turns: 0 } };
+const avatar='Eligibility check failed: failed to get profile picture: Get "https://lh3.googleusercontent.com/a/fictional-avatar=s96-c": EOF';
+const avatarFailure=['avatar-exhaust','avatar-after-step'].includes(mode)||mode==='avatar-recover'&&previous.launches===2;
+const failure=avatarFailure?avatar:mode==='avatar-recover'?'Eligibility check failed: Get "https://www.googleapis.com/oauth2/v2/userinfo": EOF':temporary;
+const refusal = { event: 'result', result: { conversation_id: '', status: 'ERROR', response: '', error: failure, duration_seconds: 0, num_turns: 0 } };
+if(mode==='avatar-exhaust'||mode==='avatar-recover'&&previous.launches<=2){send(refusal);process.exit(1);}
+if(mode==='avatar-after-step'){send({event:'step_update',step_update:{step_type:'tool',step_index:1,tool_name:'run_command',state:'DONE',output:'already ran once'}});send(refusal);process.exit(1);}
 if (mode === 'json-recover' && previous.launches === 1) { send(refusal); process.exit(1); }
 if (mode === 'json-after-step') { send({ event: 'step_update', step_update: { step_type: 'agent_response', step_index: 1, state: 'DONE', text: 'partial' } }); send(refusal); process.exit(1); }
 if (mode === 'forbidden') { console.error('Eligibility check failed: PERMISSION_DENIED (code 403)'); process.exit(1); }

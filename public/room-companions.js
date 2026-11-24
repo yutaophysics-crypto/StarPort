@@ -4,6 +4,7 @@
 (() => {
   const Room = globalThis.StarportAgentsRoom;
   const W = globalThis.StarportWorkflows;
+  const Knowledge = globalThis.StarportKnowledge;
   const { el, icon, avatar, textAction, field, showDialog, closeDialog, confirmDialog, modelPicker } =
     globalThis.StarportUI;
   const { roomInfo, currentGroupId, currentRoom, roomMounts, modelLine, toggleMention } = Room;
@@ -490,9 +491,13 @@
         el('div', { class: 'room-field-grid' }, [field('名字', name, '点名时写 @名字'), field('头像', face)]),
         field('角色', role),
         el('div', { class: 'room-field-grid' }, [field('工具', picker.provider), field('思考强度', picker.effort)]),
-        field('模型', picker.model),
+        field('模型', picker.model, '', picker.refresh),
         modes.node,
-        field('性格', persona)
+        field('性格', persona),
+        // Saved as soon as a folder is added or removed, apart from the form's 保存 (knowledge.js).
+        existing
+          ? Knowledge && field('知识库', Knowledge.editor('companion', existing.id), Knowledge.note('companion'))
+          : field('知识库', el('span', { class: 'room-field-hint', text: '招募之后，可以在这里给它挂只读的资料文件夹。' }))
       ],
       footer: [
         remove,

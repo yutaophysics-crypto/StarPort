@@ -11,3 +11,93 @@
 .transfer-preview { display: grid; gap: 10px; max-height: 30vh; overflow: auto; overflow-wrap: anywhere; }
 .transfer-preview:empty { display: none; }
 .transfer-preview .history-preview-message div { white-space: pre-wrap; }
+
+.export-mode-tabs {
+  display: inline-flex;
+  justify-self: start;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--field, var(--panel));
+  gap: 2px;
+}
+.export-mode-tab {
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  transition: color .15s, background-color .15s;
+}
+.export-mode-tab:hover:not(:disabled) {
+  color: var(--ink);
+}
+.export-mode-tab[aria-selected=true] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 14%, var(--paper));
+  font-weight: 500;
+}
+.export-pane {
+  display: grid;
+  gap: 12px;
+}
+.export-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 540px) {
+  .export-theme-grid { grid-template-columns: 1fr; }
+}
+.export-theme-card {
+  display: grid;
+  gap: 2px;
+  padding: 7px 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--field, var(--panel));
+  color: var(--ink);
+  text-align: left;
+  transition: border-color .15s, background-color .15s;
+}
+.export-theme-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.export-theme-card[aria-pressed=true] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.export-theme-card b {
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.export-theme-card small {
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.export-theme-swatch {
+  position: relative;
+  display: block;
+  height: 64px;
+  margin-bottom: 6px;
+  border-radius: 5px;
+  background: #091322 url('/assets/star-sea.png') center 60% / cover no-repeat;
+}
+.export-theme-card[data-export-theme=port] .export-theme-swatch {
+  background: #03050a url('/assets/spaceport.svg') center / cover no-repeat;
+}
+.export-theme-card[data-export-theme=deep-space] .export-theme-swatch {
+  background: #0c0f13 url('/assets/deep-space.webp') 64% 42% / cover no-repeat;
+}
+.export-theme-card[aria-pressed=true] .export-theme-swatch::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23071220' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 11px no-repeat;
+  box-shadow: 0 1px 4px #0006;
+}

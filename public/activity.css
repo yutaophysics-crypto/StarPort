@@ -133,6 +133,11 @@
   padding: 8px 15px 14px;
 }
 
+.workflow-collapse {
+  justify-self: end;
+  margin-top: 4px;
+}
+
 .workflow-view-switch {
   display: flex;
   justify-content: flex-end;

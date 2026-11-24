@@ -4,7 +4,8 @@
 // anchored menus, segmented controls and the provider / model / effort picker.
 // workflows.js, agents-room.js and prompt-snippets.js all draw with these.
 globalThis.StarportUI = (() => {
-  const PROVIDER_LABELS = { codex: 'Codex', claude: 'Claude Code', antigravity: 'Antigravity', deepseek: 'DeepSeek' };
+  const PROVIDER_LABELS = { codex: 'Codex', claude: 'Claude Code', antigravity: 'Antigravity', deepseek: 'DeepSeek', ollama: 'Ollama' };
+  const tr = (text, values) => globalThis.StarportI18n?.t(text, values) || text;
   // --- small DOM helpers --------------------------------------------------------------------
   const el = (tag, attrs = {}, children = []) => {
     const node = document.createElement(tag);
@@ -74,10 +75,13 @@ globalThis.StarportUI = (() => {
 
   function field(label, control, hint = '', action = null) {
     const hintNode = hint ? el('span', { class: 'room-field-hint', text: hint }) : null;
-    if (!action) return el('label', { class: 'room-field' }, [el('span', { class: 'room-field-label', text: label }), control, hintNode]);
-    // A button inside a <label> would become the labelled control, so a field with an action is a plain block.
+    const single = ['INPUT', 'SELECT', 'TEXTAREA'].includes(String(control?.tagName || control?.tag || '').toUpperCase());
+    if (!action && single) return el('label', { class: 'room-field' }, [el('span', { class: 'room-field-label', text: label }), control, hintNode]);
+    // A button or a multi-control stack inside a <label> would misdirect clicks onto the first control.
     return el('div', { class: 'room-field' }, [
-      el('div', { class: 'room-field-head' }, [el('span', { class: 'room-field-label', text: label }), action]),
+      action
+        ? el('div', { class: 'room-field-head' }, [el('span', { class: 'room-field-label', text: label }), action])
+        : el('span', { class: 'room-field-label', text: label }),
       control,
       hintNode
     ]);
@@ -253,18 +257,46 @@ globalThis.StarportUI = (() => {
   }
 
   // --- model picker: provider, model and effort, loaded from the provider itself -------------
+  const MODEL_TTL = 5 * 60 * 1000;
   const modelLists = new Map();
+  const degradedModels = new Set();
 
-  function modelList(provider) {
+  function invalidateModels(provider = '') {
+    for (const key of [...modelLists.keys()]) {
+      if (!provider || key.startsWith(provider + '\n')) modelLists.delete(key);
+    }
+    for (const key of [...degradedModels]) {
+      if (!provider || key.startsWith(provider + '\n')) degradedModels.delete(key);
+    }
+  }
+
+  function modelList(provider, { refresh = false } = {}) {
     const workspace = state.chat?.workspace || state.workspace || '';
     const key = provider + '\n' + workspace;
-    if (!modelLists.has(key)) {
-      modelLists.set(
-        key,
-        api('/providers/' + provider + '/models?' + new URLSearchParams({ workspace })).catch(() => ({ models: [] }))
-      );
-    }
-    return modelLists.get(key);
+    const cached = modelLists.get(key);
+    const force = refresh || degradedModels.has(key);
+    if (refresh) globalThis.StarportInvalidateOptionModels?.(provider);
+    if (cached && !force && (cached.pending || Date.now() < cached.expires)) return cached.promise;
+    const query = (ws, forceRefresh) =>
+      api('/providers/' + provider + '/models?' + new URLSearchParams({ workspace: ws, ...(forceRefresh ? { refresh: '1' } : {}) }));
+    const entry = { pending: true, expires: 0 };
+    entry.promise = query(workspace, force)
+      .catch(error => (workspace ? query('', force) : Promise.reject(error)))
+      .catch(() => ({ models: [], source: 'unavailable' }))
+      .then(result => {
+        entry.pending = false;
+        const ok = Array.isArray(result?.models) && result.models.length > 0 && !['unavailable', 'aliases'].includes(result?.source);
+        if (ok) {
+          degradedModels.delete(key);
+          entry.expires = Date.now() + MODEL_TTL;
+        } else {
+          degradedModels.add(key);
+          if (modelLists.get(key) === entry) modelLists.delete(key);
+        }
+        return result || { models: [], source: 'unavailable' };
+      });
+    modelLists.set(key, entry);
+    return entry.promise;
   }
 
   const EFFORT_FALLBACK = ['low', 'medium', 'high', 'xhigh'];
@@ -272,79 +304,155 @@ globalThis.StarportUI = (() => {
   function modelPicker({ provider = '', model = '', effort = '', service = '' } = {}, { allowNone = false } = {}) {
     const installed = id => (state.providers || []).find(p => p.id === id)?.installed !== false;
     const providerSelect = el('select', {}, [
-      allowNone ? el('option', { value: '', text: '不用' }) : null,
+      allowNone ? el('option', { value: '', text: tr('不用') }) : null,
       ...Object.entries(PROVIDER_LABELS).map(([value, label]) =>
-        el('option', { value, text: label + (installed(value) ? '' : '（未找到）') })
+        el('option', { value, text: label + (installed(value) ? '' : tr('（未找到）')) })
       )
     ]);
     providerSelect.value = provider || (allowNone ? '' : 'codex');
     const modelSelect = el('select', {});
-    const custom = el('input', { type: 'text', placeholder: '模型 ID', hidden: true });
+    const custom = el('input', { type: 'text', placeholder: tr('模型 ID'), hidden: true });
+    const status = el('span', { class: 'room-field-hint', hidden: true });
     const effortSelect = el('select', {});
     let catalog = { models: [] };
     let current = { model, effort, service };
+    let requestId = 0;
+    const refreshButton = textAction(tr('刷新列表'), () => drawModels({ refresh: true }));
 
     function drawEffort() {
-      const chosen = catalog.models?.find(m => m.id === modelSelect.value && (m.provider || '') === (modelSelect.selectedOptions[0]?.dataset.service || ''));
-      const choices = (chosen?.effort || catalog.effort)?.choices?.map(c => ({ value: c.value, label: c.label })) ||
+      const selectedId = modelSelect.value === '__custom__' ? custom.value.trim() : modelSelect.value;
+      const selectedService = modelSelect.value === '__custom__' ? '' : modelSelect.selectedOptions[0]?.dataset.service || '';
+      const chosen = catalog.models?.find(m => m.id === selectedId && (m.provider || '') === selectedService);
+      const choices =
+        (chosen?.effort || catalog.effort)?.choices?.map(c => ({ value: c.value, label: tr(c.label) })) ||
         EFFORT_FALLBACK.map(value => ({ value, label: value }));
-      const value = effortSelect.options.length ? effortSelect.value : current.effort;
+      const value = current.effort;
       effortSelect.replaceChildren(
-        el('option', { value: '', text: '默认思考强度' }),
+        el('option', { value: '', text: tr('默认思考强度') }),
         ...choices.map(c => el('option', { value: c.value, text: c.label })),
-        value && !choices.some(c => c.value === value) ? el('option', { value, text: `${value}（当前）` }) : ''
+        value && !choices.some(c => c.value === value) ? el('option', { value, text: tr('{value}（当前）', { value }) }) : ''
       );
       effortSelect.value = value || '';
     }
 
-    async function drawModels() {
+    async function drawModels({ refresh = false } = {}) {
       const id = providerSelect.value;
+      const seq = ++requestId;
       const none = !id;
       modelSelect.disabled = effortSelect.disabled = none;
       if (none) {
+        refreshButton.disabled = true;
+        refreshButton.textContent = tr('刷新列表');
+        status.hidden = true;
         modelSelect.replaceChildren(el('option', { value: '', text: '—' }));
         effortSelect.replaceChildren(el('option', { value: '', text: '—' }));
         custom.hidden = true;
         return;
       }
-      // Until the list arrives, the current model stays selected so an early save keeps it.
-      modelSelect.replaceChildren(el('option', { value: current.model, text: current.model || '正在读取模型列表…', 'data-service': current.service }));
+      refreshButton.disabled = true;
+      refreshButton.textContent = tr('正在读取…');
+      status.hidden = true;
+      const typingCustom = modelSelect.value === '__custom__';
+      // Until the list arrives, keep the current model selected so an early save keeps it,
+      // while still offering manual ID entry if a slow CLI is starting up.
+      if (!typingCustom) {
+        modelSelect.replaceChildren(
+          el('option', {
+            value: current.model,
+            text: current.model ? tr('{model}（正在读取模型列表…）', { model: current.model }) : tr('正在读取模型列表…'),
+            'data-service': current.service
+          }),
+          el('option', { value: '__custom__', text: tr('手动输入模型 ID…'), 'data-service': '' })
+        );
+        modelSelect.value = current.model;
+      }
       drawEffort();
-      catalog = await modelList(id);
-      if (providerSelect.value !== id) return;
+      const loaded = await modelList(id, { refresh });
+      if (seq !== requestId || providerSelect.value !== id) return;
+      catalog = loaded || { models: [] };
+      refreshButton.disabled = false;
+      refreshButton.textContent = tr('刷新列表');
       const models = catalog.models || [];
-      const known = models.some(m => m.id === current.model && (!current.service || (m.provider || '') === current.service));
+      const stillCustom = modelSelect.value === '__custom__';
+      const wanted = stillCustom ? custom.value.trim() : current.model;
+      const wantedService = stillCustom ? '' : current.service;
+      const known = models.some(m => m.id === wanted && (!wantedService || (m.provider || '') === wantedService));
       modelSelect.replaceChildren(
-        el('option', { value: '', text: '跟随默认模型', 'data-service': '' }),
+        el('option', { value: '', text: tr('跟随默认模型'), 'data-service': '' }),
         ...models.map(m =>
-          el('option', { value: m.id, text: m.label && m.label !== m.id ? `${m.label} (${m.id})` : m.id, 'data-service': m.provider || '' })
+          el('option', {
+            value: m.id,
+            text: m.label && m.label !== m.id ? `${m.label} (${m.id})` : m.id,
+            'data-service': m.provider || ''
+          })
         ),
-        current.model && !known ? el('option', { value: current.model, text: `${current.model}（当前）`, 'data-service': current.service }) : '',
-        el('option', { value: '__custom__', text: '手动输入模型 ID…', 'data-service': '' })
+        wanted && !known && !stillCustom
+          ? el('option', { value: wanted, text: tr('{value}（当前）', { value: wanted }), 'data-service': wantedService })
+          : '',
+        el('option', { value: '__custom__', text: tr('手动输入模型 ID…'), 'data-service': '' })
       );
-      const match = [...modelSelect.options].find(o => o.value === current.model && (!current.service || o.dataset.service === current.service));
-      if (match) match.selected = true;
-      else modelSelect.value = '';
-      custom.hidden = true;
+      if (stillCustom && (!wanted || !known)) {
+        modelSelect.value = '__custom__';
+        custom.hidden = false;
+      } else {
+        const match = [...modelSelect.options].find(
+          o => o.value === wanted && o.value !== '__custom__' && (!wantedService || o.dataset.service === wantedService)
+        );
+        if (match) {
+          modelSelect.value = match.value;
+          match.selected = true;
+        } else {
+          modelSelect.value = '';
+        }
+        current.model = modelSelect.value;
+        current.service = providerSelect.value === 'deepseek' ? modelSelect.selectedOptions[0]?.dataset.service || '' : '';
+        custom.hidden = true;
+      }
+      status.textContent = !models.length
+        ? tr('暂未取得模型列表，可刷新重试或手动输入模型 ID。')
+        : catalog.source === 'aliases'
+          ? tr('未取得实际版本，暂显示模型别名；可点「刷新列表」重试。')
+          : '';
+      status.hidden = !status.textContent;
       drawEffort();
     }
 
     providerSelect.onchange = () => {
       current = { model: '', effort: '', service: '' };
+      custom.value = '';
+      custom.hidden = true;
       effortSelect.replaceChildren();
       drawModels();
     };
     modelSelect.onchange = () => {
-      custom.hidden = modelSelect.value !== '__custom__';
-      if (!custom.hidden) custom.focus();
+      const isCustom = modelSelect.value === '__custom__';
+      custom.hidden = !isCustom;
+      if (isCustom) {
+        if (!custom.value && current.model) custom.value = current.model;
+        custom.focus();
+      } else {
+        const option = modelSelect.selectedOptions[0];
+        current.model = modelSelect.value;
+        current.service = providerSelect.value === 'deepseek' ? option?.dataset.service || '' : '';
+      }
       drawEffort();
+    };
+    custom.oninput = () => {
+      current.model = custom.value.trim();
+      current.service = '';
+      drawEffort();
+    };
+    effortSelect.onchange = () => {
+      current.effort = effortSelect.value;
     };
     drawModels();
 
     return {
       provider: providerSelect,
-      model: el('span', { class: 'room-field-stack' }, [modelSelect, custom]),
+      model: el('span', { class: 'room-field-stack' }, [modelSelect, custom, status]),
       effort: effortSelect,
+      refresh: refreshButton,
+      reload: () => drawModels({ refresh: true }),
       value() {
         const option = modelSelect.selectedOptions[0];
         const id = modelSelect.value === '__custom__' ? custom.value.trim() : modelSelect.value;
@@ -358,5 +466,5 @@ globalThis.StarportUI = (() => {
     };
   }
 
-  return { el, icon, avatar, iconButton, textAction, field, showDialog, closeDialog, confirmDialog, menu, closeMenu, segmented, modelPicker, PROVIDER_LABELS };
+  return { el, icon, avatar, iconButton, textAction, field, showDialog, closeDialog, confirmDialog, menu, closeMenu, segmented, modelPicker, invalidateModels, PROVIDER_LABELS };
 })();

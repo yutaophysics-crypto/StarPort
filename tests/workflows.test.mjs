@@ -4,11 +4,22 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createServer as createPortProbe } from 'node:net';
 import { buildContext } from '../src/storage.mjs';
 import { createHub } from '../src/server.mjs';
 import { parseMentions, nextSlot, verdict, splitLedger, heuristicPlan, triggerData } from '../src/workflows.mjs';
 
 const registry={resolve:()=>({command:process.execPath,prefixArgs:[]}),probe:async()=>({loggedIn:true,nativeAutoReview:true}),models:async()=>({models:[]}),record(){},list:async()=>[]};
+// Some Windows hosts allocate low ephemeral ports that Fetch refuses (e.g.
+// 6667). Pick a vacant HTTP-safe port without touching a running local server.
+async function httpTestPort(){
+  for(let attempt=0;attempt<32;attempt++){
+    const port=32000+Math.floor(Math.random()*20000),probe=createPortProbe();
+    try{await new Promise((ok,no)=>{probe.once('error',no);probe.listen(port,'127.0.0.1',ok);});await new Promise(ok=>probe.close(ok));return port;}
+    catch(error){if(!['EADDRINUSE','EACCES'].includes(error.code))throw error;}
+  }
+  throw Error('No vacant HTTP test port');
+}
 const until=async(check,label,ms=8000)=>{const end=Date.now()+ms;while(Date.now()<end){if(check())return;await new Promise(r=>setTimeout(r,15));}throw new Error('timed out: '+label);};
 const hasGit=(()=>{try{execFileSync('git',['--version'],{stdio:'ignore'});return true;}catch{return false;}})();
 
@@ -69,7 +80,7 @@ test('workflows: @dispatch with planner fallback, verification, run cards, reply
     deepseek:async({prompt,emit})=>{prompts.push({provider:'deepseek',prompt});if(prompt.includes('你是星港的排程员')){reply(emit,'{"steps":[{"order":1,"companion":"cx","task":"写代码"},{"order":2,"companion":"cl","task":"验收","verify":true}]}');return;}reply(emit,'对话模型的回答');}
   };
   const dataDir=mkdtempSync(join(tmpdir(),'hub-workflows-')),workspace=mkdtempSync(join(tmpdir(),'hub-workflows-ws-'));
-  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
   const base='http://127.0.0.1:'+hub.server.address().port;
   const call=async(path,method='GET',data)=>{const res=await fetch(base+'/api'+path,{method,headers:{'Content-Type':'application/json','X-Hub-Token':hub.token,Origin:base},body:data===undefined?undefined:JSON.stringify(data)});const json=await res.json();if(!res.ok)throw Object.assign(new Error(json.error),{status:res.status});return json;};
   const {store,workflows}=hub;
@@ -180,7 +191,7 @@ test('workflows: @dispatch with planner fallback, verification, run cards, reply
 
 test('migration imports browser companions, rosters and routines once, with routines switched off',{timeout:20000},async t=>{
   const dataDir=mkdtempSync(join(tmpdir(),'hub-migrate-')),workspace=mkdtempSync(join(tmpdir(),'hub-migrate-ws-'));
-  const hub=createHub({port:0,dataDir,registry:{...registry,models:async provider=>({models:provider==='codex'?[{id:'gpt-6-luna'}]:[]})},implementations:{}});await hub.listen();t.after(()=>hub.close());
+  const hub=createHub({port:await httpTestPort(),dataDir,registry:{...registry,models:async provider=>({models:provider==='codex'?[{id:'gpt-6-luna'}]:[]})},implementations:{}});await hub.listen();t.after(()=>hub.close());
   const room=hub.store.group('交易作战室'),quiet=hub.store.group('客厅');
   const result=await hub.workflows.migrate({workspace,companions:[
     {id:'scout',name:'探子',avatar:'🦅',role:'信息猎手',persona:'抓预期差',provider:'codex',model:'gpt-5.4',effort:'high',duty:'扫描公告'},
@@ -211,7 +222,7 @@ test('room memory switches: per room and companion, desks get only the granted m
     reply(emit,'我负责：查看\n'+results.join(','));
   }};
   const dataDir=mkdtempSync(join(tmpdir(),'hub-room-memory-')),workspace=mkdtempSync(join(tmpdir(),'hub-room-memory-ws-'));
-  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
   const base='http://127.0.0.1:'+hub.server.address().port;
   const call=async(path,method='GET',data)=>{const res=await fetch(base+'/api'+path,{method,headers:{'Content-Type':'application/json','X-Hub-Token':hub.token,Origin:base},body:data===undefined?undefined:JSON.stringify(data)});const json=await res.json();if(!res.ok)throw Object.assign(new Error(json.error),{status:res.status});return json;};
   const {store,workflows}=hub;
@@ -252,7 +263,7 @@ test('one-way @mentions: the companion gets only the message on its own desk, an
   const reply=(emit,text)=>{emit({type:'replace',text});emit({type:'final-answer',text});};
   const implementations={codex:async({prompt,emit})=>{prompts.push(prompt);reply(emit,prompt.includes('单向可见')?'我负责：独立评估\n独立结论 Q7':'我负责：复核\n普通结论 N2');}};
   const dataDir=mkdtempSync(join(tmpdir(),'hub-one-way-')),workspace=mkdtempSync(join(tmpdir(),'hub-one-way-ws-'));
-  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
   const {store,workflows}=hub,room=store.group('评审室');
   workflows.createCompanion({name:'评审',avatar:'🔍',provider:'codex'},{id:'rv'});workflows.addMember(room.id,'rv');
   const chat=store.newChat({group_id:room.id,provider:'claude',workspace});store.updateChat(chat.id,{title:'标题里的背景 T3'});
@@ -329,7 +340,7 @@ test('exams: the model proposes, the user starts; seats answer blind and in para
     deepseek:args=>sit(args,async cwd=>`答卷：开卷 ${existsSync(join(cwd,'知识库','notes.md'))}`)
   };
   const dataDir=mkdtempSync(join(tmpdir(),'hub-exam-'));
-  const hub=createHub({port:0,dataDir,registry,implementations,examRoot});await hub.listen();t.after(()=>hub.close());
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations,examRoot});await hub.listen();t.after(()=>hub.close());
   const base='http://127.0.0.1:'+hub.server.address().port;
   const call=async(path,method='GET',data)=>{const res=await fetch(base+'/api'+path,{method,headers:{'Content-Type':'application/json','X-Hub-Token':hub.token,Origin:base},body:data===undefined?undefined:JSON.stringify(data)});const json=await res.json();if(!res.ok)throw Object.assign(new Error(json.error),{status:res.status});return json;};
   const {store,workflows}=hub;
@@ -400,7 +411,7 @@ test('an empty desk reply shows the tool\'s reason on the run card, and desks ru
   const seen=[];
   const implementations={antigravity:async({emit,unattended})=>{seen.push(unattended);await new Promise(resolve=>setTimeout(resolve,20));emit({type:'notice',text:'命令在无人值守的工位里被自动拒绝'});emit({type:'replace',text:''});emit({type:'final-answer',text:''});}};
   const dataDir=mkdtempSync(join(tmpdir(),'hub-desk-notice-')),workspace=mkdtempSync(join(tmpdir(),'hub-desk-notice-ws-'));
-  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
   const {store,workflows}=hub,room=store.group('科研');
   workflows.createCompanion({name:'argon',provider:'antigravity',access:'workspace'},{id:'ag'});workflows.addMember(room.id,'ag');
   const chat=store.newChat({group_id:room.id,provider:'codex',workspace});
@@ -413,7 +424,7 @@ test('companions pick their tool\'s own 工作方式: every Claude mode, Codex �
   const seen=[];
   const reply=provider=>async({emit,options})=>{seen.push([provider,options.permissionMode,options.sandbox??null]);emit({type:'replace',text:'好'});emit({type:'final-answer',text:'好'});};
   const dataDir=mkdtempSync(join(tmpdir(),'hub-desk-modes-')),workspace=mkdtempSync(join(tmpdir(),'hub-desk-modes-ws-'));
-  const hub=createHub({port:0,dataDir,registry,implementations:{claude:reply('claude'),codex:reply('codex')}});await hub.listen();t.after(()=>hub.close());
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations:{claude:reply('claude'),codex:reply('codex')}});await hub.listen();t.after(()=>hub.close());
   const {store,workflows}=hub,room=store.group('科研'),fields=workflows.state().deskFields;
   assert.deepEqual(fields.claude.map(f=>[f.key,f.choices.map(c=>c.value)]),[['permissionMode',['default','plan','dontAsk','acceptEdits','auto','bypassPermissions']]]);
   assert.deepEqual(fields.codex.map(f=>[f.key,f.choices.map(c=>c.value)]),[['mode',['chat','plan']],['permissionMode',['read-only','ask','auto-review','full-access']]]);
@@ -448,7 +459,7 @@ test('while a companion works: others take @-requests alongside it, the chat mod
     claude:async({emit})=>{started.push('主模型');reply(emit,'主模型的回答');}};
   const dataDir=mkdtempSync(join(tmpdir(),'hub-parallel-')),workspace=mkdtempSync(join(tmpdir(),'hub-parallel-ws-'));
   // Let the long task end before closing, so a failed check does not leave the hub waiting on it.
-  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>{finishLong();return hub.close();});
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations});await hub.listen();t.after(()=>{finishLong();return hub.close();});
   const {store,workflows,runner}=hub,room=store.group('并行室');workflows.deskPollMs=20;
   workflows.createCompanion({name:'甲',avatar:'🦉',provider:'codex'},{id:'a'});workflows.addMember(room.id,'a');
   workflows.createCompanion({name:'乙',avatar:'🐙',provider:'codex'},{id:'b'});workflows.addMember(room.id,'b');
@@ -507,7 +518,7 @@ test('companion calls: the room decides who may call whom; calls run at fresh de
       reply(emit,who==='甲'?'我负责：算数\n42':'我负责：复核\n没问题');
     }};
   const dataDir=mkdtempSync(join(tmpdir(),'hub-calls-')),workspace=mkdtempSync(join(tmpdir(),'hub-calls-ws-'));
-  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations});await hub.listen();t.after(()=>hub.close());
   const {store,workflows,runner}=hub,room=store.group('调用室'),popups=[];workflows.deskPollMs=20;
   workflows.onFinished=info=>popups.push(info);
   for(const [id,name] of [['a','甲'],['b','乙'],['c','丙']]){workflows.createCompanion({name,avatar:'🦉',provider:'codex'},{id});workflows.addMember(room.id,id);}
@@ -570,7 +581,7 @@ test('@主模型: only an explicit mention gives the conversation model a part; 
     codex:async({prompt,emit})=>{prompts.push({who:'codex',prompt});if(prompt.includes('你是星港的排程员'))return reply(emit,plan);reply(emit,'我负责：查资料\n资料：42');},
     claude:async({prompt,emit})=>{prompts.push({who:'main',prompt});if(prompt.includes('先回答一个长问题'))await long;reply(emit,prompt.includes('[星港点名]')?'主模型汇总完成':'主模型的普通回答');}};
   const dataDir=mkdtempSync(join(tmpdir(),'hub-main-')),workspace=mkdtempSync(join(tmpdir(),'hub-main-ws-'));
-  const hub=createHub({port:0,dataDir,registry,implementations});await hub.listen();t.after(()=>{finishLong();return hub.close();});
+  const hub=createHub({port:await httpTestPort(),dataDir,registry,implementations});await hub.listen();t.after(()=>{finishLong();return hub.close();});
   const {store,workflows,runner}=hub,room=store.group('主模型室');workflows.deskPollMs=20;
   workflows.createCompanion({name:'甲',avatar:'🦉',provider:'codex'},{id:'a'});workflows.addMember(room.id,'a');
   const chat=store.newChat({group_id:room.id,provider:'claude',workspace});

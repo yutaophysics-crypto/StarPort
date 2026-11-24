@@ -12,6 +12,9 @@ const failure = 'Eligibility check failed: failed to fetch user info: 500 Intern
 test('only explicit transient eligibility bootstrap errors are eligible for retry', () => {
   for (const code of [500, 502, 503, 504]) assert.equal(temporaryAntigravityStartup(failure.replace('500', code)), true);
   assert.equal(temporaryAntigravityStartup('Eligibility check failed: Get "https://www.googleapis.com/oauth2/v2/userinfo": EOF'), true);
+  const avatar='Eligibility check failed: failed to get profile picture: Get "https://lh3.googleusercontent.com/a/fictional-avatar=s96-c": ';
+  for(const drop of ['EOF','unexpected EOF','connection reset by peer','i/o timeout','TLS handshake timeout'])assert.equal(temporaryAntigravityStartup(avatar+drop),true,drop);
+  for(const text of [avatar+'403 Forbidden',avatar+'401 Unauthorized',avatar+'429 Too Many Requests',avatar.replace('lh3.googleusercontent.com','example.com')+'EOF',avatar.replace('Eligibility check failed: ','')+'EOF'])assert.equal(temporaryAntigravityStartup(text),false,text);
   for (const text of ['HTTP 500', 'API error (attempt 1): INTERNAL (code 500)', failure.replace('500', '403'), failure.replace('500', '401'), failure.replace('500', '429'), 'Eligibility check failed: not eligible (500)', 'Eligibility check failed: account disabled (500)']) assert.equal(temporaryAntigravityStartup(text), false, text);
 });
 
@@ -46,7 +49,16 @@ test('a zero-turn stream-json refusal on stdout is retried like the stderr form'
   assert.ok(events.some(e => e.type === 'diagnostic' && e.kind === 'antigravity-startup-temporary'));
 });
 
-for (const mode of ['forbidden', 'executed', 'raw-output', 'json-after-step']) test('never replays an access refusal or any stdout: ' + mode, async t => {
+test('userinfo EOF followed by avatar EOF retries both startup failures and sends the prompt only once', {timeout:12000}, async t=>{
+  const f=await fixture(t,'avatar-recover'),events=[];
+  await f.run({emit:event=>events.push(event)});
+  assert.deepEqual(await f.state(),{launches:3,prompts:['initial']});
+  assert.equal(events.filter(e=>e.type==='diagnostic'&&e.kind==='antigravity-startup-temporary').length,2);
+  assert.ok(events.some(e=>e.type==='notice'&&/2\/2/.test(e.text)));
+  assert.ok(events.some(e=>e.type==='notice'&&/已恢复/.test(e.text)));
+});
+
+for (const mode of ['forbidden', 'executed', 'raw-output', 'json-after-step', 'avatar-after-step']) test('never replays an access refusal or any stdout: ' + mode, async t => {
   const f = await fixture(t, mode);
   await assert.rejects(() => f.run(), error => !error.antigravityStartupFailure);
   assert.equal((await f.state()).launches, 1);
@@ -58,8 +70,8 @@ test('stop interrupts backoff promptly and no extra native process is started', 
   assert.equal((await f.state()).launches, 1);
 });
 
-test('unrecovered startup keeps the existing native session and cursor; tools never get replayed', { timeout: 9000 }, async t => {
-  const f = await fixture(t, 'exhaust'), store = new Store(':memory:'); t.after(() => store.close());
+for(const mode of ['exhaust','avatar-exhaust'])test('unrecovered startup keeps the existing native session and cursor; tools never get replayed: '+mode, { timeout: 12000 }, async t => {
+  const f = await fixture(t, mode), store = new Store(':memory:'); t.after(() => store.close());
   const registry = { resolve: () => f.runtime, probe: async () => ({}), record() {} };
   let first = true;
   const runner = new Runner(store, registry, () => {}, { antigravity: async args => {

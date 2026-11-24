@@ -8,7 +8,7 @@ const registry={resolve:()=>null,list:async()=>Object.values(PROVIDERS).map(p=>(
 const hub=createHub({port:3211,dataDir:mkdtempSync(join(tmpdir(),'starport-render-')),registry});
 if(process.argv[2]){
   const source=JSON.parse(readFileSync(process.argv[2],'utf8'));
-  const chat=hub.store.newChat({title:'渲染回归 · 导入示例',workspace:process.cwd()});
+  const chat=hub.store.newChat({title:'渲染回归 · 新课题',workspace:process.cwd()});
   for(const message of source.messages)hub.store.message(chat.id,message.role,message.provider,message.content,message.status,{});
 }
 const cases=hub.store.newChat({title:'公式与代码边界',workspace:process.cwd()});

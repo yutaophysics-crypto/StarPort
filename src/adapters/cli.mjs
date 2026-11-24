@@ -2,7 +2,7 @@ import { createInterface } from 'node:readline';
 import { StringDecoder } from 'node:string_decoder';
 import { startProcess, stopProcess, redact } from '../process.mjs';
 import { parseClaudeEvent } from './claude-events.mjs';
-import { parseAntigravityEvent } from './antigravity-events.mjs';
+import { parseAntigravityEvent, transientAntigravityError, antigravityCutOff } from './antigravity-events.mjs';
 import { temporaryAntigravityStartup, withAntigravityStartupRetry } from './antigravity-startup.mjs';
 import { AntigravityTranscript, transcriptEvents, transcriptReady } from './antigravity-transcript.mjs';
 
@@ -13,8 +13,12 @@ const DENIED_FOLLOW_UP='（星港）刚才那个操作没有获得批准：你�
 const DENIED_FOLLOW_UPS=2;
 const CHAT_DENIED='Antigravity 想调用命令等工具，但无交互模式无法弹出审批，操作被自动拒绝，这一轮没有产生回复。请把「工具权限」设为「允许所有工具」后重发；若使用「遵循原工具权限」，需在 Antigravity CLI 的 settings.json（permissions.allow）里为工作目录添加允许规则。';
 const DESK_DENIED='Antigravity 想调用的命令在无人值守的工位里被自动拒绝，请它不用该命令继续后仍没有产生回复。如果这位伙伴的任务确实需要运行命令，可以把它的「无人值守时的权限」调成「完全权限」，或在 Antigravity CLI 的权限设置里为这类命令添加允许规则。';
+// Nobody at an unattended desk can say "go on" when agy gives up mid-turn on a dropped
+// connection or a reply cut off at its output limit, so its conversation is resumed and asked to.
+const CONTINUE_PROMPT='（星港）你刚才的工作因为连接中断或单次回复超出输出上限，在中途停下了。请在同一个任务上从停下的地方接着做：已经完成的文件和步骤不用重做；单次回复写短一些，长内容写进文件。最后给出完整的文字回复：交回去的只有你这一次的最后回复，不要只写“接上文”。';
+const CONTINUES=2;
 
-export function cliArguments(provider, options, session) {
+export function cliArguments(provider, options, session, knowledgeDirs=[]) {
   if (provider==='claude') {
     const args=['-p','--output-format','stream-json','--verbose','--include-partial-messages','--permission-mode',options.permissionMode];
     if(options.nativeNoPrompts)args.push('--permission-prompts','none');
@@ -31,6 +35,8 @@ export function cliArguments(provider, options, session) {
     if (options.effort) args.push('--effort',options.effort);
     if (options.agent) args.push('--agent',options.agent);
     if (options.sandbox) args.push('--sandbox');
+    // agy cannot hold an added folder read-only; the turn's prompt asks it not to write there.
+    for (const dir of knowledgeDirs) args.push('--add-dir',dir);
     if (session) args.push('--conversation',session);
     return args;
   }
@@ -51,9 +57,22 @@ export async function runCli(input) {
   // Inputs accepted during a failed startup remain queued for the same run.
   // They are never re-enqueued as duplicate Starport user messages.
   const startupQueue=[];
-  return withAntigravityStartupRetry(()=>runCliAttempt({...input,signal,startupQueue,setControl:control=>input.setControl({...control,stop:async()=>{controller.abort();await control.stop();}})}),{signal,emit:input.emit});
+  let session=input.session;
+  const emit=event=>{if(event.type==='session'&&event.id)session=event.id;input.emit(event);};
+  const attempt=extra=>withAntigravityStartupRetry(()=>runCliAttempt({...input,emit,signal,startupQueue,...extra,setControl:control=>input.setControl({...control,stop:async()=>{controller.abort();await control.stop();}})}),{signal,emit});
+  for(let continued=0;;continued++){
+    try{return await attempt(continued?{session,prompt:CONTINUE_PROMPT,images:[]}:{});}
+    catch(error){
+      if(!error.antigravityResumable||!session||signal.aborted)throw error;
+      const reason=antigravityCutOff(error.message)?'单次回复超出了输出上限':'连接中断';
+      if(continued>=CONTINUES){error.message=`Antigravity 因${reason}中途停下，已自动请它接着做 ${CONTINUES} 次，仍未完成。\n`+error.message;throw error;}
+      const note=`Antigravity 因${reason}中途停下，已在同一会话里请它接着做（${continued+1}/${CONTINUES}）。`;
+      emit({type:'notice',text:note});
+      emit({type:'diagnostic',kind:'antigravity-continued',attempt:continued+1,note,message:error.message});
+    }
+  }
 }
-async function runCliAttempt({provider, runtime, options, session, initialContext, prompt,contextEnv={}, images=[], cwd, signal, emit, setControl,startupQueue,unattended=false,nativeHome}) {
+async function runCliAttempt({provider, runtime, options, session, initialContext, prompt,contextEnv={}, images=[], cwd, signal, emit, setControl,startupQueue,unattended=false,nativeHome,knowledgeDirs=[]}) {
   const payload=cliInput(provider,prompt,images);
   if(provider==='claude'&&Buffer.byteLength(payload)>10*1024*1024)throw new Error('Claude 图片输入超过 10 MB，请减少附件');
   // Thought summaries and whole tool results come from agy's own transcript, which the stream leaves out.
@@ -69,7 +88,7 @@ async function runCliAttempt({provider, runtime, options, session, initialContex
       if(final)waiting.length=0;
     }catch{}finally{relaying=null;}
   })();
-  const child=startProcess(runtime.command,[...runtime.prefixArgs,...cliArguments(provider,options,session),...(provider==='claude'&&images.length?['--input-format','stream-json']:[])],{cwd,env:contextEnv});
+  const child=startProcess(runtime.command,[...runtime.prefixArgs,...cliArguments(provider,options,session,provider==='antigravity'?knowledgeDirs:[]),...(provider==='claude'&&images.length?['--input-format','stream-json']:[])],{cwd,env:contextEnv});
   const relayTimer=transcript?setInterval(relay,2000):null;
   relayTimer?.unref?.();
   const state={model:initialContext?.model,windowTokens:initialContext?.windowTokens}; let stderr='', failure='', gotOutput=false, sawStdout=false, canceled=false, finishTimer=null,accepting=provider==='antigravity',currentInput=null;
@@ -147,7 +166,8 @@ async function runCliAttempt({provider, runtime, options, session, initialContex
       clearTimeout(finishTimer);
       if(canceled) return reject(Object.assign(new Error('已停止'),{canceled:true}));
       if(failure) return reject(Object.assign(new Error(redact(failure)),
-        provider==='antigravity'&&startupRefusal&&!nativeWork&&temporaryAntigravityStartup(failure)?{antigravityStartupFailure:true}:{}));
+        provider==='antigravity'&&startupRefusal&&!nativeWork&&temporaryAntigravityStartup(failure)?{antigravityStartupFailure:true}:{},
+        provider==='antigravity'&&unattended&&nativeWork&&transientAntigravityError(failure)?{antigravityResumable:true}:{}));
       // A complete result event is authoritative: the text is already saved,
       // so a nonzero exit code right after it (our forced stop) is expected.
       if(state.terminal){

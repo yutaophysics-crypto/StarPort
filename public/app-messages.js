@@ -31,6 +31,8 @@ function markdown(text) {
     );
   } catch {
     div.textContent = text;
+    div.classList.add('plain-text');
+    repairMarkdown();
   }
   for (const link of div.querySelectorAll('a')) {
     const href = link.getAttribute('href') || '';
@@ -51,6 +53,48 @@ function markdown(text) {
   globalThis.StarportFiles?.decorate(div, context);
   globalThis.StarportCodeCopy?.decorate(div);
   return div;
+}
+
+// The renderer's scripts load once with the page. When one does not arrive (npm replacing
+// node_modules/dompurify, a server restart mid-load), every reply in that window used to show as
+// one run-together block until a reload. Meanwhile the text keeps its line breaks; the missing
+// scripts are fetched again, and the conversation is redrawn once they are all in.
+const markdownScripts = [
+  ['marked', '/vendor/marked.min.js'],
+  ['katex', '/vendor/katex.min.js'],
+  ['DOMPurify', '/vendor/purify.min.js'],
+  ['StarportMarkdown', '/markdown.js']
+];
+let markdownGeneration = 0;
+let markdownRepair = null;
+
+function loadScript(src) {
+  return new Promise(resolve => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = script.onerror = () => {
+      script.remove();
+      resolve();
+    };
+    document.head.append(script);
+  });
+}
+
+function repairMarkdown() {
+  const missing = () => markdownScripts.filter(([name]) => !globalThis[name]);
+  if (markdownRepair || !missing().length) return;
+  markdownRepair = (async () => {
+    // A few tries over about half a minute; a later failed render starts another round.
+    for (let attempt = 0; attempt < 5 && missing().length; attempt++) {
+      if (attempt) await new Promise(resolve => setTimeout(resolve, 2000 * 2 ** (attempt - 1)));
+      for (const [, src] of missing()) await loadScript(src);
+    }
+  })().finally(() => {
+    markdownRepair = null;
+    if (missing().length) return;
+    markdownGeneration++;
+    renderMessages();
+  });
 }
 
 function formatDuration(seconds) {
@@ -81,21 +125,45 @@ function hashText(text) {
   return 4294967296 * (2097151 & h2) + (h1 >>> 0);
 }
 
+// A running reply, drawn by activity.js, which changes only the parts a push changed.
+const liveReply = msg =>
+  msg.role === 'assistant' && msg.status === 'running' && !msg.details?.workflowRun && !msg.details?.dispatchStep;
+
+// A running reply's signature leaves out what its process view compares part by part (activity.js)
+// and what changes on every push without showing, so a long reply is not serialized on each push.
 function messageSignature(msg) {
   let signature = messageSignatures.get(msg);
   if (signature === undefined) {
-    signature = hashText(JSON.stringify(msg));
+    const shown = liveReply(msg)
+      ? {
+          ...msg,
+          content: '',
+          details: {
+            ...msg.details,
+            activity: null,
+            tools: null,
+            subagents: null,
+            finalAnswer: null,
+            contextCompaction: null,
+            liveRevision: null,
+            usage: null,
+            context: null
+          }
+        }
+      : msg;
+    signature = hashText(JSON.stringify(shown));
     messageSignatures.set(msg, signature);
   }
   return signature;
 }
 
-// What a row shows besides its message: language, trace level, tool name, chat title for memory
-// receipts, a failed read of its process log, and for run cards their companions and toggles
-// (StarportWorkflows.cardContext).
+// What a row shows besides its message: language, the Markdown renderer coming back, trace level,
+// tool name, chat title for memory receipts, a failed read of its process log, and for run cards
+// their companions and toggles (StarportWorkflows.cardContext).
 function rowContext(msg) {
   return [
     i18n.language,
+    markdownGeneration,
     globalThis.StarportActivityModel?.level,
     provider(msg.provider)?.name,
     state.chat?.title,
@@ -126,6 +194,10 @@ function readTrace(msg) {
     })
     .catch(error => traceReads.set(key, { error: error.message }))
     .finally(() => renderMessages());
+}
+
+function activityOptions(msg) {
+  return { el, t, markdown, chatId: state.chat?.id || '', collapseButton: true, ...traceOptions(msg) };
 }
 
 function traceOptions(msg) {
@@ -165,9 +237,14 @@ function renderMessages() {
     const signature = messageSignature(msg);
     const context = rowContext(msg);
     const cached = messageRows.get(msg.id);
-    const reuse = cached && cached.signature === signature && cached.context === context;
+    // Session recovery buttons follow the run state, not the message.
+    let reuse = cached && cached.signature === signature && cached.context === context && !msg.details?.nativeConflict;
+    // A running reply keeps its row; its process and answer change in place.
+    if (reuse && cached.msg !== msg && liveReply(msg))
+      reuse = !!cached.activity && StarportActivity.update(cached.activity, msg, activityOptions(msg));
     const row = reuse ? cached.node : messageRow(msg);
-    if (!reuse) messageRows.set(msg.id, { signature, context, node: row });
+    if (reuse) cached.msg = msg;
+    else messageRows.set(msg.id, { signature, context, node: row, msg, activity: row.querySelector(':scope > .native-activity') });
     seen.add(msg.id);
     wanted.push(row);
     if (state.chat?.options?.branch?.at === msg.id) wanted.push(branchLine(state.chat.options.branch));
@@ -228,7 +305,7 @@ function messageRow(msg) {
         ? el('div', { class: 'message-body', text: dispatchStep ? dispatchStep.task : msg.content })
         : workflows
           ? workflows.renderCard(msg)
-          : StarportActivity.render(msg, { el, t, markdown, chatId: state.chat?.id || '', ...traceOptions(msg) })
+          : StarportActivity.render(msg, activityOptions(msg))
     ]
   );
   if (msg.details?.attachments?.length) {
@@ -284,6 +361,8 @@ function messageRow(msg) {
   }
   if (msg.details?.error) {
     row.append(el('div', { class: 'error-note', text: notice(msg.details.error) }));
+    const recovery = globalThis.StarportCodexSession?.render(msg);
+    if (recovery) row.append(recovery);
   } else if (msg.status === 'interrupted') {
     row.append(el('div', { class: 'notice', text: t('本次执行已停止，已有内容已保存。') }));
   }

@@ -3,8 +3,9 @@ import { dirname, extname, join, win32, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
-const actions=new Set(['open','reveal','open-with']);
-// Code and executable files go through the application picker, never their run association.
+const actions=new Set(['open','run','reveal','open-with']);
+const executables=new Set(['.exe','.bat','.cmd']);
+// Only explicit Run actions start executables. Other code opens through the application picker.
 const documents=new Set('.md .mdx .txt .log .pdf .doc .docx .odt .rtf .xls .xlsx .ods .csv .ppt .pptx .odp .png .jpg .jpeg .gif .webp .bmp .svg .ico .mp3 .wav .mp4 .mov .mkv .html .htm .zip'.split(' '));
 function referenceValue(reference,platform){
   if(typeof reference!=='string'||!reference.trim()||reference.length>8192||/[\x00-\x1f\x7f]/.test(reference))throw new Error('文件路径无效');
@@ -100,9 +101,13 @@ export class FileActions{
   }
   async perform(action,reference,workspace){
     if(!actions.has(action))throw new Error('文件操作无效');
+    const extension=action==='run'?extname(localFilePath(reference,workspace,this.platform)).toLowerCase():null;
+    if(action==='run'&&!executables.has(extension))throw new Error('请选择 .exe、.bat 或 .cmd 文件运行');
     const file=await this.resolve(reference,workspace);
     if(file.ambiguous)return file;
-    const nativeAction=action==='open'&&!documents.has(extname(file.path).toLowerCase())?'open-with':action;
+    const resolvedExtension=extname(file.path).toLowerCase();
+    if(action==='run'&&extension!==resolvedExtension)throw new Error('链接和目标文件的扩展名不同，请使用实际文件路径');
+    const nativeAction=action==='open'&&!documents.has(resolvedExtension)?'open-with':action;
     const result=await this.launch(nativeAction,file.path);
     return {...file,action:nativeAction,...result};
   }

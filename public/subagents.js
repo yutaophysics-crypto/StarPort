@@ -35,11 +35,14 @@ globalThis.StarportSubagents=(()=>{
     }
     return section;
   }
+  // A clock written with the text it already shows still makes the browser lay it out again, and a
+  // long conversation has hundreds of them; only the ones that changed are written.
+  const setText=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
   function tick(){
     globalThis.StarportActivity?.tick();globalThis.StarportWorkflows?.tick();
-    for(const span of document.querySelectorAll('.subagent-duration'))span.textContent=duration({startedAt:Number(span.dataset.start),endedAt:Number(span.dataset.end),status:span.dataset.status});
-    for(const span of document.querySelectorAll('.subagent-updated'))span.textContent=t('最后活动：{time}',{time:new Date(Number(span.dataset.updated)).toLocaleTimeString(i18n.locale)});
-    if(state.run)$('#run-status').textContent=runStatusLine(state.run);
+    for(const span of document.querySelectorAll('.subagent-duration'))setText(span,duration({startedAt:Number(span.dataset.start),endedAt:Number(span.dataset.end),status:span.dataset.status}));
+    for(const span of document.querySelectorAll('.subagent-updated'))setText(span,t('最后活动：{time}',{time:new Date(Number(span.dataset.updated)).toLocaleTimeString(i18n.locale)}));
+    if(state.run)setText($('#run-status'),runStatusLine(state.run));
   }
   setInterval(tick,1000);
   return {render,summary,rows,tick};

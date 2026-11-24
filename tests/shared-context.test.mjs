@@ -9,7 +9,7 @@ import {Store} from '../src/storage.mjs';
 import {Runner} from '../src/runner.mjs';
 import {createHub} from '../src/server.mjs';
 import {contextToolHost,contextCommandBridge,contextToolInstructions,CONTEXT_TOOLS,CALL_TOOLS} from '../src/context-tools.mjs';
-import {runClaude} from '../src/adapters/claude.mjs';
+import {runClaude,CHECKPOINT_TOOL} from '../src/adapters/claude.mjs';
 import {runCodex} from '../src/adapters/codex.mjs';
 import {runCli} from '../src/adapters/cli.mjs';
 import {runDeepseek} from '../src/adapters/deepseek.mjs';
@@ -85,7 +85,11 @@ for(const provider of ['codex','claude','antigravity','deepseek'])test(provider+
   }});
   try{const p=s.addProject('A','C:/A'),foreign=s.addProject('B','C:/B');s.instructions.update(null,{content:'简洁偏好',revision:0});s.instructions.update(p.id,{content:'当前项目的特殊要求',revision:0});s.instructions.update(foreign.id,{content:'不应泄漏的其他项目要求',revision:0});s.memory.create({...input,content:'其他项目记忆',project_id:foreign.id},{confirmed:true});
     const source=s.newChat({project_id:p.id,title:'采购决定'});s.message(source.id,'user',provider,'采购预算定为123元。');const chat=s.newChat({project_id:p.id,provider,workspace:process.cwd()});await runner.start(chat.id,'以前采购预算怎么定的？以后请简洁作答');await until(()=>!runner.active.has(chat.id));assert.equal(s.lastAssistant(chat.id).status,'complete');assert.match(calls[0].prompt,/简洁偏好/);assert.match(calls[0].prompt,/当前项目的特殊要求/);assert.doesNotMatch(calls[0].prompt,/其他项目/);assert.equal(s.lastAssistant(chat.id).details.memory.candidates.length,1);assert.ok(s.lastAssistant(chat.id).details.memory.sources.length);
-    s.instructions.update(p.id,{revision:1,content:'更新项目要求'});await runner.start(chat.id,'以后请简洁作答，再看预算');await until(()=>!runner.active.has(chat.id));assert.equal(calls[1].session,undefined);assert.match(calls[1].prompt,/更新项目要求/);
+    s.instructions.update(p.id,{revision:1,content:'更新项目要求'});await runner.start(chat.id,'以后请简洁作答，再看预算');await until(()=>!runner.active.has(chat.id));assert.equal(calls[1].session,provider==='deepseek'?undefined:'native-context');assert.match(calls[1].prompt,/更新项目要求/);
+    await runner.start(chat.id,'以后请简洁作答，继续看预算');await until(()=>!runner.active.has(chat.id));assert.equal(calls[2].session,provider==='deepseek'?undefined:'native-context');
+    if(provider!=='deepseek')assert.doesNotMatch(calls[2].prompt,/更新项目要求|简洁偏好/);
+    s.instructions.update(p.id,{revision:2,content:''});await runner.start(chat.id,'以后请简洁作答，清空项目要求后继续');await until(()=>!runner.active.has(chat.id));assert.equal(calls[3].session,provider==='deepseek'?undefined:'native-context');
+    if(provider!=='deepseek')assert.match(calls[3].prompt,/当前无生效的项目要求/);
   }finally{await runner.close();s.close();}
 });
 
@@ -105,11 +109,12 @@ test('backups remap project scopes and restore instructions for review instead o
   }finally{s.close();restored.close();}
 });
 
-test('Claude registers only the Starport tool server, preserving native settings and permission mode',async()=>{
+test('Claude registers only the Starport tool servers, preserving native settings and permission mode',async()=>{
   let seen;const signal=new AbortController().signal;
   const tools={definitions:CONTEXT_TOOLS,call:async()=>({total:0,items:[]})};
   const makeQuery=args=>{seen=args.options;return {close(){},async *[Symbol.asyncIterator](){yield {type:'result',subtype:'success',result:'done',session_id:'fixture',usage:{}};}};};
-  await runClaude({runtime:{command:process.execPath},options:{permissionMode:'plan'},contextTools:tools,prompt:'test',cwd:process.cwd(),signal,emit(){},setControl(){},makeQuery});assert.equal(seen.permissionMode,'plan');assert.ok(seen.mcpServers.starport_context);assert.equal(seen.allowedTools.length,CONTEXT_TOOLS.length);assert.ok(seen.allowedTools.every(name=>name.startsWith('mcp__starport_context__starport_')));
+  await runClaude({runtime:{command:process.execPath},options:{permissionMode:'plan'},contextTools:tools,prompt:'test',cwd:process.cwd(),signal,emit(){},setControl(){},makeQuery});assert.equal(seen.permissionMode,'plan');assert.ok(seen.mcpServers.starport_context);
+  const context=seen.allowedTools.filter(name=>name!==CHECKPOINT_TOOL);assert.equal(context.length,CONTEXT_TOOLS.length);assert.ok(context.every(name=>name.startsWith('mcp__starport_context__starport_')));
 });
 
 test('context APIs protect user instructions; the project of a conversation follows its folder, not its group',async()=>{

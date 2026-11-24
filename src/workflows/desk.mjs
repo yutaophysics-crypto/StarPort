@@ -19,6 +19,12 @@ export async function runUnattended({runner,store,clockFactory},run,deskId,promp
     const started=await runner.start(deskId,prompt,[],{desk:true,...bare?{bare:true}:{},memory:{read:!!memory?.read,propose:!!memory?.propose},callChain});
     // Notices already present are Starport's own (context trimming); the tool's arrive later.
     const handled=new Set(),preset=started.assistant.details?.notices?.length||0;
+    // Each time the tool was asked to carry on after stopping mid-turn, the card says so too.
+    let continued=0;
+    const forwardContinues=message=>{
+      for(const entry of message?.details?.diagnostics||[])
+        if(entry.kind==='antigravity-continued'&&entry.attempt>continued){continued=entry.attempt;onNote(entry.note);}
+    };
     const clock=clockFactory({minutes,idleStopMinutes}),runtime=()=>({...clock.snapshot(),messageId:started.assistant.id});
     onRuntime(runtime());
     const checkpoint=reason=>{
@@ -60,6 +66,7 @@ export async function runUnattended({runner,store,clockFactory},run,deskId,promp
         runner.answer(deskId,request.id,{decision:question?'skip':'decline'}).catch(()=>{});
         onNote(question?'伙伴提了问题；无人值守，已跳过':'需要审批的操作已自动拒绝：'+describe(request));
       }
+      forwardContinues(active.message);
       inspect();
     },800);watch.unref?.();
     const timer=clock.deadlineAt===null?null:setTimeout(inspect,Math.max(0,clock.deadlineAt-Date.now()));timer?.unref?.();
@@ -67,6 +74,7 @@ export async function runUnattended({runner,store,clockFactory},run,deskId,promp
     try{await started.done?.catch(()=>{});}finally{clearInterval(watch);clearTimeout(timer);}
     // A turn that stopped hands on its tool calls (historyMessage), so it is read with its log.
     const message=store.messageById(deskId,started.assistant.id,{trace:true});
+    forwardContinues(message);
     const output=message?.status==='complete'?message.details?.finalAnswer||message.content||'':message?historyMessage(message)?.content||message.content||'':'';
     const error=clock.expired?`达到你设置的 ${minutes} 分钟时限，已停止；进度和执行记录已保留。`
       :clock.idleStopped?`连续 ${idleStopMinutes} 分钟没有任何活动，已停止；进度和执行记录已保留。`

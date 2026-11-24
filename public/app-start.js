@@ -217,8 +217,7 @@ $('#features-toggle').onclick = () => {
     $('.app-shell').classList.toggle('features-closed');
   }
 };
-$('#sidebar-toggle').onclick = () => $('.sidebar').classList.toggle('open');
-
+setupSidebarToggle();
 setupPanelResizers();
 
 document.addEventListener('keydown', e => {

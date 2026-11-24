@@ -552,6 +552,49 @@ html[data-theme=deep-space] {
   color: var(--ink);
 }
 
+/* Knowledge folders (knowledge.js): name over a one-line path, remove at the end. */
+.knowledge-editor,
+.knowledge-inherited {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.knowledge-inherited:empty {
+  display: none;
+}
+.room-duty-list li.knowledge-folder {
+  align-items: center;
+}
+.knowledge-folder > .room-icon {
+  flex: none;
+  color: var(--muted);
+}
+.room-duty-list li > span.knowledge-folder-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.knowledge-folder-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.knowledge-folder.missing .knowledge-folder-text span {
+  color: var(--room-danger);
+}
+.room-duty-list li.knowledge-empty {
+  font-size: 12px;
+  color: var(--faint);
+}
+.knowledge-add {
+  align-self: flex-start;
+}
+
 /* A companion's desk */
 .room-desk-head {
   display: flex;

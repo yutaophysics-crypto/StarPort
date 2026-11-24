@@ -1,13 +1,16 @@
 import { readFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { connectCodex } from './adapters/codex.mjs';
+import { temporaryAntigravityStartup } from './adapters/antigravity-startup.mjs';
 import { exec, childEnvironment } from './process.mjs';
 import { claudeModels } from './claude-models.mjs';
 import { effortChoices } from './effort.mjs';
 import { isDeepseekDesktop, deepseekDesktopMetadata } from './deepseek-desktop.mjs';
+import { ollamaHost, ollamaModels } from './adapters/ollama.mjs';
 
 export function parseAntigravityModels(stdout) {
   return stdout.replace(/\x1b\[[0-9;]*m/g,'').split(/\r?\n/).flatMap(line=>{
@@ -69,15 +72,38 @@ async function deepseekModels(runtime,root) {
   return {models,source:'configured'};
 }
 
+export async function antigravityModels(runtime,cwd,{run=exec,wait=delay}={}) {
+  const delays=[800,2000];
+  for(let attempt=0;;attempt++){
+    try{
+      const result=await run(runtime.command,[...runtime.prefixArgs,'models'],{cwd,timeout:30000,maxBuffer:2*1024*1024,windowsHide:true,env:childEnvironment()});
+      const models=parseAntigravityModels(result.stdout||'');
+      if(!models.length&&attempt<delays.length&&temporaryAntigravityStartup(`${result.stderr||''}\n${result.stdout||''}`)){
+        await wait(delays[attempt]);continue;
+      }
+      return {models,source:'native',effort:effortChoices(['low','medium','high','xhigh','max'],{source:'cli',labels:{xhigh:'Extra high'}})};
+    }catch(error){
+      const detail=`${error?.stderr||''}\n${error?.stdout||''}\n${error?.message||''}`;
+      if(attempt<delays.length&&temporaryAntigravityStartup(detail)){
+        await wait(delays[attempt]);continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export async function loadModels(id,runtime,cwd,root) {
   if(id==='claude')return claudeModels(runtime,cwd);
   if(!runtime)return {models:[],source:'unavailable'};
   if(id==='codex')return codexModels(runtime,cwd);
-  if(id==='antigravity'){
-    const result=await exec(runtime.command,[...runtime.prefixArgs,'models'],{cwd,timeout:30000,maxBuffer:2*1024*1024,windowsHide:true,env:childEnvironment()});
-    return {models:parseAntigravityModels(result.stdout),source:'native',effort:effortChoices(['low','medium','high'],{source:'cli'})};
-  }
+  if(id==='antigravity')return antigravityModels(runtime,cwd);
   if(id==='deepseek')return isDeepseekDesktop(runtime)?deepseekDesktopMetadata(runtime,cwd):deepseekModels(runtime,root);
+  if(id==='ollama'){
+    const labels={off:'不思考',on:'思考'};
+    const models=(await ollamaModels(ollamaHost(runtime.env))).map(({effortLevels,...row})=>({...row,effort:effortChoices(effortLevels,{labels})}));
+    // Which model "default" means depends on what is installed, so its thinking modes are unknown.
+    return {models,source:'native',effort:effortChoices([])};
+  }
   throw new Error('Unknown provider');
 }
 

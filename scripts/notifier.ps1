@@ -84,9 +84,9 @@ public static class StarportWin {
 '@
 
 $Palettes = @{
-  'sea'        = @{ Card = '#0F1B2B'; Border = '#2A4058'; Hot = '#47637F'; Ink = '#E6EEF8'; Body = '#B9C8DA'; Muted = '#93A6BD'; Ok = '#A0D4F3'; Error = '#EE9AA2'; Hover = '#1B2D42'; Radius = 8; Small = 5; Brackets = 'Collapsed'; Bracket = '#00000000' }
-  'port'       = @{ Card = '#0A0F16'; Border = '#22313F'; Hot = '#2F5566'; Ink = '#E3ECF2'; Body = '#AEBDCA'; Muted = '#8295A6'; Ok = '#6FF0B0'; Error = '#FF8A80'; Hover = '#122030'; Radius = 3; Small = 2; Brackets = 'Visible'; Bracket = '#AA5FD8FF' }
-  'deep-space' = @{ Card = '#171C22'; Border = '#323942'; Hot = '#4F4A40'; Ink = '#EEEEE9'; Body = '#C4C8CD'; Muted = '#9BA2AB'; Ok = '#DFB87D'; Error = '#E8968C'; Hover = '#242A32'; Radius = 7; Small = 4; Brackets = 'Collapsed'; Bracket = '#00000000' }
+  'sea'        = @{ Card = '#0F1B2B'; Border = '#2A4058'; Hot = '#47637F'; Ink = '#E6EEF8'; Body = '#B9C8DA'; Muted = '#93A6BD'; Ok = '#A0D4F3'; Error = '#EE9AA2'; Ask = '#F2C879'; Hover = '#1B2D42'; Radius = 8; Small = 5; Brackets = 'Collapsed'; Bracket = '#00000000' }
+  'port'       = @{ Card = '#0A0F16'; Border = '#22313F'; Hot = '#2F5566'; Ink = '#E3ECF2'; Body = '#AEBDCA'; Muted = '#8295A6'; Ok = '#6FF0B0'; Error = '#FF8A80'; Ask = '#FFD166'; Hover = '#122030'; Radius = 3; Small = 2; Brackets = 'Visible'; Bracket = '#AA5FD8FF' }
+  'deep-space' = @{ Card = '#171C22'; Border = '#323942'; Hot = '#4F4A40'; Ink = '#EEEEE9'; Body = '#C4C8CD'; Muted = '#9BA2AB'; Ok = '#DFB87D'; Error = '#E8968C'; Ask = '#9FC4F0'; Hover = '#242A32'; Radius = 7; Small = 4; Brackets = 'Collapsed'; Bracket = '#00000000' }
 }
 $CloseLabel = @{ zh = '关闭'; en = 'Close' }
 
@@ -149,7 +149,8 @@ $Template = @'
 function New-Popup($item) {
   $palette = $Palettes[[string]$item.theme]
   if (-not $palette) { $palette = $Palettes['sea'] }
-  $tone = if ($item.tone -eq 'error') { $palette.Error } else { $palette.Ok }
+  # A question waits for the user, so it has its own colour, apart from done and failed.
+  $tone = switch ([string]$item.tone) { 'error' { $palette.Error } 'question' { $palette.Ask } default { $palette.Ok } }
   $xaml = $Template
   foreach ($pair in @(@('@CARD@', $palette.Card), @('@BORDER@', $palette.Border), @('@HOT@', $palette.Hot), @('@INK@', $palette.Ink),
       @('@BODY@', $palette.Body), @('@MUTED@', $palette.Muted), @('@TONE@', $tone), @('@HOVER@', $palette.Hover), @('@RADIUS@', $palette.Radius),
@@ -178,13 +179,16 @@ if ($Snapshot) {
   $sample = @{
     zh = @{ source = '星港 · 科研'; complete = '已完成'; error = '出错了'; title = '计算衍生论'
       body = '闭合误差已经算完：在 L=64 时误差降到 3.2×10^-3，宏观层基本自洽。下一步可以把粗粒化尺度再放大一倍，看误差是否继续下降。'
-      failure = '模拟的工具错误：python fit.py 返回了非零退出码，请检查输入数据。' }
+      failure = '模拟的工具错误：python fit.py 返回了非零退出码，请检查输入数据。'
+      question = '等你回答'; ask = '先放大粗粒化尺度，还是先换成动量壳方案？' }
     en = @{ source = 'Starport · Research'; complete = 'Done'; error = 'Failed'; title = 'Computational derivation'
       body = 'The closure error is computed: at L=64 it drops to 3.2×10^-3, so the macro layer is nearly self-consistent. Next, double the coarse-graining scale.'
-      failure = 'Simulated tool error: python fit.py exited with a non-zero status. Check the input data.' }
+      failure = 'Simulated tool error: python fit.py exited with a non-zero status. Check the input data.'
+      question = 'Needs your answer'; ask = 'Double the coarse-graining scale first, or switch to the momentum-shell scheme?' }
   }[$Language]
   $item = @{ theme = $Theme; tone = $Tone; language = $Language; icon = $Icon; source = $sample.source; title = $sample.title
-    state = $(if ($Tone -eq 'error') { $sample.error } else { $sample.complete }); body = $(if ($Tone -eq 'error') { $sample.failure } else { $sample.body }) }
+    state = $(switch ($Tone) { 'error' { $sample.error } 'question' { $sample.question } default { $sample.complete } })
+    body = $(switch ($Tone) { 'error' { $sample.failure } 'question' { $sample.ask } default { $sample.body } }) }
   $window = New-Popup $item
   $root = $window.Content
   $window.Content = $null

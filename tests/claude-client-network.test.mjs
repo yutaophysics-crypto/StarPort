@@ -7,15 +7,53 @@ import {join} from 'node:path';
 import {readClaudeNetworkPolicy,applyClaudeNetworkPolicy,createClaudeNetworkGuard} from '../src/claude-network.mjs';
 import {ProviderRegistry} from '../src/providers.mjs';
 import {Store} from '../src/storage.mjs';
+import {Runner} from '../src/runner.mjs';
 import {prepareExternalClaude} from '../src/external-tools/claude-launch.mjs';
 import {runWorkspaceCommand} from '../src/external-tools/terminal.mjs';
 import {runClaude} from '../src/adapters/claude.mjs';
 
 async function fixture(){const root=realpathSync.native(await mkdtemp(join(tmpdir(),'starport-client-network-'))),data=join(root,'data'),workspace=join(root,'project');for(const path of [data,workspace])await mkdir(path);return {root,data,workspace};}
-const configuration={version:1,enabled:true,toolNetwork:'normal',proxyUrl:'http://127.0.0.1:18080',protectedPrograms:[process.execPath],gitExecutable:process.execPath};
+const configuration={version:1,enabled:true,toolNetwork:'normal',proxyUrl:'http://127.0.0.1:17897',protectedPrograms:[process.execPath],gitExecutable:process.execPath};
 const guarded={claudeNetwork:{script:'fixture-firewall.ps1',policyPath:'fixture-policy.json',program:process.execPath}};
 const auditPassed={stdout:JSON.stringify({Success:true,Missing:[],Error:null})};
 async function policy(f,value=configuration){await writeFile(join(f.data,'claude-network-policy.json'),JSON.stringify(value));return readClaudeNetworkPolicy(f.root,f.data);}
+
+test('a Claude send rechecks a cached logout after signing in outside Starport',async()=>{
+ const f=await fixture(),store=new Store(':memory:');
+ const cli=join(f.root,'claude-fixture.mjs'),auth=join(f.root,'auth-status.json');
+ try{
+  await writeFile(cli,`import {readFileSync} from 'node:fs';
+const [auth,command]=process.argv.slice(2);
+if(command==='--version')console.log('2.1.296 (Claude Code)');
+else if(command==='auth'){
+ const report=readFileSync(auth,'utf8');
+ console.log(report);
+ process.exitCode=JSON.parse(report).loggedIn?0:1;
+}`);
+  await writeFile(auth,JSON.stringify({loggedIn:false}));
+  store.setSetting('providers',{claude:{command:process.execPath,prefixArgs:[cli,auth]}});
+  const registry=new ProviderRegistry(f.root,f.data,store);
+  let started=0;
+  const runner=new Runner(store,registry,()=>{}, {claude:async({options,emit})=>{
+   started++;
+   assert.equal(options.nativeNoPrompts,true);
+   emit({type:'delta',text:'OK'});
+   return {exitCode:0,completed:true};
+  }});
+  const chat=store.newChat({provider:'claude',workspace:f.workspace});
+  await assert.rejects(runner.start(chat.id,'Before login'),/Claude Code 尚未登录/);
+  assert.equal(started,0);
+  assert.equal(store.messages(chat.id).length,0);
+
+  await writeFile(auth,JSON.stringify({loggedIn:true}));
+  assert.equal((await registry.probe('claude')).loggedIn,false);
+  await runner.start(chat.id,'After login');
+  await runner.active.get(chat.id)?.done;
+  assert.equal(started,1);
+  assert.equal(store.messages(chat.id).at(-1).status,'complete');
+  assert.equal(store.messages(chat.id).at(-1).content,'OK');
+ }finally{store.close();}
+});
 
 test('concurrent launches share a pending audit but subsequent launches check again',async()=>{
  let calls=0,release;
@@ -59,7 +97,7 @@ test('only Claude clients force the proxy; DSH and ordinary providers stay uncha
  const value=applyClaudeNetworkPolicy(runtime,'claude',p);assert.equal(value.env.HTTPS_PROXY,p.proxyUrl);assert.equal(value.env.https_proxy,p.proxyUrl);assert.equal(value.env.ELECTRON_RUN_AS_NODE,'1');assert.equal(value.claudeNetwork.program,process.execPath);
  for(const id of ['deepseek','codex'])assert.equal(applyClaudeNetworkPolicy(runtime,id,p),runtime);assert.equal(runtime.env.https_proxy,'http://wrong.invalid');
  assert.equal(await policy(f,{...configuration,activated:false}),null);
- await assert.rejects(policy(f,{...configuration,proxyUrl:'http://user:password@127.0.0.1:18080'}),/网络策略无效/);
+ await assert.rejects(policy(f,{...configuration,proxyUrl:'http://user:password@127.0.0.1:17897'}),/网络策略无效/);
 });
 test('all Claude projects receive the normal terminal, including those with no external grants',async()=>{
  const f=await fixture(),store=new Store(':memory:');try{

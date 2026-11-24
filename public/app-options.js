@@ -44,33 +44,54 @@ function saveOptions(p, updated) {
     queueSave({ options: updated });
   } else {
     state.options[p.id] = updated;
+    rememberDraftPermissions(p.id, updated);
   }
   globalThis.StarportContext?.render();
 }
+
+const MODEL_TTL = 5 * 60 * 1000;
+const FALLBACK_TTL = 15 * 1000;
+
+function invalidateOptionModels(provider = '') {
+  for (const key of [...modelLists.keys()]) {
+    if (!provider || key.startsWith(`["${provider}",`)) modelLists.delete(key);
+  }
+}
+globalThis.StarportInvalidateOptionModels = invalidateOptionModels;
 
 async function fetchModels(force = false) {
   const key = modelContext();
   const p = currentProvider();
   const previous = modelLists.get(key);
-  if (!p || previous?.loading || (!force && previous)) return;
+  const degraded = previous && ['unavailable', 'aliases'].includes(previous.source);
+  const fresh = previous && Date.now() < (previous.expires || 0);
+  if (!p || previous?.loading || (!force && fresh)) return;
+  const refresh = force || degraded;
+  if (refresh) globalThis.StarportUI?.invalidateModels?.(p.id);
   const entry = { ...previous, loading: true };
   modelLists.set(key, entry);
-  try {
-    const result = await api(
+  const workspace = state.chat?.workspace || state.workspace || '';
+  const query = ws =>
+    api(
       '/providers/' +
         p.id +
         '/models?' +
         new URLSearchParams({
-          workspace: state.chat?.workspace || state.workspace,
-          ...(force ? { refresh: '1' } : {})
+          workspace: ws,
+          ...(refresh ? { refresh: '1' } : {})
         })
     );
+  try {
+    const result = await query(workspace).catch(error => (workspace ? query('') : Promise.reject(error)));
     delete entry.effort;
     Object.assign(entry, result);
+    const ok = Array.isArray(entry.models) && entry.models.length > 0 && !['unavailable', 'aliases'].includes(entry.source);
+    entry.expires = Date.now() + (ok ? MODEL_TTL : FALLBACK_TTL);
   } catch {
     entry.models = [];
     delete entry.effort;
     entry.source = 'unavailable';
+    entry.expires = Date.now() + FALLBACK_TTL;
   } finally {
     entry.loading = false;
     if (key === modelContext()) {
@@ -222,7 +243,7 @@ function renderEffortField() {
         el('option', {
           value: c.value,
           text:
-            c.label +
+            t(c.label) +
             (c.value === capability.defaultLevel ? ' · ' + t('模型默认') : '') +
             (c.warning ? ' · ' + t(c.warning) : ''),
           title: c.description || c.label
@@ -381,12 +402,7 @@ function renderFeatures() {
         ...opts(),
         [field.key]: field.type === 'checkbox' ? input.checked : input.value
       };
-      if (state.chat) {
-        state.chat.options[p.id] = updated;
-        queueSave({ options: updated });
-      } else {
-        state.options[p.id] = updated;
-      }
+      saveOptions(p, updated);
       if (field.key === 'mode') renderFeatures();
       else if (field.key === 'provider') {
         renderModelField();
@@ -401,9 +417,9 @@ function renderFeatures() {
   }
   $('#provider-note').textContent = t(p.notes);
   $('#composer-provider').textContent = p.name;
+  fetchModels();
   renderModelField();
   renderEffortField();
-  fetchModels();
   globalThis.StarportComposer?.render();
   globalThis.StarportPermissions?.render();
   renderWelcome();
@@ -417,8 +433,10 @@ async function switchProvider(id) {
   }
   viewRevision++;
   if (state.chat) {
+    const chatId = state.chat.id;
     state.chat.provider = id;
-    await queueSave({ provider: id });
+    const saved = await queueSave({ provider: id });
+    if (state.chat?.id === chatId && state.chat.provider === id) state.chat.options = saved.options;
   } else {
     state.selected = id;
   }

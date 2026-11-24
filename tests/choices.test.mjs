@@ -5,23 +5,27 @@ import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import { browseFolders, createFolder, directoryPath, userFolders } from '../src/folders.mjs';
 import { FileActions } from '../src/files.mjs';
-import { ModelCatalog, codexModels, parseAntigravityModels, deepseekConfiguredModels } from '../src/models.mjs';
+import { ModelCatalog, antigravityModels, codexModels, parseAntigravityModels, deepseekConfiguredModels } from '../src/models.mjs';
 import { createHub } from '../src/server.mjs';
-import { claudeModels,claudeModelCatalog } from '../src/claude-models.mjs';
+import { claudeModels,claudeModelCatalog,claudeAliases } from '../src/claude-models.mjs';
 
 test('Claude native names show resolved versions while preserving selectable aliases and custom deployments',()=>{
   const result=claudeModelCatalog([{value:'default',displayName:'Default',resolvedModel:'claude-sonnet-5'},
     {value:'sonnet',displayName:'Sonnet',resolvedModel:'claude-sonnet-5'},
     {value:'opus',displayName:'Opus',resolvedModel:'claude-opus-5-5'},
+    {value:'claude-fable-5-2',displayName:'Fable 5.2',resolvedModel:'claude-fable-5-2',supportedEffortLevels:['low','medium','high','xhigh','max']},
+    {value:'fable',displayName:'Fable 5.1',resolvedModel:'claude-fable-5-1',supportedEffortLevels:['low','medium','high','xhigh','max']},
     {value:'haiku',displayName:'Haiku',resolvedModel:'claude-haiku-4-5-20251001'},
     {value:'opus[1m]',displayName:'Opus (1M context)',resolvedModel:'claude-opus-5-5[1m]'},
     {value:'company',displayName:'Company model',resolvedModel:'custom-deployment'}]);
   assert.ok(result.models.every(m=>m.id!=='default'));
-  assert.deepEqual(result.models.slice(0,4).map(m=>[m.id,m.label]),[['sonnet','Claude Sonnet 5'],['opus','Claude Opus 5.5'],['haiku','Claude Haiku 4.5'],['opus[1m]','Claude Opus 5.5 · 1M']]);
-  assert.equal(result.models[4].label,'Company model · custom-deployment');assert.equal(result.models.at(-1).id,'opusplan');assert.match(result.models.at(-1).label,/Opus 5\.5 → Claude Sonnet 5/);
+  assert.deepEqual(result.models.slice(0,6).map(m=>[m.id,m.label]),[['sonnet','Claude Sonnet 5'],['opus','Claude Opus 5.5'],['claude-fable-5-2','Claude Fable 5.2'],['fable','Claude Fable 5.1'],['haiku','Claude Haiku 4.5'],['opus[1m]','Claude Opus 5.5 · 1M']]);
+  assert.equal(result.models[2].effort.defaultLevel,'high');
+  assert.equal(result.models[6].label,'Company model · custom-deployment');assert.equal(result.models.at(-1).id,'opusplan');assert.match(result.models.at(-1).label,/Opus 5\.5 → Claude Sonnet 5/);
   assert.equal(claudeModelCatalog([{value:'haiku',displayName:'Haiku'}]).models.length,1);
+  assert.ok(claudeAliases().models.some(m=>m.id==='fable'&&m.label==='Claude Fable'));
 });
-test('Claude catalog initialization sends no prompt and closes on success, failure and timeout',async()=>{
+test('Claude catalog initialization sends no prompt, retries a transient failure and closes on success, failure and timeout',async()=>{
   for(const mode of ['success','failure','timeout']){
     let closed=false,request;const result=await claudeModels({command:process.execPath,prefixArgs:[]},process.cwd(),input=>{
       request=input;assert.deepEqual(input.options.tools,[]);assert.equal(input.options.settings.disableAllHooks,true);assert.equal(input.options.persistSession,false);assert.equal(input.options.strictMcpConfig,true);
@@ -31,6 +35,20 @@ test('Claude catalog initialization sends no prompt and closes on success, failu
     assert.equal(result.source,mode==='success'?'native':'aliases');
     if(mode!=='success')assert.ok(result.models.every(m=>!/5\.5/.test(m.label)));
   }
+  let calls=0;
+  const recovered=await claudeModels({command:process.execPath,prefixArgs:[]},process.cwd(),()=>{
+    calls++;
+    return {
+      supportedModels:async()=>{
+        if(calls===1)throw new Error('transient');
+        return [{value:'claude-fable-5-2',displayName:'Fable 5.2',resolvedModel:'claude-fable-5-2',supportedEffortLevels:['low','medium','high','xhigh','max']}];
+      },
+      close(){}
+    };
+  },1000);
+  assert.equal(calls,2);
+  assert.equal(recovered.source,'native');
+  assert.deepEqual(recovered.models.map(m=>[m.id,m.label]),[['claude-fable-5-2','Claude Fable 5.2']]);
 });
 
 test('folder browser handles Unicode/spaces, returns directories only, parent and empty folders',async()=>{
@@ -47,7 +65,43 @@ test('folder browser handles Unicode/spaces, returns directories only, parent an
 test('native catalogs preserve model ids, follow Codex pagination and ignore CLI chatter',async()=>{
   const models=await codexModels({command:process.execPath,prefixArgs:[resolve('tests/fixtures/models-rpc.mjs')]},process.cwd());
   assert.deepEqual(models.models.map(m=>m.id),['first','second']);
-  assert.deepEqual(parseAntigravityModels('Fetching available models...\n\x1b[32mgemini-test\tGemini Test\x1b[0m\nError: login needed'),[{id:'gemini-test',label:'Gemini Test'}]);
+  assert.deepEqual(parseAntigravityModels([
+    'Fetching available models...',
+    '\x1b[32mgemini-4-carbon-medium\tGemini 4 Carbon (Medium)\x1b[0m',
+    'gemini-4-carbon-high\tGemini 4 Carbon (High)',
+    'gemini-4-carbon-low\tGemini 4 Carbon (Low)',
+    'Error: login needed'
+  ].join('\n')),[
+    {id:'gemini-4-carbon-medium',label:'Gemini 4 Carbon (Medium)'},
+    {id:'gemini-4-carbon-high',label:'Gemini 4 Carbon (High)'},
+    {id:'gemini-4-carbon-low',label:'Gemini 4 Carbon (Low)'}
+  ]);
+});
+test('Antigravity model catalog retries transient eligibility EOF and exposes CLI effort levels',async()=>{
+  let attempts=0;const waits=[];
+  const catalog=await antigravityModels({command:'agy.exe',prefixArgs:[]},process.cwd(),{
+    wait:async ms=>{waits.push(ms);},
+    run:async()=>{
+      attempts++;
+      if(attempts===1)throw Object.assign(new Error('Command failed'),{stderr:'Error: Eligibility check failed: failed to fetch user info: Get "https://www.googleapis.com/oauth2/v2/userinfo": EOF\n'});
+      return {stdout:'gemini-4-carbon-high\tGemini 4 Carbon (High)\ngemini-4-argon-high\tGemini 4 Argon (High)\n',stderr:''};
+    }
+  });
+  assert.equal(attempts,2);
+  assert.deepEqual(waits,[800]);
+  assert.deepEqual(catalog.models.map(m=>[m.id,m.label]),[
+    ['gemini-4-carbon-high','Gemini 4 Carbon (High)'],
+    ['gemini-4-argon-high','Gemini 4 Argon (High)']
+  ]);
+  assert.deepEqual(catalog.effort.choices.map(c=>[c.value,c.label]),[
+    ['low','Low'],['medium','Medium'],['high','High'],['xhigh','Extra high'],['max','Max']
+  ]);
+  let denied=0;
+  await assert.rejects(()=>antigravityModels({command:'agy.exe',prefixArgs:[]},process.cwd(),{
+    wait:async()=>{},
+    run:async()=>{denied++;throw Object.assign(new Error('denied'),{stderr:'Error: Eligibility check failed: 403 account not eligible'});}
+  }),/denied/);
+  assert.equal(denied,1);
 });
 test('DeepSeek exposes only model metadata, keeping service identity and saved custom choices',()=>{
   const result=deepseekConfiguredModels({'llm-deepseek':{apiKey:'secret',models:[{id:'same',name:'Local'}]},'llm-pi-ai':{providers:{gateway:{apiKey:'secret',models:[{id:'same',name:'Gateway'}]}}},'agent-default-model':{provider:'other',model:'custom'}},[{id:'bundled'}]);

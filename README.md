@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 <img src="public/icon.svg" width="64" height="64" alt="StarPort">
 
-StarPort is a local workspace for Codex, Claude Code, Antigravity and DeepSeek Harness. Conversations, rooms, shared memory and project instructions live in one place, while each tool keeps its own login, models and permission modes. Companions and workflows let several agents work in the same conversation. Group conversations, where people call agents on their own connected computers, are in development.
+StarPort is a local workspace for Codex, Claude Code, Antigravity and DeepSeek Harness, plus local models through Ollama. Conversations, rooms, shared memory and project instructions live in one place, while each tool keeps its own login, models and permission modes. Companions and workflows let several agents work in the same conversation. Group conversations, where people call agents on their own connected computers, are in development.
 
 The local workspace does not need a StarPort account. Group conversations use accounts on a server you choose; model credentials stay on each participant's computer. StarPort does not provide model subscriptions or move credentials between providers.
 
@@ -77,6 +77,9 @@ Each computer needs its own installed and signed-in agent tools. This repository
 | Claude Code | Official Claude Agent SDK driving the local CLI | Model, reasoning effort, working mode (including plan, **Auto review** and **Bypass permissions**), separate Git worktree, approvals and questions |
 | Antigravity | Local AGY CLI with streaming JSON | Model, reasoning effort, chat, edit or plan mode, **Allow all tools** or native permissions, agent, terminal sandbox |
 | DeepSeek Harness | Official SDK over JSON-RPC | Model, model provider, reasoning effort; also works with the desktop app's bundled CLI |
+| Ollama *(testing)* | Local Ollama HTTP API | Downloaded local models; thinking on/off where the model supports it |
+
+Ollama is text-only: it does not read or write files, run commands or use StarPort's tools, and StarPort sends the conversation record with every turn. It talks to the Ollama service on this computer (`http://127.0.0.1:11434` by default, or `OLLAMA_HOST`); download models first with `ollama pull`. Ollama is not offered in group conversations.
 
 Only the tools you install are needed. Model lists and reasoning levels come from each tool. When StarPort cannot confirm what a model supports, it says so instead of guessing. Permission choices map to the tool's own modes, and the tool can still enforce its rules or ask for approval. Choosing a working folder does not create an operating-system sandbox.
 
@@ -94,13 +97,37 @@ Details: [Agent tools: models, permissions and usage](docs/agents.md).
 - **Branch from here**, under a finished reply, starts a new conversation with the history up to that reply. **Prompts**, next to the send button, inserts your saved prompts. Each code block has a **Copy** button that copies the original text.
 - The **Context** indicator below the input shows the latest context usage reported by Codex or Claude Code.
 
+*(testing)* One Claude response, thinking included, stops at 128,000 tokens. That is the ceiling for every current model, and `CLAUDE_CODE_MAX_OUTPUT_TOKENS` cannot raise it. Thinking that hits it before producing text or a tool call is discarded whole, while thinking before a tool call is kept and the next response starts with a fresh limit. So every Claude run gets a read-only checkpoint tool (`mcp__starport_thinking__checkpoint`, no approval needed) and is told to record what it has established, what is open and what comes next once a stretch of thinking runs long, then think on. Split this way, total thinking is not bound by the per-response limit, and Claude is not asked to think less.
+
+The Codex interface includes goal and plan controls where supported. Claude Code supports native approval and question callbacks. Approval cards let you allow or reject actions, answer questions or skip a question without granting permission. Remaining-usage reports show the fields available from each vendor's own interface; missing data is not invented.
 Details: [Conversations, files and context](docs/workspace.md).
 
 ## Long conversations and context
 
-When you keep using the same tool, Codex, Claude Code and Antigravity resume their native sessions, receive only the messages they have not seen and manage their own context. When a new session has to read the history (after you switch tool or model, branch, or change conversation settings, and on every DeepSeek turn, because DeepSeek starts a new SDK session each time), StarPort sends the history within a per-tool budget. If it does not fit, a summarizer model compacts older messages into a structured summary that keeps your own points. The model then receives the summary and the recent messages verbatim. The summary belongs to the conversation and is reused after later switches; StarPort compacts again only when new content no longer fits.
+When you keep using the same tool, Codex, Claude Code and Antigravity resume their native sessions, receive only the messages they have not seen and manage their own context. When a new session has to read the history (after you switch tool or model, branch, or change conversation settings, and on each DeepSeek or Ollama turn), StarPort sends the history within a per-tool budget. If it does not fit, a summarizer model compacts older messages into a structured summary that keeps your own points. The model then receives the summary and the recent messages verbatim. The summary belongs to the conversation and is reused after later switches; StarPort compacts again only when new content no longer fits.
+
+- Organize conversations into groups independently of their working folders. Conversations in one group may use different folders, tools and models.
+- The selected working folder is the project. Conversations in the same folder share its project instructions and memory; subfolders are separate projects.
+- A room can have a default working folder (room menu → Default working folder…, or a conversation's menu → Use as the room's default working folder). New conversations started in the room begin there; existing conversations keep their own folders. Hovering the room name shows it.
+- View the final answer alone, a task overview, or detailed available execution records. During a task the overview stays visible; after completion it collapses and can be reopened. Select a step or subagent to inspect its recorded activity.
+- Native reasoning summaries and execution records are shown only when the tool supplies them. StarPort does not invent hidden reasoning or claim to reproduce a vendor's private desktop UI exactly.
+- Antigravity's stream leaves out its thought summaries and gives file reads only as a line and byte count. While it works, StarPort reads agy's own local transcript (`~/.gemini/antigravity-cli`, read-only) and adds both to the reply's steps; read results keep up to 8,000 characters. *(testing)*
+- Running conversations show a spinner; completed replies awaiting review show a blue dot. Native failures, interrupted tasks and unconfirmed completion remain distinct.
+- When a conversation's own model stops to ask you a question (Claude's AskUserQuestion, Codex's request for input), its conversation shows an amber question mark instead of the spinner until you answer, and a popup at the bottom right says "Needs your answer" with the question, in its own colour and with its own chime, apart from the "Done" popup. Permission requests and companions' desks raise none.
+- Messages sent while a task is running enter a queue. Edit, remove or explicitly **Steer** a queued message into the current task. Entered text changes the Stop control into a Send arrow; clearing the input restores Stop.
+- A task is not stopped merely because it is quiet. Explicit time limits, cancellation and native failures retain their own behavior. Subagent completion is tracked before declaring a task finished.
 
 Messages that are not sent verbatim are saved to `.starport/history/<conversation id>.md` in the working folder, where the model can read them; `.starport/` contains its own `.gitignore`. **Settings → Context** turns automatic compaction on or off, sets each tool's budget (by default 100k tokens for Codex and Claude Code, 60k for Antigravity and DeepSeek) and chooses up to three summarizer models. Each request to Antigravity is also capped at 184,000 bytes to avoid truncated input.
+
+### Selected text: explain and read aloud *(testing)*
+
+Select text in a conversation and a small bar offers **Translate/Explain** and **Read aloud**.
+
+- **Translate/Explain** opens a card under the selection. Each click starts a new hidden conversation that receives only the prompt and the selected text: no conversation history, memory or instructions from StarPort. The default is Antigravity `gemini-3.8-flash-low` with the prompt 用三句话解释这个词语/短语/句子. **Settings → Selection** changes the tool, model and prompt; a local Ollama model also works. The tool's own built-in instructions and global files such as `CLAUDE.md` or `GEMINI.md` may still apply.
+- **Read aloud** uses the browser's voices and picks a voice for the text's language. A bar at the top of the page shows that it is speaking and has a **Stop** button.
+
+The selection bar can be turned off per device in **Settings → Selection**.
+
 
 ## Shared memory and project instructions
 
@@ -134,6 +161,12 @@ Rooms can also hold **companions**: named agents with an avatar, role, personali
 
 Details: [Rooms, companions and workflows](docs/rooms-and-workflows.md).
 
+*Testing.* **Reference material** (知识库): hang local folders on a room (room menu → Reference material…), a conversation (conversation menu) or a companion (its settings). A turn reads its room's and its conversation's folders; a companion at work also reads its own. Exam seats and Starport's own desks read none. Folders stay where they are: the model gets their paths and top-level contents, and searches them with its own tools. They are read-only: Claude gets them as extra working directories with edits denied, and its sandboxed terminal may only read them; Codex's sandbox reads outside the working folder but blocks writes there (except with full access); agy gets `--add-dir`, and Antigravity and DeepSeek are only asked not to write. Ollama cannot read files. A resumed session is told again only when the list changes. A folder that contains the working folder is skipped for that turn, and drives, the home folder, Starport's data folder and credential folders are refused. To add to them, ask in the conversation, e.g. "download this paper into the room's knowledge base": the model then calls `starport_knowledge_save`, and Starport itself downloads the URL (http/https, up to 500 MB, never from this computer's own addresses) or copies a file from the working folder into the chosen folder, without overwriting unless asked. The save is refused unless your message in that turn mentions the knowledge base (知识库, knowledge base, reference material); everything else is written to the working folder as before. The conversation's own model can save into the room's, the conversation's and the room companions' folders; a companion @-mentioned in the conversation into the room's, the conversation's and its own. Called companions, workflow steps and exam seats never save. A Codex conversation starts a new native session once when it first gets somewhere to save, because Codex fixes its tools when a session starts.
+
+*Testing.* agy retries within a turn when its reply hits the model's output limit or its stream or connection drops, yet still reports that error at the end. A turn that finished with a complete final answer after such a retry counts as complete. If an Antigravity companion at an unattended desk (a call, an exam seat, an @mention or a workflow step) really does stop mid-turn on one of these, StarPort resumes the same agy conversation and asks it to carry on, at most twice; each time is noted on the card. The conversation's own model is not resumed automatically.
+
+*Testing.* While a companion works, you can mention other companions to work alongside it, or talk to the conversation's model without a mention. A second request to the same companion waits its turn and shows as queued; its clock starts when its turn comes. The room panel shows each working companion's elapsed time, updated every second.
+
 ## Notifications and settings
 
 When a task finishes or fails, StarPort shows a notification with the room, conversation title and a short summary; clicking it opens the conversation. On Windows this is a native popup with a short chime, and the taskbar button flashes while StarPort is in the background. Other systems use browser notifications. A message that mentions companions notifies once, when everyone it named has finished. The conversation you are viewing, tasks you stopped and tasks with messages still queued do not notify. The bell in the top bar turns **Do not disturb** on or off.
@@ -162,6 +195,18 @@ The **+** menu below the input attaches files, folders, browser tabs and video s
 The optional [Edge extension](extensions/edge) pairs with StarPort and lets you explicitly attach a browser tab or read Bilibili subtitles using that browser's current login. Browser credentials remain in Edge. The tool reads only the requested pages or videos; it does not read browsing history, password fields or unrelated form input. Missing subtitles or failed authentication produce an explanation, not a fabricated transcript. See the [browser subtitle guide](docs/browser-video-subtitles.md).
 
 Local file links in replies can be opened with the default application. On Windows, the context menu offers **Open file**, **Show in File Explorer** with the file selected, and the system **Open with** chooser. Ambiguous relative filenames require a choice. Rendering a message never runs a file action, and executable or unknown file types open the application chooser.
+
+## LaTeX editor *(testing)*
+
+The TeX button in the top bar opens a LaTeX editor beside the conversation: source on one side, the PDF built with your computer's TeX on the other. Dock it left or right of the conversation (drag its edge to resize) or open it in its own window; each conversation remembers its place.
+
+- The first time, pick the main file: a `.tex` file in the working folder with `\documentclass`. The file menu switches to the project's other files or to another main file.
+- Edits are saved to disk about a second after you stop typing, and each save builds the PDF (turn off **Auto** to build with Ctrl S instead). The engine follows `% !TEX program = …`, uses XeLaTeX for ctex, fontspec and similar packages, and pdfLaTeX otherwise. Build output goes to the working folder's `.starport/latex/`.
+- Errors and warnings are listed below and marked in the source; each opens its file and line. Double-click the PDF to jump to the source; **Find in PDF** (Ctrl Alt →) marks the caret's position in the PDF.
+- **Visual mode** (the **Visual** switch, on by default) changes only how the source looks; the file stays standard `.tex`. Formulas are drawn in place with KaTeX using your preamble's macros and common `physics` commands, numbered as the last build numbered them, with or without a `\label`; TikZ and Feynman pictures are compiled alone by your TeX with your real preamble; headings and bold or italic text show their look; `\ref`, `\eqref` and `\cite` show the last build's numbers; `\includegraphics` shows the image. Wherever the caret goes the source comes back, with a live preview under a formula or picture being edited. A formula KaTeX cannot draw stays source, and a picture that depends on a macro in the body is cut from the built PDF.
+- Select source in the editor and a dashed quote card appears above the composer, leaving again when nothing is selected. To quote several places, press Ctrl L or the pin on the card to keep it, then select elsewhere; kept cards stay until sent or removed, also across a page reload. The next message carries them in front of what you write. While the editor is open, the conversation's model hears each turn which main file and section you are in and how the last build went. When a model or another editor changes a file on disk, the editor merges it in, lights the changed lines and builds again; if you have unsaved edits too, you choose which version to keep.
+- Builds run with your user account outside the agent sandbox. StarPort skips the project's latexmk configuration and uses restricted shell escape. File-read restrictions depend on the TeX distribution and do not reliably confine TeX to the project, so compile only sources you trust. LuaLaTeX requires per-project permission, which can be withdrawn in the file tree. Pictures are included directly in the PDF instead of using the TikZ externalization workflow.
+- Needs TeX Live, MiKTeX or MacTeX. If `latexmk` is not found, set `STARPORT_TEX_BIN` to its bin folder. Source files must be UTF-8.
 
 ## Import, export and move to another computer
 
@@ -216,6 +261,7 @@ The test runner uses an isolated temporary folder and cleans it afterwards. A si
 | --- | --- |
 | `src/server.mjs` | Local HTTP API and static assets |
 | `src/runner.mjs`, `src/adapters/` | Context assembly, task lifecycle and native adapters |
+| `src/explain.mjs`, `public/selection-tools.js` | Explain and read-aloud for selected text |
 | `src/storage.mjs`, `src/compaction.mjs` | SQLite records and conversation compaction |
 | `src/workflows.mjs`, `src/workflows/` | Companions, rooms, workflow scheduling, ledgers and exams |
 | `src/external-tools/` | Project tool grants, sandboxed terminal, approved host launches and persistent applications |

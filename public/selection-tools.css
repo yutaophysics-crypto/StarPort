@@ -1,0 +1,51 @@
+/* Selected text in the conversation: the small toolbar, the explanation card and the 朗读 status.
+   Built on .chat-actions-menu, so every theme's menu colours apply. */
+.selection-icon { display: inline-flex; flex: none; }
+.selection-icon svg { display: block; }
+
+.chat-actions-menu.selection-bar { width: auto; display: flex; gap: 2px; padding: 4px; z-index: 88; }
+.chat-actions-menu.selection-bar .selection-action,
+.chat-actions-menu.selection-speaking .selection-action {
+  display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 7px 10px; font-size: 12px; white-space: nowrap;
+}
+.chat-actions-menu .selection-action:disabled { opacity: .45; cursor: not-allowed; }
+
+.chat-actions-menu.selection-card {
+  width: min(400px, calc(100vw - 16px)); max-height: min(420px, calc(100dvh - 16px));
+  display: flex; flex-direction: column; padding: 0; z-index: 87; overflow: hidden;
+}
+.selection-card-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--line); }
+.selection-card-source {
+  flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  color: var(--muted); font-size: 12px; quotes: '“' '”';
+}
+.selection-card-tools { display: flex; gap: 2px; flex: none; }
+.chat-actions-menu .selection-tool {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; color: var(--muted);
+}
+.chat-actions-menu .selection-tool:hover:not(:disabled) { color: var(--ink); }
+.chat-actions-menu .selection-tool:disabled { opacity: .35; }
+.selection-card-body { overflow: auto; padding: 12px 14px; }
+.selection-card-body .message-body { font-size: 13px; line-height: 1.8; }
+.selection-card-body .room-text-action { display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 4px 0; }
+.selection-card-status { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--muted); font-size: 12px; }
+.chat-actions-menu .selection-card-status .room-text-action { margin-left: auto; width: auto; padding: 4px 6px; }
+.selection-card-error { margin: 0 0 8px; color: var(--ink); font-size: 12px; line-height: 1.7; white-space: pre-wrap; }
+.selection-card-foot { padding: 6px 14px 8px; border-top: 1px solid var(--line); }
+.selection-card-model { color: var(--faint); font-size: 11px; }
+.selection-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: selection-pulse 1.2s ease-in-out infinite; }
+@keyframes selection-pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+.chat-actions-menu.selection-speaking {
+  top: 14px; left: 50%; transform: translateX(-50%); width: auto; z-index: 89;
+  display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 14px; color: var(--muted); font-size: 12px;
+}
+.selection-wave { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.selection-wave i { width: 2px; height: 100%; border-radius: 1px; background: var(--accent); animation: selection-wave 1s ease-in-out infinite; }
+.selection-wave i:nth-child(2) { animation-delay: -.33s; }
+.selection-wave i:nth-child(3) { animation-delay: -.66s; }
+@keyframes selection-wave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .selection-pulse, .selection-wave i { animation: none; } }
+
+.selection-picker { display: grid; grid-template-columns: 130px 1fr 130px; gap: 8px; align-items: start; }
+@media (max-width: 650px) { .selection-picker { grid-template-columns: 1fr 1fr; } }

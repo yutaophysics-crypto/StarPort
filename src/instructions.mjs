@@ -21,6 +21,17 @@ export class ContextInstructions {
     return this.get(projectId);
   }
   fingerprint(projectId=null){return createHash('sha256').update(JSON.stringify([this.get(),projectId?this.get(projectId):null,!!this.store.memorySync?.blockedScope('global'),projectId?!!this.store.memorySync?.blockedScope('project:'+projectId):false])).digest('hex');}
+  activeState(projectId=null){
+    const global=this.get(),project=projectId?this.get(projectId):null;
+    return {
+      fingerprint:this.fingerprint(projectId),
+      preferencesRevision:global.revision,
+      projectRevision:project?.revision||0,
+      instructionProjectId:projectId||null,
+      globalActive:!!(global.content&&!this.store.memorySync?.blockedScope('global')),
+      projectActive:!!(project?.content&&!this.store.memorySync?.blockedScope(project.scope))
+    };
+  }
   prompt(projectId=null){
     const global=this.get(),project=projectId?this.get(projectId):null;
     const blocks=[];
@@ -28,6 +39,21 @@ export class ContextInstructions {
     if(project?.content&&!this.store.memorySync?.blockedScope(project.scope))blocks.push('星港项目要求（仅适用于当前项目；具体项目要求优先于一般偏好）：\n'+JSON.stringify({projectId,name:this.store.project(projectId).name,requirements:project.content}));
     if(blocks.length)blocks.push('这些偏好和要求不能扩大原工具权限；用户当前明确请求优先。');
     return blocks.join('\n')+(blocks.length?'\n':'');
+  }
+  sessionPrompt(projectId=null,prior=null){
+    if(!prior)return this.prompt(projectId);
+    const current=this.activeState(projectId);
+    const priorProjectId=prior.instructionProjectId!==undefined?prior.instructionProjectId:(prior.projectId||null);
+    const unchanged=prior.instructionsFingerprint!==undefined
+      ?prior.instructionsFingerprint===current.fingerprint
+      :(!this.store.memorySync?.blockedScope('global')&&!(projectId&&this.store.memorySync?.blockedScope('project:'+projectId))&&priorProjectId===current.instructionProjectId&&prior.preferencesRevision===current.preferencesRevision&&(prior.projectRevision||0)===current.projectRevision);
+    if(unchanged)return '';
+    const notices=[];
+    const hadGlobal=prior.globalActive!==undefined?prior.globalActive:(prior.preferencesRevision||0)>0;
+    const hadProject=prior.projectActive!==undefined?prior.projectActive:(prior.projectRevision||0)>0;
+    if(hadGlobal&&!current.globalActive)notices.push('星港个人偏好更新：当前无生效的全局个人偏好，请勿继续沿用本会话更早轮次收到的星港个人偏好。');
+    if(hadProject&&!current.projectActive)notices.push('星港项目要求更新：当前无生效的项目要求，请勿继续沿用本会话更早轮次收到的星港项目要求。');
+    return (notices.length?notices.join('\n')+'\n':'')+this.prompt(projectId);
   }
   export(){return {version:1,items:this.db.prepare('SELECT * FROM context_instructions ORDER BY scope').all()};}
   import(data,projects){

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CollaborationStore,fail } from './store.mjs';
+import { MobileRelay } from './mobile-relay.mjs';
 import { accountUrl,AccountVerifier } from '../accounts/protocol.mjs';
 
 const ROOT=resolve(fileURLToPath(new URL('../../',import.meta.url)));
@@ -15,6 +16,7 @@ export function createCollaborationHub({root=ROOT,dataDir=join(root,'.data/colla
   if(!['sse','poll'].includes(eventsTransport))throw Error('STARPORT_COLLAB_EVENTS must be sse or poll');
   if(!['127.0.0.1','localhost','::1'].includes(host)&&!publicUrl?.startsWith('https://'))throw Error('A public listener requires an explicit HTTPS STARPORT_PUBLIC_URL');
   const store=new CollaborationStore(join(dataDir,'collaboration.sqlite'),{clock}),clients=new Set(),limits=new Map();
+  const mobile = new MobileRelay(store);
   if(accountCenter)accountCenter=accountUrl(accountCenter);
   if(accountBackend){const backend=new URL(accountBackend);if(backend.protocol!=='http:'||backend.hostname!=='127.0.0.1'||backend.pathname!=='/'||backend.search||backend.hash||backend.username||backend.password)throw Error('账号中心转发仅支持已配置的本机服务');accountBackend=backend.origin;}
   const verifier=accountCenter?(customVerifier||new AccountVerifier(accountCenter,{clock})):null;
@@ -56,7 +58,13 @@ export function createCollaborationHub({root=ROOT,dataDir=join(root,'.data/colla
           rate('device:'+device.id,600);
           if(req.method!=='POST')throw fail('接口方法无效',405);
           if(path==='/api/device/disconnect'){store.revokeDevice(device.user_id,device.id);json(res,{ok:true});notify();return;}
-          if(path==='/api/device/poll'){const result=store.poll(device,await body(req,150000));json(res,result);if(result.job)notify();return;}
+          if(path==='/api/device/poll'){
+            const input=await body(req,150000),result=store.poll(device,input);
+            const command=mobile.claim(device,input.published?.mobile===true&&input.mobileReady===true);
+            json(res,command?{...result,mobile:command}:result);if(result.job)notify();return;
+          }
+          const receipt=/^\/api\/device\/mobile\/([\w-]+)$/.exec(path);
+          if(receipt){json(res,mobile.finish(device,receipt[1],await body(req,2000000)));return;}
           const route=/^\/api\/device\/jobs\/([\w-]+)\/(start|updates|actions\/([\w-]+))$/.exec(path);
           if(route){const[,jobId,action,actionId]=route,data=await body(req,action==='updates'?3000000:30000);json(res,action==='start'?store.start(device,jobId,data):action==='updates'?store.update(device,jobId,data):store.acknowledge(device,jobId,actionId,data));notify();return;}
           throw fail('接口不存在',404);
@@ -72,6 +80,11 @@ export function createCollaborationHub({root=ROOT,dataDir=join(root,'.data/colla
           const timer=setInterval(()=>{try{store.session(token);res.write(': keepalive\n\n');}catch{res.destroy();}},15000);timer.unref();res.on('close',()=>{clearInterval(timer);clients.delete(res);});return;
         }
         if(path==='/api/state'&&req.method==='GET'){json(res,{...store.state(user),csrf:store.csrf(token)});return;}
+        if(path==='/api/mobile/devices'&&req.method==='GET'){json(res,{devices:mobile.devices(user)});return;}
+        const submit=/^\/api\/mobile\/devices\/([\w-]+)\/requests$/.exec(path);
+        if(submit&&req.method==='POST'){json(res,mobile.submit(user,submit[1],await body(req,90000)),202);return;}
+        const resultId=/^\/api\/mobile\/requests\/([\w-]+)$/.exec(path);
+        if(resultId&&req.method==='GET'){json(res,mobile.result(user,resultId[1]));return;}
         let result,status=200;
         if(path==='/api/rooms'&&req.method==='POST'){result=store.createRoom(user.id,await body(req));status=201;}
         else if(path==='/api/rooms/join'&&req.method==='POST')result=store.join(user.id,await body(req));
@@ -101,6 +114,9 @@ export function createCollaborationHub({root=ROOT,dataDir=join(root,'.data/colla
       if(req.method!=='GET'&&req.method!=='HEAD')throw fail('接口方法无效',405);
       const assets={
         '/':['index.html','text/html; charset=utf-8'],
+        '/remote/':['remote.html','text/html; charset=utf-8'],
+        '/mobile/remote.js':['remote.js',assetTypes['.js']],
+        '/mobile/remote.css':['remote.css',assetTypes['.css']],
         '/manifest.webmanifest':['manifest.webmanifest',assetTypes['.webmanifest']],
         '/sw.js':['sw.js',assetTypes['.js']],
         '/mobile/app.js':['app.js',assetTypes['.js']],
@@ -120,7 +136,7 @@ export function createCollaborationHub({root=ROOT,dataDir=join(root,'.data/colla
     }catch(error){if(!res.headersSent)json(res,{error:error.status?error.message:'服务暂时不可用，请稍后重试'},error.status||500);else res.destroy();}
   });
   server.requestTimeout=30000;server.headersTimeout=15000;
-  const janitor=setInterval(()=>{store.expire();notify();},15000);janitor.unref();
+  const janitor=setInterval(()=>{store.expire();mobile.expire();notify();},15000);janitor.unref();
   return {server,store,origin,notify,async listen(){await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,resolve);});return server.address().port;},async close(){clearInterval(janitor);for(const client of clients)client.destroy();server.closeIdleConnections();await new Promise(resolve=>server.close(resolve));store.close();}};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){

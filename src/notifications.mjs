@@ -6,9 +6,11 @@ import { randomUUID } from 'node:crypto';
 const OPEN_WINDOW_MS=60000,THEMES=['sea','port','deep-space'];
 const TEXT={
   zh:{app:'星港',complete:'已完成',error:'出错了',passed:'验收通过',done:'已完成',failed:'运行失败','verify-failed':'验收未通过',
-    testTitle:'通知测试',testBody:'任务做完时，星港会这样提醒你。点这里回到对话。',code:'[代码]',formula:'[公式]',errorBody:'任务没有完成'},
+    testTitle:'通知测试',testBody:'任务做完时，星港会这样提醒你。点这里回到对话。',code:'[代码]',formula:'[公式]',errorBody:'任务没有完成',
+    question:'等你回答',questionBody:'有个问题等你选择',moreQuestions:'（另有 {count} 个问题）'},
   en:{app:'Starport',complete:'Done',error:'Failed',passed:'Verified',done:'Done',failed:'Run failed','verify-failed':'Verification failed',
-    testTitle:'Test notification',testBody:'This is how Starport tells you a task is done. Click here to return to the conversation.',code:'[code]',formula:'[formula]',errorBody:'The task did not finish'}
+    testTitle:'Test notification',testBody:'This is how Starport tells you a task is done. Click here to return to the conversation.',code:'[code]',formula:'[formula]',errorBody:'The task did not finish',
+    question:'Needs your answer',questionBody:'A question is waiting for your choice',moreQuestions:' (+{count} more)'}
 };
 const TEX={'\\alpha':'α','\\beta':'β','\\gamma':'γ','\\delta':'δ','\\epsilon':'ϵ','\\varepsilon':'ε','\\lambda':'λ','\\mu':'μ','\\pi':'π','\\sigma':'σ',
   '\\tau':'τ','\\phi':'φ','\\omega':'ω','\\Delta':'Δ','\\Sigma':'Σ','\\Omega':'Ω','\\times':'×','\\cdot':'·','\\approx':'≈','\\leq':'≤','\\geq':'≥','\\le':'≤','\\ge':'≥','\\neq':'≠','\\to':'→','\\infty':'∞','\\pm':'±'};
@@ -36,9 +38,11 @@ export function excerpt(text,limit=120,language='en'){
   return chars.length>limit?chars.slice(0,limit-1).join('').trimEnd()+'…':plain;
 }
 
-// A soft two-note chime: 16-bit mono WAV, about half a second, well below full scale.
-export function chimeWav(rate=44100){
-  const notes=[[783.99,0],[1046.5,0.11]],length=Math.round(rate*0.62),data=Buffer.alloc(length*2);
+// A soft chime: 16-bit mono WAV, well below full scale. "Done" rises G5–C6; a question
+// asks with three notes that dip and then rise (C6–A5–D6), so the two are told apart by ear.
+export const QUESTION_CHIME=[[1046.5,0],[880,0.1],[1174.66,0.2]];
+export function chimeWav(rate=44100,notes=[[783.99,0],[1046.5,0.11]]){
+  const length=Math.round(rate*(notes.at(-1)[1]+0.51)),data=Buffer.alloc(length*2);
   for(let i=0;i<length;i++){
     const t=i/rate;let value=0;
     for(const[frequency,start]of notes){
@@ -101,11 +105,27 @@ export class Notifications{
     const chat=this.store.chat(chatId);if(!chat||chat.options?.desk)return null;
     const words=TEXT[this.look.language],failed=status==='error'||status==='failed'||status==='verify-failed';
     const summary=excerpt(text,120,this.look.language)||(failed?words.errorBody:'');
-    const room=chat.group_id?this.store.db.prepare('SELECT name FROM groups WHERE id=?').get(chat.group_id)?.name:'';
     return this.deliver({chatId,kind,tone:failed?'error':'complete',
-      source:room?`${words.app} · ${room}`:words.app,state:words[status]||words[failed?'error':'complete'],
+      source:this.source(chat,words),state:words[status]||words[failed?'error':'complete'],
       title:excerpt(chat.title,60,this.look.language),body:label?`${label}${summary?(this.look.language==='en'?': ':'：')+summary:''}`:summary},
       {sound:settings.sound,flash:!this.focused()});
+  }
+  // Called by the runner when a conversation's own model stops to ask the user a question
+  // (Claude's AskUserQuestion, Codex's request for input). The task waits until it is answered,
+  // so this is told apart from "done": its own state, colour and chime.
+  asked({chatId,request}={}){
+    const settings=this.settings();
+    if(!settings.enabled||!chatId||this.watching(chatId))return null;
+    const chat=this.store.chat(chatId);if(!chat||chat.options?.desk)return null;
+    const words=TEXT[this.look.language],questions=Array.isArray(request?.params?.questions)?request.params.questions:[];
+    const text=excerpt(questions[0]?.question||questions[0]?.header||'',110,this.look.language)||words.questionBody;
+    const more=questions.length>1?words.moreQuestions.replace('{count}',questions.length-1):'';
+    return this.deliver({chatId,kind:'question',tone:'question',source:this.source(chat,words),state:words.question,
+      title:excerpt(chat.title,60,this.look.language),body:text+more},{sound:settings.sound,flash:!this.focused()});
+  }
+  source(chat,words){
+    const room=chat.group_id?this.store.db.prepare('SELECT name FROM groups WHERE id=?').get(chat.group_id)?.name:'';
+    return room?`${words.app} · ${room}`:words.app;
   }
   test(chatId=null){
     const settings=this.settings(),words=TEXT[this.look.language],chat=typeof chatId==='string'?this.store.chat(chatId):null;
